@@ -17,6 +17,7 @@ void CRPCCallback::Initialize()
 	CRPC::Add(eRPC::ON_MOUSE_CLICK, CRPCCallback::PlayerClick);
 	CRPC::Add(eRPC::ON_RADIO_CHANGE, CRPCCallback::RadioChange);
 	CRPC::Add(eRPC::ON_DRINK_SPRUNK, CRPCCallback::DrinkSprunk);
+	CRPC::Add(eRPC::ON_KEY_STATE_CHANGE, CRPCCallback::KeyStateChange);
 }
 
 RPC_CALLBACK CRPCCallback::PlayerPauseMenuSwitch(RPC_ARGS)
@@ -92,4 +93,20 @@ RPC_CALLBACK CRPCCallback::RadioChange(RPC_ARGS)
 RPC_CALLBACK CRPCCallback::DrinkSprunk(RPC_ARGS)
 {
 	Callback::Execute("OnPlayerDrinkSprunk", "i", iExtra);
+}
+
+RPC_CALLBACK CRPCCallback::KeyStateChange(RPC_ARGS)
+{
+	unsigned short key;
+	unsigned char state;
+	unsigned char actionLength;
+
+	if (!bsData.Read(key) || !bsData.Read(state) || !bsData.Read(actionLength) || actionLength > 31)
+		return;
+
+	char action[32] = { 0 };
+	if (actionLength && !bsData.Read(action, actionLength))
+		return;
+
+	Callback::Execute("OnPlayerSAMPPKey", "siii", action, (int)state, (int)key, iExtra);
 }

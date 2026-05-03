@@ -1,5 +1,7 @@
 #include <RakNet/BitStream.h>
 
+#include <string>
+
 #include <SAMP+/Utility.h>
 #include <SAMP+/CRPC.h>
 #include <SAMP+/svr/Plugin.h>
@@ -15,6 +17,24 @@ static CPlayer* GetSAMPPPlayer(cell playerid, const char* nativeName)
 		Utility::Printf("%s called for player %d without SA-MP+ client", nativeName, (int)playerid);
 
 	return pPlayer;
+}
+
+static std::string GetPawnString(AMX* pAmx, cell amxAddress, size_t maxLength)
+{
+	cell* pString = NULL;
+	if (amx_GetAddr(pAmx, amxAddress, &pString) != AMX_ERR_NONE || !pString)
+		return "";
+
+	int length = 0;
+	if (amx_StrLen(pString, &length) != AMX_ERR_NONE || length <= 0)
+		return "";
+
+	if ((size_t)length > maxLength)
+		length = (int)maxLength;
+
+	char buffer[64] = { 0 };
+	amx_GetString(buffer, pString, false, (size_t)length + 1);
+	return std::string(buffer, (size_t)length);
 }
 
 cell AMX_NATIVE_CALL CallbackProc(AMX* pAmx, cell* pParams)
@@ -369,6 +389,53 @@ cell AMX_NATIVE_CALL IsUsingSAMPPProc(AMX* pAmx, cell* pParams)
 	return Network::isConnected(pParams[1]);
 }
 
+cell AMX_NATIVE_CALL BindKeyProc(AMX* pAmx, cell* pParams)
+{
+	CPlayer* pPlayer = GetSAMPPPlayer(pParams[1], "SAMPP_BindKey");
+	if (!pPlayer)
+		return 0;
+
+	unsigned short key = (unsigned short)pParams[2];
+	unsigned char eventMask = (unsigned char)(pParams[3] & 0x03);
+	std::string action = pParams[0] >= 4 * sizeof(cell) ? GetPawnString(pAmx, pParams[4], 31) : "";
+
+	if (!key || key > 255 || !eventMask)
+		return 0;
+
+	unsigned char actionLength = (unsigned char)action.length();
+	RakNet::BitStream bitStream;
+	bitStream.Write(key);
+	bitStream.Write(eventMask);
+	bitStream.Write(actionLength);
+
+	if (actionLength)
+		bitStream.Write(action.c_str(), actionLength);
+
+	return Network::PlayerSendRPC(eRPC::SET_KEY_BIND, pParams[1], &bitStream);
+}
+
+cell AMX_NATIVE_CALL UnbindKeyProc(AMX* pAmx, cell* pParams)
+{
+	if (!GetSAMPPPlayer(pParams[1], "SAMPP_UnbindKey"))
+		return 0;
+
+	unsigned short key = (unsigned short)pParams[2];
+	if (!key || key > 255)
+		return 0;
+
+	RakNet::BitStream bitStream;
+	bitStream.Write(key);
+	return Network::PlayerSendRPC(eRPC::UNBIND_KEY, pParams[1], &bitStream);
+}
+
+cell AMX_NATIVE_CALL ClearKeyBindsProc(AMX* pAmx, cell* pParams)
+{
+	if (!GetSAMPPPlayer(pParams[1], "SAMPP_ClearKeyBinds"))
+		return 0;
+
+	return Network::PlayerSendRPC(eRPC::CLEAR_KEY_BINDS, pParams[1]);
+}
+
 PLUGIN_EXPORT unsigned int PLUGIN_CALL Supports()
 {
 	return SUPPORTS_VERSION | SUPPORTS_AMX_NATIVES | SUPPORTS_PROCESS_TICK;
@@ -436,6 +503,9 @@ AMX_NATIVE_INFO PluginNatives[] =
 	{ "ToggleUnderwaterEffect", ToggleUnderwaterEffect },
 	{ "ToggleNightVision", ToggleNightVision },
 	{ "ToggleThermalVision", ToggleThermalVision },
+	{ "SAMPP_BindKey", BindKeyProc },
+	{ "SAMPP_UnbindKey", UnbindKeyProc },
+	{ "SAMPP_ClearKeyBinds", ClearKeyBindsProc },
 	{ 0, 0 }
 };
 

@@ -15,6 +15,51 @@ This branch starts by keeping SA-MP+ as a legacy SA-MP plugin, then hardening th
   - `maxplayers`
 - The SA-MP+ side-channel still listens on `server_port + 1`.
 - Pawn native calls that require an SA-MP+ client now fail safely when the player is not connected to the side-channel.
+- The safe client `.asi` connects to the side-channel without Direct3D/Input hooks.
+- The safe client currently enables only the HUD component toggle RPC.
+- The safe client supports limited keybind callbacks using WinAPI keyboard polling.
+
+## Smoke Tests
+
+Tested on GTA SA 1.0 US with open.mp 0.3DL client:
+
+- `/sampp` verifies `IsUsingSAMPP=1` and side-channel handshake.
+- `/sampphud` and `/samppmoney` toggle the money HUD.
+- `/samppammo` toggles the ammo HUD.
+- `/samppweapon` toggles the weapon icon.
+- `/sampphealth` toggles the health bar.
+- `/samppbreath` toggles the breath bar.
+- `/sampparmour` and `/sampparmor` toggle the armour bar.
+- `/samppmap` toggles the minimap.
+- `/samppcrosshair` toggles the crosshair.
+- `/samppall` toggles all supported HUD components together.
+- `/samppkeys` registers smoke-test keybinds.
+- F2 triggers the help action through `OnPlayerSAMPPKey`.
+- B triggers the money HUD action through `OnPlayerSAMPPKey`.
+
+Live verified so far:
+
+- Side-channel handshake.
+- Money HUD toggle.
+- Ammo HUD toggle.
+- Weapon icon toggle.
+- Minimap toggle.
+- Keybind protocol compiled and integrated; live key callback validation is next.
+
+## Porting Order
+
+1. Keep the side-channel, Pawn natives, and client bootstrap stable.
+2. Move low-risk direct memory writes into safe mode one RPC group at a time.
+3. Add explicit smoke commands for each newly enabled RPC before broad use.
+4. Reintroduce hooks only when a feature cannot work through a direct RPC handler.
+5. Keep the original full hook client behind an explicit unsafe/full opt-in.
+
+Risk tiers:
+
+- Low: HUD component toggles, simple stored player state, read-only native checks.
+- Medium: HUD colours, radio/wave/game-speed style direct memory writes, keybind polling callbacks.
+- High: resolution callbacks, pause menu, mouse/radio/stunt callbacks, D3D/Input proxy hooks.
+- Highest: checkpoint internals, player action blocking, weapon/reload patches, cross-version GTA addresses.
 
 ## Build
 
@@ -52,8 +97,9 @@ Linux builds require a 32-bit toolchain and multilib C/C++ runtime.
 
 ## Known Remaining Work
 
-- Build and test a real Win32 DLL against the current open.mp package.
 - Validate plugin load order with `Pawn.dll` and legacy plugin loading.
-- Build the safe client `.asi` from source. The archived client binary crashes during the first GTA SA 1.0 US load test because it applies full hooks immediately.
+- Keep the safe client as the default shipped ASI; the archived client binary crashes during the first GTA SA 1.0 US load test because it applies full hooks immediately.
 - Modernize or replace the full client `.asi` hooks. The client code still depends on hardcoded GTA:SA/SA-MP addresses.
+- Bring additional RPCs into safe mode one group at a time, starting with low-risk direct memory patches.
+- Restore resolution reporting with a narrowly scoped hook instead of the original full hook bundle.
 - Revisit the side-channel player matching logic for multiple players behind the same public IP.

@@ -77,6 +77,97 @@
 #define MOUSE_RIGHT_CLICK 1
 #define MOUSE_MIDDLE_CLICK 2
 
+#define SAMPP_KEY_STATE_UP 0
+#define SAMPP_KEY_STATE_DOWN 1
+
+#define SAMPP_KEY_EVENT_DOWN 1
+#define SAMPP_KEY_EVENT_UP 2
+#define SAMPP_KEY_EVENT_BOTH 3
+
+#define SAMPP_KEY_LBUTTON 0x01
+#define SAMPP_KEY_RBUTTON 0x02
+#define SAMPP_KEY_MBUTTON 0x04
+#define SAMPP_KEY_XBUTTON1 0x05
+#define SAMPP_KEY_XBUTTON2 0x06
+#define SAMPP_KEY_BACKSPACE 0x08
+#define SAMPP_KEY_TAB 0x09
+#define SAMPP_KEY_ENTER 0x0D
+#define SAMPP_KEY_SHIFT 0x10
+#define SAMPP_KEY_CONTROL 0x11
+#define SAMPP_KEY_ALT 0x12
+#define SAMPP_KEY_PAUSE 0x13
+#define SAMPP_KEY_CAPSLOCK 0x14
+#define SAMPP_KEY_ESCAPE 0x1B
+#define SAMPP_KEY_SPACE 0x20
+#define SAMPP_KEY_PAGEUP 0x21
+#define SAMPP_KEY_PAGEDOWN 0x22
+#define SAMPP_KEY_END 0x23
+#define SAMPP_KEY_HOME 0x24
+#define SAMPP_KEY_LEFT 0x25
+#define SAMPP_KEY_UP 0x26
+#define SAMPP_KEY_RIGHT 0x27
+#define SAMPP_KEY_DOWN 0x28
+#define SAMPP_KEY_INSERT 0x2D
+#define SAMPP_KEY_DELETE 0x2E
+#define SAMPP_KEY_0 0x30
+#define SAMPP_KEY_1 0x31
+#define SAMPP_KEY_2 0x32
+#define SAMPP_KEY_3 0x33
+#define SAMPP_KEY_4 0x34
+#define SAMPP_KEY_5 0x35
+#define SAMPP_KEY_6 0x36
+#define SAMPP_KEY_7 0x37
+#define SAMPP_KEY_8 0x38
+#define SAMPP_KEY_9 0x39
+#define SAMPP_KEY_A 0x41
+#define SAMPP_KEY_B 0x42
+#define SAMPP_KEY_C 0x43
+#define SAMPP_KEY_D 0x44
+#define SAMPP_KEY_E 0x45
+#define SAMPP_KEY_F 0x46
+#define SAMPP_KEY_G 0x47
+#define SAMPP_KEY_H 0x48
+#define SAMPP_KEY_I 0x49
+#define SAMPP_KEY_J 0x4A
+#define SAMPP_KEY_K 0x4B
+#define SAMPP_KEY_L 0x4C
+#define SAMPP_KEY_M 0x4D
+#define SAMPP_KEY_N 0x4E
+#define SAMPP_KEY_O 0x4F
+#define SAMPP_KEY_P 0x50
+#define SAMPP_KEY_Q 0x51
+#define SAMPP_KEY_R 0x52
+#define SAMPP_KEY_S 0x53
+#define SAMPP_KEY_T 0x54
+#define SAMPP_KEY_U 0x55
+#define SAMPP_KEY_V 0x56
+#define SAMPP_KEY_W 0x57
+#define SAMPP_KEY_X 0x58
+#define SAMPP_KEY_Y 0x59
+#define SAMPP_KEY_Z 0x5A
+#define SAMPP_KEY_NUMPAD0 0x60
+#define SAMPP_KEY_NUMPAD1 0x61
+#define SAMPP_KEY_NUMPAD2 0x62
+#define SAMPP_KEY_NUMPAD3 0x63
+#define SAMPP_KEY_NUMPAD4 0x64
+#define SAMPP_KEY_NUMPAD5 0x65
+#define SAMPP_KEY_NUMPAD6 0x66
+#define SAMPP_KEY_NUMPAD7 0x67
+#define SAMPP_KEY_NUMPAD8 0x68
+#define SAMPP_KEY_NUMPAD9 0x69
+#define SAMPP_KEY_F1 0x70
+#define SAMPP_KEY_F2 0x71
+#define SAMPP_KEY_F3 0x72
+#define SAMPP_KEY_F4 0x73
+#define SAMPP_KEY_F5 0x74
+#define SAMPP_KEY_F6 0x75
+#define SAMPP_KEY_F7 0x76
+#define SAMPP_KEY_F8 0x77
+#define SAMPP_KEY_F9 0x78
+#define SAMPP_KEY_F10 0x79
+#define SAMPP_KEY_F11 0x7A
+#define SAMPP_KEY_F12 0x7B
+
 native SetPlayerCheckpointEx(playerid, Float:x, Float:y, Float:z, Float:size, colour = 0xFF000020, period = 1024, Float:pulse = 0.1, rotation_rate = 0, bool:check_z = true);
 native SetPlayerCheckpointColour(playerid, colour);
 
@@ -113,6 +204,9 @@ native ToggleWaterBuoyancy(playerid, bool:toggle);
 native ToggleUnderwaterEffect(playerid, bool:toggle);
 native ToggleNightVision(playerid, bool:toggle);
 native ToggleThermalVision(playerid, bool:toggle);
+native SAMPP_BindKey(playerid, key, event_mask = SAMPP_KEY_EVENT_DOWN, const action[] = "");
+native SAMPP_UnbindKey(playerid, key);
+native SAMPP_ClearKeyBinds(playerid);
 native SAMPP_ExecuteCallback(type, {Float,_}:...);
 
 forward OnPlayerOpenPauseMenu(playerid);
@@ -126,6 +220,7 @@ forward OnPlayerSAMPPJoin(playerid, bool:has_plugin);
 forward OnPlayerClick(playerid, type, X, Y);
 forward OnPlayerChangeRadioStation(playerid, stationid, vehicleid);
 forward OnPlayerDrinkSprunk(playerid);
+forward OnPlayerSAMPPKey(playerid, keyid, keystate, action[]);
 
 public OnPlayerConnect(playerid)
 {

@@ -1,5 +1,6 @@
 #include <SAMP+/client/Client.h>
 #include <SAMP+/client/CCmdlineParams.h>
+#include <SAMP+/client/CKeyBinds.h>
 #ifndef SAMPP_SAFE_CLIENT
 #include <SAMP+/client/CHooks.h>
 #endif
@@ -52,6 +53,9 @@ static DWORD WINAPI BootstrapThread(LPVOID)
 	while (g_bRunning)
 	{
 		Network::Process();
+#ifdef SAMPP_SAFE_CLIENT
+		CKeyBinds::Process();
+#endif
 		Sleep(10);
 	}
 

@@ -15,4 +15,5 @@ public:
 	static RPC_CALLBACK PlayerClick(RPC_ARGS);
 	static RPC_CALLBACK RadioChange(RPC_ARGS);
 	static RPC_CALLBACK DrinkSprunk(RPC_ARGS);
+	static RPC_CALLBACK KeyStateChange(RPC_ARGS);
 };

@@ -6,6 +6,7 @@
     <ClCompile Include="CGame.cpp" />
     <ClCompile Include="CGraphics.cpp" />
     <ClCompile Include="CHUD.cpp" />
+    <ClCompile Include="CKeyBinds.cpp" />
     <ClCompile Include="CLocalPlayer.cpp" />
     <ClCompile Include="CLog.cpp" />
     <ClCompile Include="CMem.cpp" />

@@ -1,5 +1,6 @@
 #include <SAMP+/CRPC.h>
 #include <SAMP+/client/Client.h>
+#include <SAMP+/client/CKeyBinds.h>
 #include <SAMP+/client/Network.h>
 #include <SAMP+/client/CHUD.h>
 #ifndef SAMPP_SAFE_CLIENT
@@ -20,6 +21,20 @@ namespace Network
 	static unsigned short usPort;
 #ifdef SAMPP_SAFE_CLIENT
 	static bool bSafeHUDInitialized;
+
+	static bool ReadSafeString(RakNet::BitStream& bitStream, std::string& value)
+	{
+		unsigned char length;
+		if (!bitStream.Read(length) || length > 31)
+			return false;
+
+		char buffer[32] = { 0 };
+		if (length && !bitStream.Read(buffer, length))
+			return false;
+
+		value.assign(buffer, length);
+		return true;
+	}
 
 	static void InitializeSafeHUD()
 	{
@@ -47,6 +62,31 @@ namespace Network
 					CHUD::ToggleComponent(ucComponent, bToggle);
 				}
 
+				break;
+			}
+			case eRPC::SET_KEY_BIND:
+			{
+				unsigned short key;
+				unsigned char eventMask;
+				std::string action;
+
+				if (bitStream.Read(key) && bitStream.Read(eventMask) && ReadSafeString(bitStream, action))
+					CKeyBinds::Bind(key, eventMask, action);
+
+				break;
+			}
+			case eRPC::UNBIND_KEY:
+			{
+				unsigned short key;
+
+				if (bitStream.Read(key))
+					CKeyBinds::Unbind(key);
+
+				break;
+			}
+			case eRPC::CLEAR_KEY_BINDS:
+			{
+				CKeyBinds::Clear();
 				break;
 			}
 			default:
@@ -142,6 +182,9 @@ namespace Network
 				case ePacketType::PACKET_PLAYER_PROPER_DISCONNECT:
 				{
 					bServerHasPlugin = false;
+#ifdef SAMPP_SAFE_CLIENT
+					CKeyBinds::Clear();
+#endif
 
 					break;
 				}
@@ -149,6 +192,9 @@ namespace Network
 				case ID_CONNECTION_LOST:
 				{
 					bConnected = false;
+#ifdef SAMPP_SAFE_CLIENT
+					CKeyBinds::Clear();
+#endif
 
 					if (ServerHasPlugin())
 						Connect();
