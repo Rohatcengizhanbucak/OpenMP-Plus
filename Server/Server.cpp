@@ -1,5 +1,7 @@
 #include <SAMP+/svr/Server.h>
 
+#include <cstdlib>
+
 namespace SAMPServer
 {
 	static CServerConfig* pServerConfig;
@@ -7,6 +9,12 @@ namespace SAMPServer
 	void Initialize(const char* szConfigFileName)
 	{
 		pServerConfig = new CServerConfig(szConfigFileName);
+
+		if (!pServerConfig->IsLoaded() && std::string(szConfigFileName) == "config.json")
+		{
+			delete pServerConfig;
+			pServerConfig = new CServerConfig("server.cfg");
+		}
 	}
 
 	CServerConfig* GetConfig()
@@ -16,20 +24,19 @@ namespace SAMPServer
 
 	unsigned short getMaxPlayers()
 	{
-		return atoi(pServerConfig->GetSetting("maxplayers").c_str());
+		std::string value = pServerConfig->GetSettingOr("max_players", pServerConfig->GetSettingOr("maxplayers", "50"));
+		return (unsigned short)atoi(value.c_str());
 	}
 
 	std::string GetListeningAddress()
 	{
-		if (pServerConfig->HasSetting("bind"))
-			return pServerConfig->GetSetting("bind");
-		else
-			return "";
+		return pServerConfig->GetSettingOr("network.bind", pServerConfig->GetSettingOr("bind", ""));
 	}
 
 	unsigned short GetListeningPort()
 	{
-		return atoi(pServerConfig->GetSetting("port").c_str());
+		std::string value = pServerConfig->GetSettingOr("network.port", pServerConfig->GetSettingOr("port", "7777"));
+		return (unsigned short)atoi(value.c_str());
 	}
 
 }

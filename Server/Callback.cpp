@@ -81,7 +81,7 @@ namespace Callback
 			if (!pReturnValues[i])
 				iReturnValue = 0;
 
-		delete pReturnValues;
+		delete[] pReturnValues;
 
 		return iReturnValue;
 	}

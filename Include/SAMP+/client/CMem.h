@@ -35,7 +35,7 @@ void CMem::InstallJmp(T address, U proxy, DWORD& jumpback, DWORD dwLen, DWORD ju
 }
 
 template <class T, class U>
-static void CMem::InstallJmp(T address, U proxy, DWORD dwLen)
+void CMem::InstallJmp(T address, U proxy, DWORD dwLen)
 {
 	return ApplyJmp((BYTE*)address, (DWORD)proxy, dwLen);
 }

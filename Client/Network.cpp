@@ -2,9 +2,11 @@
 #include <SAMP+/client/Client.h>
 #include <SAMP+/client/Network.h>
 #include <SAMP+/client/CHUD.h>
+#ifndef SAMPP_SAFE_CLIENT
 #include <SAMP+/client/CHooks.h>
 #include <SAMP+/client/CGame.h>
 #include <SAMP+/client/CRPCCallback.h>
+#endif
 
 #include <RakNet/MessageIdentifiers.h>
 
@@ -16,6 +18,43 @@ namespace Network
 	static bool bServerHasPlugin;
 	static std::string strAddress;
 	static unsigned short usPort;
+#ifdef SAMPP_SAFE_CLIENT
+	static bool bSafeHUDInitialized;
+
+	static void InitializeSafeHUD()
+	{
+		if (bSafeHUDInitialized)
+			return;
+
+		CHUD::Initialize();
+		bSafeHUDInitialized = true;
+		CLog::Write("Safe HUD RPC handlers initialized");
+	}
+
+	static void ProcessSafeRPC(unsigned short usRpcId, RakNet::BitStream& bitStream)
+	{
+		switch (usRpcId)
+		{
+			case eRPC::TOGGLE_HUD_COMPONENT:
+			{
+				unsigned char ucComponent;
+				bool bToggle;
+
+				if (bitStream.Read(ucComponent) && bitStream.Read(bToggle))
+				{
+					InitializeSafeHUD();
+					CLog::Write("Safe RPC ToggleHUDComponent component=%u toggle=%u", ucComponent, bToggle ? 1 : 0);
+					CHUD::ToggleComponent(ucComponent, bToggle);
+				}
+
+				break;
+			}
+			default:
+				CLog::Write("Safe RPC ignored: %u", usRpcId);
+				break;
+		}
+	}
+#endif
 
 	void Initialize(std::string address, unsigned short port)
 	{
@@ -78,7 +117,11 @@ namespace Network
 				{
 					bConnected = true;
 					bServerHasPlugin = true;
+#ifndef SAMPP_SAFE_CLIENT
 					CRPCCallback::Initialize();
+#else
+					CLog::Write("Safe side-channel registered; limited HUD RPC mode enabled");
+#endif
 
 					break;
 				}
@@ -87,7 +130,11 @@ namespace Network
 					unsigned short usRpcId;
 
 					if (bitStream.Read<unsigned short>(usRpcId))
+#ifndef SAMPP_SAFE_CLIENT
 						CRPC::Process(usRpcId, bitStream);
+#else
+						ProcessSafeRPC(usRpcId, bitStream);
+#endif
 
 					break;
 				}

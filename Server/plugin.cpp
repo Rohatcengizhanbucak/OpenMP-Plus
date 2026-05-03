@@ -7,6 +7,16 @@
 
 #include <sampgdk.h>
 
+static CPlayer* GetSAMPPPlayer(cell playerid, const char* nativeName)
+{
+	CPlayer* pPlayer = Network::GetPlayerFromPlayerid((unsigned int)playerid);
+
+	if (!pPlayer)
+		Utility::Printf("%s called for player %d without SA-MP+ client", nativeName, (int)playerid);
+
+	return pPlayer;
+}
+
 cell AMX_NATIVE_CALL CallbackProc(AMX* pAmx, cell* pParams)
 {	
 	return Callback::Process(pAmx, (Callback::eCallbackType)pParams[1], &pParams[2]);
@@ -47,7 +57,8 @@ cell AMX_NATIVE_CALL GetRadioStation(AMX* pAmx, cell* pParams)
 {
 	if (IsPlayerInAnyVehicle(pParams[1]))
 	{
-		return Network::GetPlayerFromPlayerid(pParams[1])->GetRadio();
+		CPlayer* pPlayer = GetSAMPPPlayer(pParams[1], "GetPlayerRadioStation");
+		return pPlayer ? pPlayer->GetRadio() : 0;
 	}
 	return 0;
 }
@@ -110,17 +121,22 @@ cell AMX_NATIVE_CALL ToggleThermalVision(AMX* pAmx, cell* pParams)
 
 cell AMX_NATIVE_CALL IsPlayerInPauseMenuProc(AMX* pAmx, cell* pParams)
 {
-	return Network::GetPlayerFromPlayerid(pParams[1])->IsInPauseMenu();
+	CPlayer* pPlayer = GetSAMPPPlayer(pParams[1], "IsPlayerInPauseMenu");
+	return pPlayer ? pPlayer->IsInPauseMenu() : 0;
 }
 
 cell AMX_NATIVE_CALL GetPlayerResolutionProc(AMX* pAmx, cell* pParams)
 {	
+	CPlayer* pPlayer = GetSAMPPPlayer(pParams[1], "GetPlayerResolution");
+	if (!pPlayer)
+		return 0;
+
 	cell *cellptr;
 	amx_GetAddr(pAmx, pParams[2], &cellptr);
-	*cellptr = Network::GetPlayerFromPlayerid(pParams[1])->GetResolutionX(); 
+	*cellptr = pPlayer->GetResolutionX();
 
 	amx_GetAddr(pAmx, pParams[3], &cellptr);
-	*cellptr = Network::GetPlayerFromPlayerid(pParams[1])->GetResolutionY();
+	*cellptr = pPlayer->GetResolutionY();
 
 	return 1;
 }
@@ -279,46 +295,73 @@ cell AMX_NATIVE_CALL TogglePlayerInfiniteRunProc(AMX* pAmx, cell* pParams)
 
 cell AMX_NATIVE_CALL SetPlayerAircraftHeightProc(AMX* pAmx, cell* pParams)
 {
+	CPlayer* pPlayer = GetSAMPPPlayer(pParams[1], "SetPlayerAircraftHeight");
+	if (!pPlayer)
+		return 0;
+
 	RakNet::BitStream bitStream;
 	bitStream.Write(amx_ctof(pParams[2]));
 
-	Network::GetPlayerFromPlayerid(pParams[1])->SetAircraftHeight(amx_ctof(pParams[2]));
+	pPlayer->SetAircraftHeight(amx_ctof(pParams[2]));
 	return Network::PlayerSendRPC(eRPC::SET_AIRCRAFT_HEIGHT, pParams[1], &bitStream);
 }
 
 cell AMX_NATIVE_CALL GetPlayerAircraftHeightProc(AMX* pAmx, cell* pParams)
 {
-	float f = Network::GetPlayerFromPlayerid(pParams[1])->GetAircraftHeight();
+	CPlayer* pPlayer = GetSAMPPPlayer(pParams[1], "GetPlayerAircraftHeight");
+	if (!pPlayer)
+	{
+		float fallback = 0.0f;
+		return amx_ftoc(fallback);
+	}
+
+	float f = pPlayer->GetAircraftHeight();
 	return amx_ftoc(f);
 }
 
 cell AMX_NATIVE_CALL SetPlayerJetpackHeightProc(AMX* pAmx, cell* pParams)
 {
+	CPlayer* pPlayer = GetSAMPPPlayer(pParams[1], "SetPlayerJetpackHeight");
+	if (!pPlayer)
+		return 0;
+
 	RakNet::BitStream bitStream;
 	bitStream.Write(amx_ctof(pParams[2]));
 
-	Network::GetPlayerFromPlayerid(pParams[1])->SetJetpackHeight(amx_ctof(pParams[2]));
+	pPlayer->SetJetpackHeight(amx_ctof(pParams[2]));
 	return Network::PlayerSendRPC(eRPC::SET_JETPACK_HEIGHT, pParams[1], &bitStream);
 }
 
 cell AMX_NATIVE_CALL GetPlayerJetpackHeightProc(AMX* pAmx, cell* pParams)
 {
-	float f = Network::GetPlayerFromPlayerid(pParams[1])->GetJetpackHeight();
+	CPlayer* pPlayer = GetSAMPPPlayer(pParams[1], "GetPlayerJetpackHeight");
+	if (!pPlayer)
+	{
+		float fallback = 0.0f;
+		return amx_ftoc(fallback);
+	}
+
+	float f = pPlayer->GetJetpackHeight();
 	return amx_ftoc(f);
 }
 
 cell AMX_NATIVE_CALL TogglePlayerVehicleBlipsProc(AMX* pAmx, cell* pParams)
 {
+	CPlayer* pPlayer = GetSAMPPPlayer(pParams[1], "TogglePlayerVehicleBlips");
+	if (!pPlayer)
+		return 0;
+
 	RakNet::BitStream bitStream;
 	bitStream.Write(!!pParams[2]);
 
-	Network::GetPlayerFromPlayerid(pParams[1])->ToggleVehicleBlips(!!pParams[2]);
+	pPlayer->ToggleVehicleBlips(!!pParams[2]);
 	return Network::PlayerSendRPC(eRPC::TOGGLE_VEHICLE_BLIPS, pParams[1], &bitStream);
 }
 
 cell AMX_NATIVE_CALL GetPlayerVehicleBlipsProc(AMX* pAmx, cell* pParams)
 {
-	return Network::GetPlayerFromPlayerid(pParams[1])->GetVehicleBlips();
+	CPlayer* pPlayer = GetSAMPPPlayer(pParams[1], "GetPlayerVehicleBlips");
+	return pPlayer ? pPlayer->GetVehicleBlips() : 0;
 }
 
 cell AMX_NATIVE_CALL IsUsingSAMPPProc(AMX* pAmx, cell* pParams)
@@ -340,7 +383,11 @@ PLUGIN_EXPORT bool PLUGIN_CALL Load(void **ppData)
 {
 	Utility::Initialize(ppData);
 	Utility::Printf("Loaded");
-	SAMPServer::Initialize("server.cfg");
+	SAMPServer::Initialize("config.json");
+	Utility::Printf("Using server port %u, SA-MP+ port %u, max players %u",
+		SAMPServer::GetListeningPort(),
+		SAMPServer::GetListeningPort() + 1,
+		SAMPServer::getMaxPlayers());
 	Network::Initialize(SAMPServer::GetListeningAddress(), SAMPServer::GetListeningPort()+1, SAMPServer::getMaxPlayers());
 	return sampgdk::Load(ppData);
 }

@@ -1,6 +1,8 @@
 #include <SAMP+/client/CHUD.h>
 #include <SAMP+/client/CMem.h>
+#ifndef SAMPP_SAFE_CLIENT
 #include <SAMP+/client/Proxy/CJmpProxy.h>
+#endif
 
 sHUDComponent CHUD::components[] =
 {
@@ -14,7 +16,24 @@ sHUDComponent CHUD::components[] =
 	{ 0x0058F47D, { 0xE990, 0x840F, 0x02 } },
 };
 
+#ifdef SAMPP_SAFE_CLIENT
+static DWORD gSafeHUDColourList[] =
+{
+	0xFF2C6836,
+	0xFF1D19B4,
+	0xFFE1E1E1,
+	0xFF1D19B4,
+	0xFFF1CBAC,
+	0xFFF1CBAC,
+	0xFF106290,
+	0xFF106290,
+	0xFF969696
+};
+
+DWORD* CHUD::colourComponents = gSafeHUDColourList;
+#else
 DWORD* CHUD::colourComponents = CJmpProxy::HUDColourList;
+#endif
 
 void CHUD::Initialize()
 {

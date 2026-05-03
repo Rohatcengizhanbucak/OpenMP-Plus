@@ -87,7 +87,11 @@ namespace Network
 
 	void CloseConnection(unsigned int uiPlayerid)
 	{
-		pRakServer->CloseConnection(players[uiPlayerid]->GetConnectionInfo()->GetSystemAddress());
+		CPlayer* pPlayer = GetPlayerFromPlayerid(uiPlayerid);
+		if (!pPlayer)
+			return;
+
+		pRakServer->CloseConnection(pPlayer->GetConnectionInfo()->GetSystemAddress());
 		Cleanup(uiPlayerid);
 	}
 
@@ -99,8 +103,12 @@ namespace Network
 
 	void Cleanup(unsigned int uiPlayerid)
 	{
-		delete players[uiPlayerid];
-		players.erase(uiPlayerid);
+		std::map<unsigned int, CPlayer*>::iterator it = players.find(uiPlayerid);
+		if (it == players.end())
+			return;
+
+		delete it->second;
+		players.erase(it);
 	}
 
 	void CleanupUnhandledConnection(const RakNet::SystemAddress& systemAddress)
@@ -196,20 +204,26 @@ namespace Network
 		while ((pPacket = pRakServer->Receive()))
 		{
 			if (!pPacket->length)
-				return;
+			{
+				pRakServer->DeallocatePacket(pPacket);
+				continue;
+			}
 
 			int iPlayerId = 0;
 			RakNet::BitStream bitStream(&pPacket->data[1], pPacket->length - 1, false);
 
 			if (pPacket->data[0] == ID_NEW_INCOMING_CONNECTION)
 			{
-				for (std::list<CClientSocketInfo*>::iterator it = unhandledConnections.begin(); it != unhandledConnections.end(); ++it)
+				for (std::list<CClientSocketInfo*>::iterator it = unhandledConnections.begin(); it != unhandledConnections.end();)
 				{
 					if (time(NULL) - (*it)->GetCreationTime() >= 60)
 					{
 						delete *it;
-						unhandledConnections.erase(it);
+						it = unhandledConnections.erase(it);
+						continue;
 					}
+
+					++it;
 				}
 
 				if (Callback::Execute("OnPlayerSAMPPConnect", "is", pPacket->systemAddress.GetPort(), pPacket->systemAddress.ToString(false)))

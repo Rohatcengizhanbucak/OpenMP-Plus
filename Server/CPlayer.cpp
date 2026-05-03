@@ -5,8 +5,12 @@ CPlayer::CPlayer(CClientSocketInfo* socketInfo)
 	m_pSockInfo = socketInfo;
 	m_bInPauseMenu = false;
 	m_ucMenuId = 42;
+	m_iResolutionX = 0;
+	m_iResolutionY = 0;
 	m_fAircraftHeight = 800.0f;
 	m_fJetpackHeight = 100.0f;
+	m_bVehicleBlips = true;
+	m_iRadioStation = 0;
 }
 
 CPlayer::~CPlayer()
