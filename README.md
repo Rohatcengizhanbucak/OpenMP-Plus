@@ -79,14 +79,20 @@ Example smoke-test files are provided in:
 ```text
 examples/filterscripts/sampp_smoketest.pwn
 examples/filterscripts/sampp_smoketest.amx
+examples/filterscripts/sampp_itemdemo.pwn
+examples/filterscripts/sampp_itemdemo.amx
+examples/filterscripts/sampp_menudemo.pwn
+examples/filterscripts/sampp_menudemo.amx
 ```
 
-Copy `examples/filterscripts/sampp_smoketest.amx` to your open.mp server `filterscripts` directory, then add it to your open.mp config:
+Copy the `.amx` files you want to test to your open.mp server `filterscripts` directory, then add them to your open.mp config:
 
 ```json
 "pawn": {
     "side_scripts": [
-        "filterscripts/sampp_smoketest"
+        "filterscripts/sampp_smoketest",
+        "filterscripts/sampp_itemdemo",
+        "filterscripts/sampp_menudemo"
     ]
 }
 ```
@@ -110,6 +116,27 @@ Smoke-test keybinds:
 
 - `F2`: show help
 - `B`: toggle money HUD
+
+Item demo commands:
+
+- `/itemadd`: create a Water Bottle object at your position
+- `/itemkeys`: rebind `E` through SA-MP+
+- `/itempickup`: fallback command for pickup testing
+- `/itemclear`: remove all demo items
+
+Item demo keybind:
+
+- `E`: pick up the nearest Water Bottle through `OnPlayerSAMPPKey`
+
+Menu demo commands:
+
+- `/menutoggle` or `/menu`: open/close the TextDraw menu without the keybind
+- `/menukeys`: rebind `M` through SA-MP+
+- `/menuhelp`: list menu-demo commands
+
+Menu demo keybind:
+
+- `M`: open/close a player TextDraw menu through `OnPlayerSAMPPKey`
 
 ## Helper Scripts
 

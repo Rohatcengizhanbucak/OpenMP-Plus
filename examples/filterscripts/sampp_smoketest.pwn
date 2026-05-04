@@ -41,7 +41,8 @@ stock BindSmokeKeys(playerid)
 		return 1;
 	}
 
-	SAMPP_ClearKeyBinds(playerid);
+	SAMPP_UnbindKey(playerid, SAMPP_KEY_F2);
+	SAMPP_UnbindKey(playerid, SAMPP_KEY_B);
 	SAMPP_BindKey(playerid, SAMPP_KEY_F2, SAMPP_KEY_EVENT_DOWN, "help");
 	SAMPP_BindKey(playerid, SAMPP_KEY_B, SAMPP_KEY_EVENT_DOWN, "money");
 
@@ -212,10 +213,6 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
 public OnPlayerSAMPPKey(playerid, keyid, keystate, action[])
 {
-	new message[144];
-	format(message, sizeof message, "[SA-MP+] Key callback: key=%d state=%d action=%s", keyid, keystate, action);
-	SendClientMessage(playerid, SAMPP_TEST_COLOUR, message);
-
 	if (keystate != SAMPP_KEY_STATE_DOWN)
 	{
 		return 1;
@@ -223,11 +220,17 @@ public OnPlayerSAMPPKey(playerid, keyid, keystate, action[])
 
 	if (!strcmp(action, "help", true))
 	{
+		new message[144];
+		format(message, sizeof message, "[SA-MP+] Key callback: key=%d state=%d action=%s", keyid, keystate, action);
+		SendClientMessage(playerid, SAMPP_TEST_COLOUR, message);
 		return SendSmokeHelp(playerid);
 	}
 
 	if (!strcmp(action, "money", true))
 	{
+		new message[144];
+		format(message, sizeof message, "[SA-MP+] Key callback: key=%d state=%d action=%s", keyid, keystate, action);
+		SendClientMessage(playerid, SAMPP_TEST_COLOUR, message);
 		return ToggleSmokeHudComponent(playerid, HUD_COMPONENT_MONEY, "money");
 	}
 
