@@ -44,7 +44,8 @@ Live verified so far:
 - Ammo HUD toggle.
 - Weapon icon toggle.
 - Minimap toggle.
-- Keybind protocol compiled and integrated; live key callback validation is next.
+- Keybind callback: `B` returned `key=66 state=1 action=money` and toggled money HUD.
+- Keybind callback: `F2` returned `key=113 state=1 action=help` and displayed help.
 
 ## Porting Order
 
@@ -81,7 +82,7 @@ Linux builds require a 32-bit toolchain and multilib C/C++ runtime.
 
 ## open.mp Installation
 
-1. Put `sampp_server.dll` or `sampp_server.so` in the server `plugins` directory.
+1. Put `sampp_server.dll` in the server `plugins` directory.
 2. Add the plugin to `config.json`:
 
 ```json
@@ -94,6 +95,8 @@ Linux builds require a 32-bit toolchain and multilib C/C++ runtime.
 
 3. Copy `Build/sampp.inc` to `qawno/include`.
 4. Install `sampp_client.asi` on clients that should receive SA-MP+ features.
+
+Linux server builds are not shipped yet for this port. The stale archived `.so` artifact was removed until it can be rebuilt and tested.
 
 ## Known Remaining Work
 
