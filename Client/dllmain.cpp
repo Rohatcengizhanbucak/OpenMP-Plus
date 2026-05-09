@@ -1,5 +1,6 @@
 #include <SAMP+/client/Client.h>
 #include <SAMP+/client/CCmdlineParams.h>
+#include <SAMP+/client/CGameRakClient.h>
 #include <SAMP+/client/CKeyBinds.h>
 #ifndef SAMPP_SAFE_CLIENT
 #include <SAMP+/client/CHooks.h>
@@ -10,6 +11,7 @@ static HANDLE g_hBootstrapThread = NULL;
 static DWORD g_dwBootstrapThreadId = 0;
 static volatile bool g_bRunning = false;
 static bool g_bHooksApplied = false;
+static bool g_bInputHooksApplied = false;
 
 static bool IsFullHookMode()
 {
@@ -23,6 +25,11 @@ static bool IsFullHookMode()
 
 static DWORD WINAPI BootstrapThread(LPVOID)
 {
+#ifndef SAMPP_SAFE_CLIENT
+	CHooks::ApplySafeInput();
+	g_bInputHooksApplied = true;
+#endif
+
 	Sleep(2500);
 
 	if (IsFullHookMode())
@@ -70,17 +77,22 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved)
 	{
 	case DLL_PROCESS_ATTACH:
 		DisableThreadLibraryCalls(hModule);
+		CGameRakClient::SetModuleHandle(hModule);
 		CLog::Initialize();
 		CCmdlineParams::Process(GetCommandLine());
 		g_bRunning = true;
 		g_hBootstrapThread = CreateThread(NULL, 0, BootstrapThread, NULL, 0, &g_dwBootstrapThreadId);
 		break;
 
-	case DLL_PROCESS_DETACH:
+case DLL_PROCESS_DETACH:
 		g_bRunning = false;
 #ifndef SAMPP_SAFE_CLIENT
-		if (g_bHooksApplied)
+		if (g_bHooksApplied || g_bInputHooksApplied)
+		{
 			CHooks::Remove();
+			g_bHooksApplied = false;
+			g_bInputHooksApplied = false;
+		}
 #endif
 
 		if (g_hBootstrapThread)

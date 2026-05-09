@@ -8,9 +8,28 @@ namespace OMPPlusProtocol
 	static const int RpcID = 220;
 	static const uint32_t Magic = 0x4F4D5050; // OMPP
 	static const uint16_t Version = 1;
-	static const uint32_t DefaultCapabilities = 0x00000001;
+	static const uint32_t CapabilityNativeTransport = 0x00000001;
+	static const uint32_t CapabilityKeyCapture = 0x00000002;
+	static const uint32_t DefaultCapabilities = CapabilityNativeTransport | CapabilityKeyCapture;
+	static const uint8_t ClientInfoVersion = 1;
+	static const uint16_t ClientVersionMajor = 0;
+	static const uint16_t ClientVersionMinor = 1;
+	static const uint16_t ClientVersionPatch = 4;
+	static const uint8_t MaxClientHashLength = 64;
 	static const int MaxPayloadBytes = 4096;
 	static const int MaxMessagesPerSecond = 60;
+
+	enum Feature : uint32_t
+	{
+		FeatureHUD = 1 << 0,
+		FeatureKeybind = 1 << 1,
+		FeatureKeyCapture = 1 << 2,
+		FeatureAudio = 1 << 3,
+		FeatureEffects = 1 << 4,
+		FeatureUI = 1 << 5,
+
+		DefaultFeatures = FeatureHUD | FeatureKeybind | FeatureKeyCapture
+	};
 
 	enum class Message : uint8_t
 	{
@@ -62,6 +81,10 @@ namespace OMPPlusProtocol
 		ON_MOUSE_CLICK,
 		ON_RADIO_CHANGE,
 		ON_DRINK_SPRUNK,
-		ON_KEY_STATE_CHANGE
+		ON_KEY_STATE_CHANGE,
+
+		SET_KEY_CAPTURE,
+		CLEAR_KEY_CAPTURE,
+		CLEAR_KEY_CAPTURES
 	};
 }

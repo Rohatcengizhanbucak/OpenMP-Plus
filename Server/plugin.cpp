@@ -1,9 +1,11 @@
 #include <RakNet/BitStream.h>
 
+#include <algorithm>
 #include <string>
 
 #include <SAMP+/Utility.h>
 #include <SAMP+/CRPC.h>
+#include <SAMP+/OMPPlusProtocol.h>
 #include <SAMP+/svr/Plugin.h>
 #include <SAMP+/svr/Callback.h>
 
@@ -389,6 +391,65 @@ cell AMX_NATIVE_CALL IsUsingSAMPPProc(AMX* pAmx, cell* pParams)
 	return Network::isConnected(pParams[1]);
 }
 
+cell AMX_NATIVE_CALL HasFeatureProc(AMX* pAmx, cell* pParams)
+{
+	if (!Network::isConnected(pParams[1]))
+		return 0;
+
+	const uint32_t features = OMPPlusProtocol::FeatureHUD | OMPPlusProtocol::FeatureKeybind | OMPPlusProtocol::FeatureKeyCapture;
+	return (features & static_cast<uint32_t>(pParams[2])) != 0 ? 1 : 0;
+}
+
+cell AMX_NATIVE_CALL GetClientFeatureFlagsProc(AMX* pAmx, cell* pParams)
+{
+	if (!Network::isConnected(pParams[1]))
+		return 0;
+
+	return static_cast<cell>(OMPPlusProtocol::FeatureHUD | OMPPlusProtocol::FeatureKeybind | OMPPlusProtocol::FeatureKeyCapture);
+}
+
+cell AMX_NATIVE_CALL GetClientCapabilitiesProc(AMX* pAmx, cell* pParams)
+{
+	return Network::isConnected(pParams[1]) ? static_cast<cell>(OMPPlusProtocol::CapabilityKeyCapture) : 0;
+}
+
+cell AMX_NATIVE_CALL GetClientVersionProc(AMX* pAmx, cell* pParams)
+{
+	if (!Network::isConnected(pParams[1]))
+		return 0;
+
+	cell* pMajor = NULL;
+	cell* pMinor = NULL;
+	cell* pPatch = NULL;
+	if (amx_GetAddr(pAmx, pParams[2], &pMajor) != AMX_ERR_NONE
+		|| amx_GetAddr(pAmx, pParams[3], &pMinor) != AMX_ERR_NONE
+		|| amx_GetAddr(pAmx, pParams[4], &pPatch) != AMX_ERR_NONE)
+		return 0;
+
+	*pMajor = 0;
+	*pMinor = 0;
+	*pPatch = 0;
+	return 1;
+}
+
+cell AMX_NATIVE_CALL GetClientHashProc(AMX* pAmx, cell* pParams)
+{
+	if (!Network::isConnected(pParams[1]))
+		return 0;
+
+	cell* pDest = NULL;
+	if (amx_GetAddr(pAmx, pParams[2], &pDest) != AMX_ERR_NONE || !pDest)
+		return 0;
+
+	const int size = pParams[0] >= 3 * sizeof(cell) ? static_cast<int>(pParams[3]) : 1;
+	return amx_SetString(pDest, "", false, false, size) == AMX_ERR_NONE ? 1 : 0;
+}
+
+cell AMX_NATIVE_CALL IsLauncherVerifiedProc(AMX* pAmx, cell* pParams)
+{
+	return 0;
+}
+
 cell AMX_NATIVE_CALL BindKeyProc(AMX* pAmx, cell* pParams)
 {
 	CPlayer* pPlayer = GetSAMPPPlayer(pParams[1], "SAMPP_BindKey");
@@ -434,6 +495,77 @@ cell AMX_NATIVE_CALL ClearKeyBindsProc(AMX* pAmx, cell* pParams)
 		return 0;
 
 	return Network::PlayerSendRPC(eRPC::CLEAR_KEY_BINDS, pParams[1]);
+}
+
+cell AMX_NATIVE_CALL BeginKeyCaptureProc(AMX* pAmx, cell* pParams)
+{
+	if (!GetSAMPPPlayer(pParams[1], "SAMPP_BeginKeyCapture"))
+		return 0;
+
+	unsigned short key = (unsigned short)pParams[2];
+	unsigned char eventMask = (unsigned char)(pParams[3] & 0x03);
+	int priorityRaw = (int)pParams[4];
+	int ttlRaw = (int)pParams[5];
+	unsigned char flags = (unsigned char)(pParams[6] & 0xFF);
+	std::string action = pParams[0] >= 7 * sizeof(cell) ? GetPawnString(pAmx, pParams[7], 31) : "";
+
+	if (!key || key > 255 || !eventMask || ttlRaw < 0)
+		return 0;
+
+	int priority = priorityRaw;
+	if (priority < -32768)
+		priority = -32768;
+	else if (priority > 32767)
+		priority = 32767;
+
+	int ttl = ttlRaw;
+	if (ttl < 0)
+		ttl = 0;
+	else if (ttl > 5000)
+		ttl = 5000;
+	unsigned char actionLength = (unsigned char)action.length();
+
+	RakNet::BitStream bitStream;
+	bitStream.Write(key);
+	bitStream.Write(eventMask);
+	bitStream.Write(flags);
+	bitStream.Write((short)priority);
+	bitStream.Write((unsigned short)ttl);
+	bitStream.Write(actionLength);
+
+	if (actionLength)
+		bitStream.Write(action.c_str(), actionLength);
+
+	return Network::PlayerSendRPC(eRPC::SET_KEY_CAPTURE, pParams[1], &bitStream);
+}
+
+cell AMX_NATIVE_CALL EndKeyCaptureProc(AMX* pAmx, cell* pParams)
+{
+	if (!GetSAMPPPlayer(pParams[1], "SAMPP_EndKeyCapture"))
+		return 0;
+
+	unsigned short key = (unsigned short)pParams[2];
+	std::string action = pParams[0] >= 3 * sizeof(cell) ? GetPawnString(pAmx, pParams[3], 31) : "";
+	if (!key || key > 255)
+		return 0;
+
+	unsigned char actionLength = (unsigned char)action.length();
+	RakNet::BitStream bitStream;
+	bitStream.Write(key);
+	bitStream.Write(actionLength);
+
+	if (actionLength)
+		bitStream.Write(action.c_str(), actionLength);
+
+	return Network::PlayerSendRPC(eRPC::CLEAR_KEY_CAPTURE, pParams[1], &bitStream);
+}
+
+cell AMX_NATIVE_CALL ClearKeyCapturesProc(AMX* pAmx, cell* pParams)
+{
+	if (!GetSAMPPPlayer(pParams[1], "SAMPP_ClearKeyCaptures"))
+		return 0;
+
+	return Network::PlayerSendRPC(eRPC::CLEAR_KEY_CAPTURES, pParams[1]);
 }
 
 PLUGIN_EXPORT unsigned int PLUGIN_CALL Supports()
@@ -484,6 +616,13 @@ AMX_NATIVE_INFO PluginNatives[] =
 	{ "SetPlayerNoReload", SetPlayerNoReloadProc },
 	{ "GetPlayerResolution", GetPlayerResolutionProc },
 	{ "IsUsingSAMPP", IsUsingSAMPPProc },
+	{ "IsUsingOMPPlus", IsUsingSAMPPProc },
+	{ "SAMPP_HasFeature", HasFeatureProc },
+	{ "SAMPP_GetClientFeatureFlags", GetClientFeatureFlagsProc },
+	{ "SAMPP_GetClientCapabilities", GetClientCapabilitiesProc },
+	{ "SAMPP_GetClientVersion", GetClientVersionProc },
+	{ "SAMPP_GetClientHash", GetClientHashProc },
+	{ "SAMPP_IsLauncherVerified", IsLauncherVerifiedProc },
 	{ "SetPlayerBlurIntensity", SetPlayerBlurIntensityProc },
 	{ "TogglePlayerDriveOnWater", TogglePlayerDriveOnWaterProc },
 	{ "SetPlayerGameSpeed", SetPlayerGameSpeedProc },
@@ -506,6 +645,9 @@ AMX_NATIVE_INFO PluginNatives[] =
 	{ "SAMPP_BindKey", BindKeyProc },
 	{ "SAMPP_UnbindKey", UnbindKeyProc },
 	{ "SAMPP_ClearKeyBinds", ClearKeyBindsProc },
+	{ "SAMPP_BeginKeyCapture", BeginKeyCaptureProc },
+	{ "SAMPP_EndKeyCapture", EndKeyCaptureProc },
+	{ "SAMPP_ClearKeyCaptures", ClearKeyCapturesProc },
 	{ 0, 0 }
 };
 

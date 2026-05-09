@@ -103,6 +103,41 @@ namespace Network
 				CKeyBinds::Clear();
 				break;
 			}
+			case eRPC::SET_KEY_CAPTURE:
+			{
+				unsigned short key;
+				unsigned char eventMask;
+				unsigned char flags;
+				short priority;
+				unsigned short ttlMs;
+				std::string action;
+
+				if (bitStream.Read(key)
+					&& bitStream.Read(eventMask)
+					&& bitStream.Read(flags)
+					&& bitStream.Read(priority)
+					&& bitStream.Read(ttlMs)
+					&& ReadSafeString(bitStream, action))
+				{
+					CKeyBinds::BeginCapture(key, eventMask, flags, priority, ttlMs, action);
+				}
+				break;
+			}
+			case eRPC::CLEAR_KEY_CAPTURE:
+			{
+				unsigned short key;
+				std::string action;
+
+				if (bitStream.Read(key) && ReadSafeString(bitStream, action))
+					CKeyBinds::EndCapture(key, action);
+
+				break;
+			}
+			case eRPC::CLEAR_KEY_CAPTURES:
+			{
+				CKeyBinds::ClearCaptures();
+				break;
+			}
 			default:
 				CLog::Write("Safe RPC ignored: %u", usRpcId);
 				break;

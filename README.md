@@ -193,13 +193,14 @@ Smoke-test keybinds:
 Item demo commands:
 
 - `/itemadd`: create a Water Bottle object at your position
-- `/itemkeys`: rebind `E` through SA-MP+
+- `/itemkeys`: reset the contextual `E` capture state
 - `/itempickup`: fallback command for pickup testing
 - `/itemclear`: remove all demo items
 
 Item demo keybind:
 
-- `E`: pick up the nearest Water Bottle through `OnPlayerSAMPPKey`
+- `E`: pick up the nearest Water Bottle through a short-lived capture lease.
+  GTA's default `E` behavior is consumed only while the player is near the item.
 
 Menu demo commands:
 
@@ -221,7 +222,7 @@ Menu demo keybind:
 
 Existing SA-MP+ natives are still declared in `Build/sampp.inc`. The currently verified safe subset is HUD toggling and keybind callbacks.
 
-Keybind example:
+Keybind example for global hotkeys:
 
 ```pawn
 public OnPlayerSAMPPJoin(playerid, bool:has_plugin)
@@ -249,6 +250,69 @@ Keybind API:
 - `SAMPP_UnbindKey(playerid, key)`
 - `SAMPP_ClearKeyBinds(playerid)`
 - `OnPlayerSAMPPKey(playerid, keyid, keystate, action[])`
+
+Contextual input capture API:
+
+- `SAMPP_BeginKeyCapture(playerid, key, event_mask, priority, ttl_ms, flags, const action[])`
+- `SAMPP_EndKeyCapture(playerid, key, const action[] = "")`
+- `SAMPP_ClearKeyCaptures(playerid)`
+- `SAMPP_CaptureKeyNearPoint(...)`
+- `SAMPP_CaptureKeyInAnyVehicle(...)`
+- `SAMPP_CaptureKeyInVehicle(...)`
+- `SAMPP_CaptureKeyNearVehicle(...)`
+
+Use `SAMPP_BeginKeyCapture` for interaction keys that conflict with GTA controls.
+The lease is short-lived and must be renewed while the context is valid. If the
+context disappears, the lease expires and the GTA default key behavior resumes.
+Higher `priority` wins when multiple systems lease the same key, so a vehicle
+engine action can override a nearby pickup while the player is in a vehicle.
+`SAMPP_CAPTURE_DEFAULT_FLAGS` consumes keyboard input and temporarily blocks
+GTA's weapon-switch action as a second safety layer for keys such as `E`.
+
+Example:
+
+```pawn
+public OnPlayerUpdate(playerid)
+{
+    SAMPP_CaptureKeyNearPoint(
+        playerid,
+        SAMPP_KEY_E,
+        x, y, z,
+        2.0,
+        "item_pickup",
+        SAMPP_CAPTURE_PRIORITY_ITEM,
+        SAMPP_CAPTURE_LEASE_DEFAULT_MS,
+        SAMPP_CAPTURE_DEFAULT_FLAGS
+    );
+    return 1;
+}
+```
+
+Client capability API:
+
+- `SAMPP_HasFeature(playerid, SAMPP_FEATURE_*)`
+- `SAMPP_GetClientFeatureFlags(playerid)`
+- `SAMPP_GetClientCapabilities(playerid)`
+- `SAMPP_GetClientVersion(playerid, &major, &minor, &patch)`
+- `SAMPP_GetClientHash(playerid, dest[], size = sizeof dest)`
+- `SAMPP_IsLauncherVerified(playerid)`
+
+The native HELLO handshake now reports the client version, supported feature
+flags, a hash of the loaded ASI, and a launcher verification flag. This is for
+compatibility and feature gating. `SAMPP_IsLauncherVerified` is currently false
+unless a future signed launcher token flow is added; do not treat it as
+anti-cheat proof.
+
+Example:
+
+```pawn
+if (SAMPP_HasFeature(playerid, SAMPP_FEATURE_KEYCAPTURE))
+{
+    SAMPP_BeginKeyCapture(playerid, SAMPP_KEY_E, SAMPP_KEY_EVENT_DOWN,
+        SAMPP_CAPTURE_PRIORITY_ITEM, SAMPP_CAPTURE_LEASE_DEFAULT_MS,
+        SAMPP_CAPTURE_DEFAULT_FLAGS, "item_pickup");
+}
+```
 
 ## Notes
 

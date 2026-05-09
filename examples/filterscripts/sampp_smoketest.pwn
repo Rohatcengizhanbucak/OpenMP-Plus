@@ -149,6 +149,30 @@ public OnPlayerCommandText(playerid, cmdtext[])
 		format(message, sizeof message, "[SA-MP+] Last known resolution: %dx%d", width, height);
 		SendClientMessage(playerid, SAMPP_TEST_COLOUR, message);
 
+		new major, minor, patch, features, hash[65];
+		SAMPP_GetClientVersion(playerid, major, minor, patch);
+		features = SAMPP_GetClientFeatureFlags(playerid);
+		SAMPP_GetClientHash(playerid, hash, sizeof hash);
+
+		format(message, sizeof message, "[SA-MP+] Client info: version=%d.%d.%d features=%d verified=%d", major, minor, patch, features, SAMPP_IsLauncherVerified(playerid));
+		SendClientMessage(playerid, SAMPP_TEST_COLOUR, message);
+
+		format(message, sizeof message, "[SA-MP+] Features: HUD=%d Keybind=%d Capture=%d Audio=%d Effects=%d UI=%d",
+			SAMPP_HasFeature(playerid, SAMPP_FEATURE_HUD),
+			SAMPP_HasFeature(playerid, SAMPP_FEATURE_KEYBIND),
+			SAMPP_HasFeature(playerid, SAMPP_FEATURE_KEYCAPTURE),
+			SAMPP_HasFeature(playerid, SAMPP_FEATURE_AUDIO),
+			SAMPP_HasFeature(playerid, SAMPP_FEATURE_EFFECTS),
+			SAMPP_HasFeature(playerid, SAMPP_FEATURE_UI));
+		SendClientMessage(playerid, SAMPP_TEST_COLOUR, message);
+
+		if (hash[0])
+		{
+			hash[16] = '\0';
+			format(message, sizeof message, "[SA-MP+] Client hash: %.16s...", hash);
+			SendClientMessage(playerid, SAMPP_TEST_COLOUR, message);
+		}
+
 		SendClientMessage(playerid, SAMPP_TEST_COLOUR, "[SA-MP+] Handshake OK. Use /sampphelp for HUD RPC tests.");
 		return 1;
 	}

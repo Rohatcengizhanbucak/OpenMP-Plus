@@ -1,5 +1,6 @@
 #include <SAMP+/client/Client.h>
 #include <SAMP+/client/CGraphics.h>
+#include <SAMP+/client/CKeyBinds.h>
 #include <SAMP+/client/Proxy/CDInput8DeviceProxy.h>
 
 CDInput8DeviceProxy::CDInput8DeviceProxy(IDirectInput8A* pInput, IDirectInputDevice8A* pDevice)
@@ -79,12 +80,34 @@ HRESULT CDInput8DeviceProxy::GetDeviceState(DWORD a, LPVOID b)
 		m_pDevice->GetDeviceData(sizeof(DIDEVICEOBJECTDATA), NULL, &dwItems, 0);
 		return hRes;
 	}
-    return m_pDevice->GetDeviceState(a, b);
+
+	HRESULT hRes = m_pDevice->GetDeviceState(a, b);
+	if (SUCCEEDED(hRes) && DINPUT_DEVICE_IS_KEYBOARD)
+		CKeyBinds::FilterKeyboardState(a, b);
+
+    return hRes;
 }
 
 HRESULT CDInput8DeviceProxy::GetDeviceData(DWORD a, LPDIDEVICEOBJECTDATA b, LPDWORD c, DWORD d)
 {
-    return m_pDevice->GetDeviceData(a, b, c, d);
+	HRESULT hRes = m_pDevice->GetDeviceData(a, b, c, d);
+
+	if (SUCCEEDED(hRes) && DINPUT_DEVICE_IS_KEYBOARD && b && c && *c > 0)
+	{
+		DWORD writeIndex = 0;
+		for (DWORD readIndex = 0; readIndex < *c; ++readIndex)
+		{
+			if (CKeyBinds::ShouldConsumeDirectInputOffset(b[readIndex].dwOfs))
+				continue;
+
+			if (writeIndex != readIndex)
+				b[writeIndex] = b[readIndex];
+			++writeIndex;
+		}
+		*c = writeIndex;
+	}
+
+    return hRes;
 
 	/*if (DINPUT_DEVICE_IS_MOUSE && CGraphics::IsCursorEnabled())
 	{

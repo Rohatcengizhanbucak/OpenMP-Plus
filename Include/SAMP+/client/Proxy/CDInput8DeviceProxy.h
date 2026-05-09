@@ -1,6 +1,7 @@
 #pragma once
 
 #define DINPUT_DEVICE_IS_MOUSE m_dwType == DI8DEVTYPE_MOUSE
+#define DINPUT_DEVICE_IS_KEYBOARD m_dwType == DI8DEVTYPE_KEYBOARD
 
 #include <DirectX/dinput.h>
 

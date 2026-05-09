@@ -18,6 +18,11 @@ void CHooks::Apply()
 	InstallPatches();
 }
 
+void CHooks::ApplySafeInput()
+{
+	ApplyDirectInput();
+}
+
 void CHooks::Remove()
 {
 	RemoveDirectInput();
@@ -69,13 +74,24 @@ void CHooks::InstallPatches()
 void CHooks::ApplyDirectInput()
 {
 	if (!m_pfnDirectInput8Create)
-		m_pfnDirectInput8Create = (DirectInput8Create_t)DetourFunction(DetourFindFunction("dinput8.dll", "DirectInput8Create"), (BYTE*)CHooks::HOOK_DirectInput8Create);
+	{
+		PBYTE target = DetourFindFunction("dinput8.dll", "DirectInput8Create");
+		if (!target)
+		{
+			CLog::Write("DirectInput capture hook unavailable");
+			return;
+		}
+		m_pfnDirectInput8Create = (DirectInput8Create_t)DetourFunction(target, (BYTE*)CHooks::HOOK_DirectInput8Create);
+	}
 }
 
 void CHooks::RemoveDirectInput()
 {
 	if (m_pfnDirectInput8Create)
+	{
 		DetourRemove((BYTE*)m_pfnDirectInput8Create, (BYTE*)HOOK_DirectInput8Create);
+		m_pfnDirectInput8Create = NULL;
+	}
 }
 
 void CHooks::ApplyDirect3D()
@@ -87,7 +103,10 @@ void CHooks::ApplyDirect3D()
 void CHooks::RemoveDirect3D()
 {
 	if (m_pfnDirect3DCreate9)
+	{
 		DetourRemove((BYTE*)m_pfnDirect3DCreate9, (BYTE*)HOOK_Direct3DCreate9);
+		m_pfnDirect3DCreate9 = NULL;
+	}
 }
 
 void CHooks::ApplyCursorPos()
@@ -99,15 +118,21 @@ void CHooks::ApplyCursorPos()
 void CHooks::RemoveCursorPos()
 {
 	if (m_pfnSetCursorPos)
+	{
 		DetourRemove((BYTE*)m_pfnSetCursorPos, (BYTE*)HOOK_SetCursorPos);
+		m_pfnSetCursorPos = NULL;
+	}
 }
 
 HRESULT CHooks::HOOK_DirectInput8Create(HINSTANCE hinst, DWORD dwVersion, REFIID riidltf, void** ppvOut, IUnknown* punkOuter)
 {
 	HRESULT hr = m_pfnDirectInput8Create(hinst, dwVersion, riidltf, ppvOut, punkOuter);
-	IDirectInput8A* pDInput = (IDirectInput8A*)*ppvOut;
-	CDInput8Proxy* pDInputHook = new CDInput8Proxy(pDInput);
-	*ppvOut = pDInputHook;
+	if (SUCCEEDED(hr) && ppvOut && *ppvOut)
+	{
+		IDirectInput8A* pDInput = (IDirectInput8A*)*ppvOut;
+		CDInput8Proxy* pDInputHook = new CDInput8Proxy(pDInput);
+		*ppvOut = pDInputHook;
+	}
 	return hr;
 }
 

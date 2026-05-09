@@ -38,6 +38,9 @@ public:
 	static RPC_CALLBACK SetKeyBind(RPC_ARGS);
 	static RPC_CALLBACK UnbindKey(RPC_ARGS);
 	static RPC_CALLBACK ClearKeyBinds(RPC_ARGS);
+	static RPC_CALLBACK SetKeyCapture(RPC_ARGS);
+	static RPC_CALLBACK ClearKeyCapture(RPC_ARGS);
+	static RPC_CALLBACK ClearKeyCaptures(RPC_ARGS);
 
 private:
 

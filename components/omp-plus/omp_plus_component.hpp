@@ -20,6 +20,13 @@ struct OMPPlusPlayerState
 	bool ready = false;
 	uint16_t protocolVersion = 0;
 	uint32_t capabilities = 0;
+	uint8_t clientInfoVersion = 0;
+	uint16_t clientVersionMajor = 0;
+	uint16_t clientVersionMinor = 0;
+	uint16_t clientVersionPatch = 0;
+	uint32_t featureFlags = 0;
+	bool launcherVerified = false;
+	std::string clientHash;
 	uint16_t resolutionX = 0;
 	uint16_t resolutionY = 0;
 	uint8_t radio = 0;
@@ -67,6 +74,7 @@ public:
 	OMPPlusPlayerState* getPlayerState(int playerid);
 	IPawnScript* getScript(AMX* amx);
 	std::string getPawnString(AMX* amx, cell address, size_t maxLength);
+	bool setPawnString(AMX* amx, cell address, cell size, const std::string& value);
 	bool setPawnCell(AMX* amx, cell address, cell value);
 
 	template <typename... Args>
@@ -100,6 +108,7 @@ private:
 	bool handleHello(IPlayer& player, NetworkBitStream& stream, uint16_t version);
 	bool handleClientRPC(IPlayer& player, NetworkBitStream& stream);
 	void processClientRPC(IPlayer& player, uint16_t rpc, NetworkBitStream& stream);
+	uint32_t deriveLegacyFeatures(uint32_t capabilities) const;
 	void sendHelloAck(IPlayer& player);
 	void sendError(IPlayer& player, uint16_t code);
 	IPlayer* getPlayer(int playerid) const;

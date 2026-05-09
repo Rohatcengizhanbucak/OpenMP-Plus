@@ -4,6 +4,8 @@
 #define ITEM_DEMO_MAX_ITEMS 64
 #define ITEM_DEMO_MODEL_WATER_BOTTLE 19570
 #define ITEM_DEMO_PICKUP_RANGE 2.0
+#define ITEM_DEMO_CAPTURE_TTL_MS 450
+#define ITEM_DEMO_CAPTURE_REFRESH_MS 150
 #define ITEM_DEMO_OBJECT_DRAW_DISTANCE 50.0
 #define ITEM_DEMO_LABEL_DRAW_DISTANCE 16.0
 
@@ -18,6 +20,8 @@ static Float:gItemY[ITEM_DEMO_MAX_ITEMS];
 static Float:gItemZ[ITEM_DEMO_MAX_ITEMS];
 static gItemWorld[ITEM_DEMO_MAX_ITEMS];
 static gItemInterior[ITEM_DEMO_MAX_ITEMS];
+static bool:gItemCaptureActive[MAX_PLAYERS];
+static gItemNextCaptureRefresh[MAX_PLAYERS];
 
 stock ResetItemSlot(slot)
 {
@@ -81,7 +85,14 @@ stock FindFreeItemSlot()
 	return -1;
 }
 
-stock BindItemKey(playerid)
+stock ResetPlayerItemCapture(playerid)
+{
+	gItemCaptureActive[playerid] = false;
+	gItemNextCaptureRefresh[playerid] = 0;
+	return 1;
+}
+
+stock PrepareItemKey(playerid)
 {
 	if (!IsUsingSAMPP(playerid))
 	{
@@ -90,9 +101,10 @@ stock BindItemKey(playerid)
 	}
 
 	SAMPP_UnbindKey(playerid, SAMPP_KEY_E);
-	SAMPP_BindKey(playerid, SAMPP_KEY_E, SAMPP_KEY_EVENT_DOWN, "item_pickup");
+	SAMPP_EndKeyCapture(playerid, SAMPP_KEY_E, "item_pickup");
+	gItemCaptureActive[playerid] = false;
 
-	SendClientMessage(playerid, ITEM_DEMO_COLOUR, "[ItemDemo] E key bound through SA-MP+. Use /itemadd, then press E near the item.");
+	SendClientMessage(playerid, ITEM_DEMO_COLOUR, "[ItemDemo] E capture activates only near a Water Bottle. Use /itemadd, then press E near it.");
 	return 1;
 }
 
@@ -140,7 +152,7 @@ stock AddWaterBottleItem(playerid)
 	new message[128];
 	format(message, sizeof message, "[ItemDemo] Water Bottle item #%d added. Press E near it to test the ASI keybind.", slot);
 	SendClientMessage(playerid, ITEM_DEMO_COLOUR, message);
-	BindItemKey(playerid);
+	PrepareItemKey(playerid);
 	return 1;
 }
 
@@ -185,8 +197,48 @@ stock PickupNearestItem(playerid)
 	}
 
 	DestroyItemSlot(slot);
+	SAMPP_EndKeyCapture(playerid, SAMPP_KEY_E, "item_pickup");
+	gItemCaptureActive[playerid] = false;
 	ApplyAnimation(playerid, "BOMBER", "BOM_Plant", 4.0, false, false, false, false, 0);
 	SendClientMessage(playerid, ITEM_DEMO_COLOUR, "[ItemDemo] You picked up a Water Bottle through the SA-MP+ E keybind.");
+	return 1;
+}
+
+stock RefreshItemCapture(playerid, bool:force = false)
+{
+	if (!IsUsingSAMPP(playerid))
+	{
+		ResetPlayerItemCapture(playerid);
+		return 1;
+	}
+
+	new now = GetTickCount();
+	if (!force && now < gItemNextCaptureRefresh[playerid])
+	{
+		return 1;
+	}
+	gItemNextCaptureRefresh[playerid] = now + ITEM_DEMO_CAPTURE_REFRESH_MS;
+
+	new slot = FindNearestItemForPlayer(playerid);
+	if (slot != -1)
+	{
+		SAMPP_BeginKeyCapture(
+			playerid,
+			SAMPP_KEY_E,
+			SAMPP_KEY_EVENT_DOWN,
+			SAMPP_CAPTURE_PRIORITY_ITEM,
+			ITEM_DEMO_CAPTURE_TTL_MS,
+			SAMPP_CAPTURE_DEFAULT_FLAGS,
+			"item_pickup"
+		);
+		gItemCaptureActive[playerid] = true;
+	}
+	else if (gItemCaptureActive[playerid])
+	{
+		SAMPP_EndKeyCapture(playerid, SAMPP_KEY_E, "item_pickup");
+		gItemCaptureActive[playerid] = false;
+	}
+
 	return 1;
 }
 
@@ -214,7 +266,20 @@ public OnFilterScriptExit()
 
 public OnPlayerConnect(playerid)
 {
+	ResetPlayerItemCapture(playerid);
 	SendClientMessage(playerid, ITEM_DEMO_COLOUR, "[ItemDemo] Use /itemadd to create a Water Bottle pickup demo.");
+	return 1;
+}
+
+public OnPlayerDisconnect(playerid, reason)
+{
+	ResetPlayerItemCapture(playerid);
+	return 1;
+}
+
+public OnPlayerUpdate(playerid)
+{
+	RefreshItemCapture(playerid);
 	return 1;
 }
 
@@ -222,7 +287,7 @@ public OnPlayerSAMPPJoin(playerid, bool:has_plugin)
 {
 	if (has_plugin)
 	{
-		BindItemKey(playerid);
+		PrepareItemKey(playerid);
 	}
 	return 1;
 }
@@ -236,7 +301,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
 	if (!strcmp(cmdtext, "/itemkeys", true))
 	{
-		return BindItemKey(playerid);
+		return PrepareItemKey(playerid);
 	}
 
 	if (!strcmp(cmdtext, "/itempickup", true))

@@ -84,6 +84,23 @@
 #define SAMPP_KEY_EVENT_UP 2
 #define SAMPP_KEY_EVENT_BOTH 3
 
+#define SAMPP_FEATURE_HUD 1
+#define SAMPP_FEATURE_KEYBIND 2
+#define SAMPP_FEATURE_KEYCAPTURE 4
+#define SAMPP_FEATURE_AUDIO 8
+#define SAMPP_FEATURE_EFFECTS 16
+#define SAMPP_FEATURE_UI 32
+
+#define SAMPP_CAPTURE_CONSUME_GAME_INPUT 1
+#define SAMPP_CAPTURE_BLOCK_SWITCH_WEAPON 2
+#define SAMPP_CAPTURE_DEFAULT_FLAGS (SAMPP_CAPTURE_CONSUME_GAME_INPUT | SAMPP_CAPTURE_BLOCK_SWITCH_WEAPON)
+#define SAMPP_CAPTURE_LEASE_DEFAULT_MS 400
+#define SAMPP_CAPTURE_REFRESH_DEFAULT_MS 150
+#define SAMPP_CAPTURE_PRIORITY_LOW 0
+#define SAMPP_CAPTURE_PRIORITY_ITEM 20
+#define SAMPP_CAPTURE_PRIORITY_VEHICLE 40
+#define SAMPP_CAPTURE_PRIORITY_MENU 60
+
 #define SAMPP_KEY_LBUTTON 0x01
 #define SAMPP_KEY_RBUTTON 0x02
 #define SAMPP_KEY_MBUTTON 0x04
@@ -190,6 +207,12 @@ native SetPlayerPedAnims(playerid, bool:toggle);
 native TogglePlayerSwitchReload(playerid, bool:toggle);
 native bool:IsUsingSAMPP(playerid);
 native bool:IsUsingOMPPlus(playerid);
+native bool:SAMPP_HasFeature(playerid, feature);
+native SAMPP_GetClientFeatureFlags(playerid);
+native SAMPP_GetClientCapabilities(playerid);
+native SAMPP_GetClientVersion(playerid, &major, &minor, &patch);
+native SAMPP_GetClientHash(playerid, dest[], size = sizeof dest);
+native bool:SAMPP_IsLauncherVerified(playerid);
 native GetPlayerResolution(playerid, &X, &Y);
 native SetPlayerNoReload(playerid, bool:toggle);
 native TogglePlayerInfiniteRun(playerid, bool:toggle);
@@ -208,7 +231,61 @@ native ToggleThermalVision(playerid, bool:toggle);
 native SAMPP_BindKey(playerid, key, event_mask = SAMPP_KEY_EVENT_DOWN, const action[] = "");
 native SAMPP_UnbindKey(playerid, key);
 native SAMPP_ClearKeyBinds(playerid);
+native SAMPP_BeginKeyCapture(playerid, key, event_mask = SAMPP_KEY_EVENT_DOWN, priority = SAMPP_CAPTURE_PRIORITY_LOW, ttl_ms = SAMPP_CAPTURE_LEASE_DEFAULT_MS, flags = SAMPP_CAPTURE_DEFAULT_FLAGS, const action[] = "");
+native SAMPP_EndKeyCapture(playerid, key, const action[] = "");
+native SAMPP_ClearKeyCaptures(playerid);
 native SAMPP_ExecuteCallback(type, {Float,_}:...);
+
+stock bool:SAMPP_CaptureKeyNearPoint(playerid, key, Float:x, Float:y, Float:z, Float:radius, const action[], priority = SAMPP_CAPTURE_PRIORITY_ITEM, ttl_ms = SAMPP_CAPTURE_LEASE_DEFAULT_MS, flags = SAMPP_CAPTURE_DEFAULT_FLAGS, event_mask = SAMPP_KEY_EVENT_DOWN)
+{
+	if (!IsUsingSAMPP(playerid))
+	{
+		return false;
+	}
+
+	if (GetPlayerDistanceFromPoint(playerid, x, y, z) > radius)
+	{
+		return false;
+	}
+
+	return SAMPP_BeginKeyCapture(playerid, key, event_mask, priority, ttl_ms, flags, action) != 0;
+}
+
+stock bool:SAMPP_CaptureKeyInAnyVehicle(playerid, key, const action[], priority = SAMPP_CAPTURE_PRIORITY_VEHICLE, ttl_ms = SAMPP_CAPTURE_LEASE_DEFAULT_MS, flags = SAMPP_CAPTURE_DEFAULT_FLAGS, event_mask = SAMPP_KEY_EVENT_DOWN)
+{
+	if (!IsUsingSAMPP(playerid) || !IsPlayerInAnyVehicle(playerid))
+	{
+		return false;
+	}
+
+	return SAMPP_BeginKeyCapture(playerid, key, event_mask, priority, ttl_ms, flags, action) != 0;
+}
+
+stock bool:SAMPP_CaptureKeyInVehicle(playerid, vehicleid, key, const action[], priority = SAMPP_CAPTURE_PRIORITY_VEHICLE, ttl_ms = SAMPP_CAPTURE_LEASE_DEFAULT_MS, flags = SAMPP_CAPTURE_DEFAULT_FLAGS, event_mask = SAMPP_KEY_EVENT_DOWN)
+{
+	if (!IsUsingSAMPP(playerid) || !IsPlayerInVehicle(playerid, vehicleid))
+	{
+		return false;
+	}
+
+	return SAMPP_BeginKeyCapture(playerid, key, event_mask, priority, ttl_ms, flags, action) != 0;
+}
+
+stock bool:SAMPP_CaptureKeyNearVehicle(playerid, vehicleid, key, Float:radius, const action[], priority = SAMPP_CAPTURE_PRIORITY_VEHICLE, ttl_ms = SAMPP_CAPTURE_LEASE_DEFAULT_MS, flags = SAMPP_CAPTURE_DEFAULT_FLAGS, event_mask = SAMPP_KEY_EVENT_DOWN)
+{
+	if (!IsUsingSAMPP(playerid))
+	{
+		return false;
+	}
+
+	new Float:x, Float:y, Float:z;
+	if (!GetVehiclePos(vehicleid, x, y, z))
+	{
+		return false;
+	}
+
+	return SAMPP_CaptureKeyNearPoint(playerid, key, x, y, z, radius, action, priority, ttl_ms, flags, event_mask);
+}
 
 forward OnPlayerOpenPauseMenu(playerid);
 forward OnPlayerClosePauseMenu(playerid);

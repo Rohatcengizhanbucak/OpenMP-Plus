@@ -139,6 +139,31 @@ cmake --build Build\openmp-legacy-win32 --config Release --target sampp_server
 Native transport uses custom RPC `220`. Keep that ID reserved for OpenMP-Plus
 unless you intentionally change and rebuild both the component and the ASI.
 
+Contextual key capture uses the same native transport. Install a matching
+`omp-plus.dll`, `sampp_client.asi`, and `sampp.inc`; otherwise Pawn scripts may
+compile with `SAMPP_BeginKeyCapture` while the client cannot consume the GTA
+default key input. The default capture flags also suppress GTA weapon switching
+while a capture lease is active. Close GTA before replacing `sampp_client.asi`,
+because Windows locks loaded ASI files while the game is running.
+
+The client and component must also match for capability negotiation. On connect,
+the ASI reports:
+
+- OpenMP-Plus client version.
+- Supported feature flags such as HUD, keybind and key capture.
+- SHA-256 hash of the loaded ASI when Windows CryptoAPI can read it.
+- Launcher verification status. This is currently informational and should not
+  be treated as anti-cheat proof.
+
+Pawn scripts can gate features with:
+
+```pawn
+if (SAMPP_HasFeature(playerid, SAMPP_FEATURE_KEYCAPTURE))
+{
+    // safe to use contextual input capture
+}
+```
+
 ## Troubleshooting
 
 `/sampp` shows `IsUsingSAMPP=0`:

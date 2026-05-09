@@ -57,6 +57,9 @@ void CRPCCallback::Initialize()
 	CRPC::Add(eRPC::SET_KEY_BIND, SetKeyBind);
 	CRPC::Add(eRPC::UNBIND_KEY, UnbindKey);
 	CRPC::Add(eRPC::CLEAR_KEY_BINDS, ClearKeyBinds);
+	CRPC::Add(eRPC::SET_KEY_CAPTURE, SetKeyCapture);
+	CRPC::Add(eRPC::CLEAR_KEY_CAPTURE, ClearKeyCapture);
+	CRPC::Add(eRPC::CLEAR_KEY_CAPTURES, ClearKeyCaptures);
 
 	CGame::OnResolutionChange(*(int*)0x0C9C040, *(int*)0x0C9C044);
 	CMem::InstallJmp(0x0584770, CJmpProxy::MarkersHook, CJmpProxy::MarkersHookJmpBack, 6);
@@ -106,6 +109,40 @@ RPC_CALLBACK CRPCCallback::UnbindKey(RPC_ARGS)
 RPC_CALLBACK CRPCCallback::ClearKeyBinds(RPC_ARGS)
 {
 	CKeyBinds::Clear();
+}
+
+RPC_CALLBACK CRPCCallback::SetKeyCapture(RPC_ARGS)
+{
+	unsigned short key;
+	unsigned char eventMask;
+	unsigned char flags;
+	short priority;
+	unsigned short ttlMs;
+	std::string action;
+
+	if (bsData.Read(key)
+		&& bsData.Read(eventMask)
+		&& bsData.Read(flags)
+		&& bsData.Read(priority)
+		&& bsData.Read(ttlMs)
+		&& ReadBoundedString(bsData, action))
+	{
+		CKeyBinds::BeginCapture(key, eventMask, flags, priority, ttlMs, action);
+	}
+}
+
+RPC_CALLBACK CRPCCallback::ClearKeyCapture(RPC_ARGS)
+{
+	unsigned short key;
+	std::string action;
+
+	if (bsData.Read(key) && ReadBoundedString(bsData, action))
+		CKeyBinds::EndCapture(key, action);
+}
+
+RPC_CALLBACK CRPCCallback::ClearKeyCaptures(RPC_ARGS)
+{
+	CKeyBinds::ClearCaptures();
 }
 
 RPC_CALLBACK CRPCCallback::SetRadioStation(RPC_ARGS)

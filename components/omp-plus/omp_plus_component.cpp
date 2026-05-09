@@ -192,6 +192,19 @@ bool OMPPlusComponent::setPawnCell(AMX* amx, cell address, cell value)
 	return true;
 }
 
+bool OMPPlusComponent::setPawnString(AMX* amx, cell address, cell size, const std::string& value)
+{
+	IPawnScript* script = getScript(amx);
+	if (!script || size <= 0)
+		return false;
+
+	cell* physical = nullptr;
+	if (script->GetAddr(address, &physical) != AMX_ERR_NONE || !physical)
+		return false;
+
+	return script->SetString(physical, StringView(value.c_str(), value.length()), false, false, static_cast<size_t>(size)) == AMX_ERR_NONE;
+}
+
 void OMPPlusComponent::resetPlayer(int playerid)
 {
 	if (playerid >= 0 && playerid < PLAYER_POOL_SIZE)
@@ -274,9 +287,68 @@ bool OMPPlusComponent::handleHello(IPlayer& player, NetworkBitStream& stream, ui
 	state->ready = true;
 	state->protocolVersion = version;
 	state->capabilities = capabilities;
+	state->clientInfoVersion = 0;
+	state->clientVersionMajor = 0;
+	state->clientVersionMinor = 0;
+	state->clientVersionPatch = 0;
+	state->featureFlags = deriveLegacyFeatures(capabilities);
+	state->launcherVerified = false;
+	state->clientHash.clear();
+
+	if (stream.GetNumberOfUnreadBits() >= 8)
+	{
+		uint8_t infoVersion = 0;
+		if (stream.Read(infoVersion))
+		{
+			state->clientInfoVersion = infoVersion;
+
+			if (infoVersion >= 1 && stream.GetNumberOfUnreadBits() >= 16 * 3 + 32 + 1 + 8)
+			{
+				uint16_t major = 0;
+				uint16_t minor = 0;
+				uint16_t patch = 0;
+				uint32_t featureFlags = 0;
+				bool launcherVerified = false;
+				uint8_t hashLength = 0;
+
+				if (stream.Read(major)
+					&& stream.Read(minor)
+					&& stream.Read(patch)
+					&& stream.Read(featureFlags)
+					&& stream.Read(launcherVerified)
+					&& stream.Read(hashLength)
+					&& hashLength <= OMPPlusProtocol::MaxClientHashLength
+					&& stream.GetNumberOfUnreadBits() >= static_cast<int>(hashLength) * 8)
+				{
+					char hash[OMPPlusProtocol::MaxClientHashLength + 1] = {};
+					if (!hashLength || stream.Read(hash, hashLength))
+					{
+						state->clientVersionMajor = major;
+						state->clientVersionMinor = minor;
+						state->clientVersionPatch = patch;
+						state->featureFlags = featureFlags;
+						state->launcherVerified = launcherVerified;
+						state->clientHash.assign(hash, hashLength);
+					}
+				}
+			}
+		}
+	}
 
 	if (core_)
-		core_->printLn("[OpenMP-Plus] Native HELLO from player %d, capabilities=%u.", player.getID(), capabilities);
+	{
+		core_->printLn(
+			"[OpenMP-Plus] Native HELLO from player %d, protocol=%u, client=%u.%u.%u, features=%u, verified=%s, hash=%.*s.",
+			player.getID(),
+			static_cast<unsigned>(version),
+			static_cast<unsigned>(state->clientVersionMajor),
+			static_cast<unsigned>(state->clientVersionMinor),
+			static_cast<unsigned>(state->clientVersionPatch),
+			static_cast<unsigned>(state->featureFlags),
+			state->launcherVerified ? "true" : "false",
+			static_cast<int>(std::min<size_t>(12, state->clientHash.length())),
+			state->clientHash.c_str());
+	}
 
 	sendHelloAck(player);
 
@@ -287,6 +359,16 @@ bool OMPPlusComponent::handleHello(IPlayer& player, NetworkBitStream& stream, ui
 	}
 
 	return false;
+}
+
+uint32_t OMPPlusComponent::deriveLegacyFeatures(uint32_t capabilities) const
+{
+	uint32_t features = 0;
+	if (capabilities & OMPPlusProtocol::CapabilityNativeTransport)
+		features |= OMPPlusProtocol::FeatureHUD | OMPPlusProtocol::FeatureKeybind;
+	if (capabilities & OMPPlusProtocol::CapabilityKeyCapture)
+		features |= OMPPlusProtocol::FeatureKeyCapture;
+	return features;
 }
 
 bool OMPPlusComponent::handleClientRPC(IPlayer& player, NetworkBitStream& stream)

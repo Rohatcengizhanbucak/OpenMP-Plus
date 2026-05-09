@@ -301,6 +301,56 @@ namespace
 		return Component()->isUsingOMPPlus(static_cast<int>(params[1])) ? 1 : 0;
 	}
 
+	cell AMX_NATIVE_CALL HasFeatureProc(AMX*, cell* params)
+	{
+		OMPPlusPlayerState* state = Component()->getPlayerState(static_cast<int>(params[1]));
+		if (!state || !state->ready)
+			return 0;
+
+		const uint32_t feature = static_cast<uint32_t>(params[2]);
+		return (state->featureFlags & feature) != 0 ? 1 : 0;
+	}
+
+	cell AMX_NATIVE_CALL GetClientFeatureFlagsProc(AMX*, cell* params)
+	{
+		OMPPlusPlayerState* state = Component()->getPlayerState(static_cast<int>(params[1]));
+		return state && state->ready ? static_cast<cell>(state->featureFlags) : 0;
+	}
+
+	cell AMX_NATIVE_CALL GetClientCapabilitiesProc(AMX*, cell* params)
+	{
+		OMPPlusPlayerState* state = Component()->getPlayerState(static_cast<int>(params[1]));
+		return state && state->ready ? static_cast<cell>(state->capabilities) : 0;
+	}
+
+	cell AMX_NATIVE_CALL GetClientVersionProc(AMX* amx, cell* params)
+	{
+		OMPPlusPlayerState* state = Component()->getPlayerState(static_cast<int>(params[1]));
+		if (!state || !state->ready)
+			return 0;
+
+		Component()->setPawnCell(amx, params[2], static_cast<cell>(state->clientVersionMajor));
+		Component()->setPawnCell(amx, params[3], static_cast<cell>(state->clientVersionMinor));
+		Component()->setPawnCell(amx, params[4], static_cast<cell>(state->clientVersionPatch));
+		return 1;
+	}
+
+	cell AMX_NATIVE_CALL GetClientHashProc(AMX* amx, cell* params)
+	{
+		OMPPlusPlayerState* state = Component()->getPlayerState(static_cast<int>(params[1]));
+		if (!state || !state->ready)
+			return 0;
+
+		const cell size = ParamCount(params) >= 3 ? params[3] : static_cast<cell>(OMPPlusProtocol::MaxClientHashLength + 1);
+		return Component()->setPawnString(amx, params[2], size, state->clientHash) ? 1 : 0;
+	}
+
+	cell AMX_NATIVE_CALL IsLauncherVerifiedProc(AMX*, cell* params)
+	{
+		OMPPlusPlayerState* state = Component()->getPlayerState(static_cast<int>(params[1]));
+		return state && state->ready && state->launcherVerified ? 1 : 0;
+	}
+
 	cell AMX_NATIVE_CALL BindKeyProc(AMX* amx, cell* params)
 	{
 		if (!Component()->isUsingOMPPlus(static_cast<int>(params[1])))
@@ -341,6 +391,61 @@ namespace
 	{
 		return SendEmpty(params[1], CLEAR_KEY_BINDS);
 	}
+
+	cell AMX_NATIVE_CALL BeginKeyCaptureProc(AMX* amx, cell* params)
+	{
+		if (!Component()->isUsingOMPPlus(static_cast<int>(params[1])))
+			return 0;
+
+		const uint16_t key = static_cast<uint16_t>(params[2]);
+		const uint8_t eventMask = static_cast<uint8_t>(params[3] & 0x03);
+		const int priorityRaw = static_cast<int>(params[4]);
+		const int ttlRaw = static_cast<int>(params[5]);
+		const uint8_t flags = static_cast<uint8_t>(params[6] & 0xFF);
+		const std::string action = ParamCount(params) >= 7 ? Component()->getPawnString(amx, params[7], 31) : std::string();
+
+		if (!key || key > 255 || !eventMask || ttlRaw < 0)
+			return 0;
+
+		const int priority = std::max(-32768, std::min(32767, priorityRaw));
+		const int ttl = std::max(0, std::min(5000, ttlRaw));
+
+		NetworkBitStream stream;
+		stream.Write(key);
+		stream.Write(eventMask);
+		stream.Write(flags);
+		stream.Write(static_cast<int16_t>(priority));
+		stream.Write(static_cast<uint16_t>(ttl));
+		stream.Write(static_cast<uint8_t>(action.length()));
+		if (!action.empty())
+			stream.Write(action.c_str(), static_cast<int>(action.length()));
+
+		return Component()->sendLegacyRPC(static_cast<int>(params[1]), SET_KEY_CAPTURE, &stream) ? 1 : 0;
+	}
+
+	cell AMX_NATIVE_CALL EndKeyCaptureProc(AMX* amx, cell* params)
+	{
+		if (!Component()->isUsingOMPPlus(static_cast<int>(params[1])))
+			return 0;
+
+		const uint16_t key = static_cast<uint16_t>(params[2]);
+		const std::string action = ParamCount(params) >= 3 ? Component()->getPawnString(amx, params[3], 31) : std::string();
+		if (!key || key > 255)
+			return 0;
+
+		NetworkBitStream stream;
+		stream.Write(key);
+		stream.Write(static_cast<uint8_t>(action.length()));
+		if (!action.empty())
+			stream.Write(action.c_str(), static_cast<int>(action.length()));
+
+		return Component()->sendLegacyRPC(static_cast<int>(params[1]), CLEAR_KEY_CAPTURE, &stream) ? 1 : 0;
+	}
+
+	cell AMX_NATIVE_CALL ClearKeyCapturesProc(AMX*, cell* params)
+	{
+		return SendEmpty(params[1], CLEAR_KEY_CAPTURES);
+	}
 }
 
 AMX_NATIVE_INFO OMPPlusNatives[] =
@@ -363,6 +468,12 @@ AMX_NATIVE_INFO OMPPlusNatives[] =
 	{ "GetPlayerResolution", GetPlayerResolutionProc },
 	{ "IsUsingSAMPP", IsUsingSAMPPProc },
 	{ "IsUsingOMPPlus", IsUsingOMPPlusProc },
+	{ "SAMPP_HasFeature", HasFeatureProc },
+	{ "SAMPP_GetClientFeatureFlags", GetClientFeatureFlagsProc },
+	{ "SAMPP_GetClientCapabilities", GetClientCapabilitiesProc },
+	{ "SAMPP_GetClientVersion", GetClientVersionProc },
+	{ "SAMPP_GetClientHash", GetClientHashProc },
+	{ "SAMPP_IsLauncherVerified", IsLauncherVerifiedProc },
 	{ "SetPlayerBlurIntensity", SetPlayerBlurIntensityProc },
 	{ "TogglePlayerDriveOnWater", TogglePlayerDriveOnWaterProc },
 	{ "SetPlayerGameSpeed", SetPlayerGameSpeedProc },
@@ -385,5 +496,8 @@ AMX_NATIVE_INFO OMPPlusNatives[] =
 	{ "SAMPP_BindKey", BindKeyProc },
 	{ "SAMPP_UnbindKey", UnbindKeyProc },
 	{ "SAMPP_ClearKeyBinds", ClearKeyBindsProc },
+	{ "SAMPP_BeginKeyCapture", BeginKeyCaptureProc },
+	{ "SAMPP_EndKeyCapture", EndKeyCaptureProc },
+	{ "SAMPP_ClearKeyCaptures", ClearKeyCapturesProc },
 	{ nullptr, nullptr }
 };

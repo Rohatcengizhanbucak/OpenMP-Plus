@@ -45,16 +45,27 @@ the native transport:
 - `/samppkeys` registers smoke-test keybinds.
 - F2 triggers the help action through `OnPlayerSAMPPKey`.
 - B triggers the money HUD action through `OnPlayerSAMPPKey`.
+- Contextual key capture leases are available for interaction keys that should
+  temporarily consume GTA input, for example `E` near a pickup or inside a
+  vehicle.
+- `SAMPP_CAPTURE_DEFAULT_FLAGS` also blocks the GTA switch-weapon action while
+  the lease is active, because GTA can process that action outside the observed
+  key callback path.
 
 Previously live verified in the safe feature subset:
 
 - Native compatibility handshake.
+- HELLO handshake now carries client version, feature flags, ASI hash and
+  launcher verification status.
 - Money HUD toggle.
 - Ammo HUD toggle.
 - Weapon icon toggle.
 - Minimap toggle.
 - Keybind callback: `B` returned `key=66 state=1 action=money` and toggled money HUD.
 - Keybind callback: `F2` returned `key=113 state=1 action=help` and displayed help.
+- Item demo uses `SAMPP_BeginKeyCapture` instead of a global `E` bind, so GTA
+  default `E` behavior is blocked only while the pickup context is active.
+- `/sampp` reports `SAMPP_HasFeature`, version and hash smoke information.
 
 ## Porting Order
 

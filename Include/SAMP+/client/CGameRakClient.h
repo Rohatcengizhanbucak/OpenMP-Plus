@@ -63,6 +63,7 @@ public:
 class CGameRakClient
 {
 public:
+	static void SetModuleHandle(HMODULE module);
 	static bool Initialize();
 	static bool IsInitialized();
 	static bool SendHello();

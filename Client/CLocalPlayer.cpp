@@ -14,10 +14,37 @@ DWORD CLocalPlayer::m_actionMemory[ePlayerAction::COUNT - 1] =
 	0xB73576
 };
 
+bool CLocalPlayer::m_actionStateInitialized = false;
+bool CLocalPlayer::m_actionDesiredDisabled[ePlayerAction::COUNT - 1] = {};
+bool CLocalPlayer::m_actionTemporaryDisabled[ePlayerAction::COUNT - 1] = {};
+
+void CLocalPlayer::EnsureActionStateInitialized()
+{
+	if (m_actionStateInitialized)
+		return;
+
+	for (unsigned char i = 1; i < ePlayerAction::COUNT; ++i)
+		m_actionDesiredDisabled[i - 1] = (*(BYTE*)m_actionMemory[i - 1]) != 0;
+
+	m_actionStateInitialized = true;
+}
+
+void CLocalPlayer::WriteEffectiveActionState(unsigned char action)
+{
+	if (action == ePlayerAction::ALL || action >= ePlayerAction::COUNT)
+		return;
+
+	const unsigned char index = action - 1;
+	const bool disabled = m_actionDesiredDisabled[index] || m_actionTemporaryDisabled[index];
+	CMem::PutSingle<BYTE>(m_actionMemory[index], disabled ? 1 : 0);
+}
+
 void CLocalPlayer::SetActionEnabled(unsigned char action, bool bEnabled)
 {
 	if (action >= ePlayerAction::COUNT)
 		return;
+
+	EnsureActionStateInitialized();
 
 	if (action == ePlayerAction::ALL)
 	{
@@ -26,8 +53,34 @@ void CLocalPlayer::SetActionEnabled(unsigned char action, bool bEnabled)
 
 	}
 	else
-		CMem::PutSingle<BYTE>(m_actionMemory[action-1], !bEnabled);
+	{
+		m_actionDesiredDisabled[action - 1] = !bEnabled;
+		WriteEffectiveActionState(action);
+	}
 
+}
+
+void CLocalPlayer::SetActionTemporarilyBlocked(unsigned char action, bool blocked)
+{
+	if (action >= ePlayerAction::COUNT)
+		return;
+
+	EnsureActionStateInitialized();
+
+	if (action == ePlayerAction::ALL)
+	{
+		for (unsigned char i = 1; i < ePlayerAction::COUNT; ++i)
+			SetActionTemporarilyBlocked(i, blocked);
+	}
+	else
+	{
+		const unsigned char index = action - 1;
+		if (m_actionTemporaryDisabled[index] == blocked)
+			return;
+
+		m_actionTemporaryDisabled[index] = blocked;
+		WriteEffectiveActionState(action);
+	}
 }
 
 // TODO: make cancellable
