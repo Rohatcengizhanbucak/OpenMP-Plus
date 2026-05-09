@@ -1,6 +1,7 @@
 #include <SAMP+/CRPC.h>
 #include <SAMP+/client/Client.h>
 #include <SAMP+/client/CKeyBinds.h>
+#include <SAMP+/client/CGameRakClient.h>
 #include <SAMP+/client/Network.h>
 #include <SAMP+/client/CHUD.h>
 #ifndef SAMPP_SAFE_CLIENT
@@ -11,12 +12,25 @@
 
 #include <RakNet/MessageIdentifiers.h>
 
+#include <stdio.h>
+
 namespace Network
 {
+	enum eTransportMode
+	{
+		TRANSPORT_DISABLED,
+		TRANSPORT_SIDE_CHANNEL,
+		TRANSPORT_NATIVE_RAKCLIENT
+	};
+
 	static CRakClient* pRakClient;
 	static bool bInitialized;
 	static bool bConnected;
 	static bool bServerHasPlugin;
+	static eTransportMode transportMode = TRANSPORT_DISABLED;
+	static DWORD dwNextHelloAttempt;
+	static DWORD dwNextNativeInitAttempt;
+	static DWORD dwNextInvalidNativeLog;
 	static std::string strAddress;
 	static unsigned short usPort;
 #ifdef SAMPP_SAFE_CLIENT
@@ -99,6 +113,7 @@ namespace Network
 	void Initialize(std::string address, unsigned short port)
 	{
 		bInitialized = false;
+		transportMode = TRANSPORT_SIDE_CHANNEL;
 
 		strAddress = address;
 		usPort = port;
@@ -113,6 +128,26 @@ namespace Network
 		bInitialized = true;
 	}
 
+	void InitializeNative()
+	{
+		bInitialized = false;
+		bConnected = false;
+		bServerHasPlugin = false;
+		pRakClient = NULL;
+		transportMode = TRANSPORT_NATIVE_RAKCLIENT;
+		dwNextHelloAttempt = 0;
+		dwNextNativeInitAttempt = 0;
+
+		if (!CGameRakClient::Initialize())
+		{
+			dwNextNativeInitAttempt = GetTickCount() + 1000;
+			CLog::Write("Native RakClient transport pending; waiting for samp.dll network state");
+			return;
+		}
+
+		bInitialized = true;
+	}
+
 	bool IsInitialized()
 	{
 		return bInitialized;
@@ -120,6 +155,20 @@ namespace Network
 
 	void Connect()
 	{
+		if (transportMode == TRANSPORT_NATIVE_RAKCLIENT)
+		{
+			if (IsInitialized())
+			{
+				CGameRakClient::SendHello();
+				dwNextHelloAttempt = GetTickCount() + 2000;
+			}
+			else
+			{
+				dwNextNativeInitAttempt = GetTickCount();
+			}
+			return;
+		}
+
 		if (IsInitialized())
 			pRakClient->Connect(strAddress.c_str(), usPort, NULL);
 
@@ -137,6 +186,35 @@ namespace Network
 
 	void Process()
 	{
+		if (transportMode == TRANSPORT_NATIVE_RAKCLIENT)
+		{
+			DWORD now = GetTickCount();
+			if (!IsInitialized())
+			{
+				if (now >= dwNextNativeInitAttempt)
+				{
+					if (CGameRakClient::Initialize())
+					{
+						bInitialized = true;
+						CGameRakClient::SendHello();
+						dwNextHelloAttempt = now + 2000;
+					}
+					else
+					{
+						dwNextNativeInitAttempt = now + 1000;
+					}
+				}
+				return;
+			}
+
+			if (!bConnected && now >= dwNextHelloAttempt)
+			{
+				CGameRakClient::SendHello();
+				dwNextHelloAttempt = now + 2000;
+			}
+			return;
+		}
+
 		if (!IsInitialized())
 			return;
 
@@ -214,24 +292,128 @@ namespace Network
 
 	unsigned int Send(Network::ePacketType packetType, RakNet::BitStream* pBitStream, PacketPriority priority, PacketReliability reliability, char cOrderingChannel)
 	{
+		if (transportMode == TRANSPORT_NATIVE_RAKCLIENT)
+			return 0;
+
 		if (!IsConnected())
 			return 0;
 
-		CLog::Write("Sent packet: %i, size: %i byte(s)", packetType, pBitStream->GetNumberOfBytesUsed());
-		CLog::bytesSent += pBitStream->GetNumberOfBytesUsed();
+		CLog::Write("Sent packet: %i, size: %i byte(s)", packetType, pBitStream ? pBitStream->GetNumberOfBytesUsed() : 0);
+		CLog::bytesSent += pBitStream ? pBitStream->GetNumberOfBytesUsed() : 0;
 
 		return pRakClient->Send(packetType, *pRakClient->GetRemoteAddress(), pBitStream, priority, reliability, cOrderingChannel);
 	}
 
 	unsigned int SendRPC(unsigned short usRPCId, RakNet::BitStream* pBitStream, PacketPriority priority, PacketReliability reliability, char cOrderingChannel)
 	{
+		if (transportMode == TRANSPORT_NATIVE_RAKCLIENT)
+		{
+			if (!IsConnected())
+				return 0;
+
+			CLog::Write("Sent native RPC: %i, size: %i byte(s)", usRPCId, pBitStream ? pBitStream->GetNumberOfBytesUsed() : 0);
+			CLog::bytesSent += pBitStream ? pBitStream->GetNumberOfBytesUsed() : 0;
+			return CGameRakClient::SendClientRPC(usRPCId, pBitStream) ? 1 : 0;
+		}
+
 		if (!IsConnected())
 			return 0;
 
-		CLog::Write("Sent packet: %i, size: %i byte(s)", usRPCId, pBitStream->GetNumberOfBytesUsed());
-		CLog::bytesSent += pBitStream->GetNumberOfBytesUsed();
+		CLog::Write("Sent packet: %i, size: %i byte(s)", usRPCId, pBitStream ? pBitStream->GetNumberOfBytesUsed() : 0);
+		CLog::bytesSent += pBitStream ? pBitStream->GetNumberOfBytesUsed() : 0;
 
 		return pRakClient->SendRPC(usRPCId, *pRakClient->GetRemoteAddress(), pBitStream, priority, reliability, cOrderingChannel);
+	}
+
+	void HandleNativeRPC(unsigned char* data, unsigned int numberOfBits)
+	{
+		if (!data || !numberOfBits)
+			return;
+
+		const unsigned int byteCount = BITS_TO_BYTES(numberOfBits);
+		unsigned int headerOffset = 0;
+		bool foundHeader = false;
+		uint32_t magic;
+		uint16_t version;
+		unsigned char message;
+
+		for (unsigned int offset = 0; offset < byteCount && offset <= 8; ++offset)
+		{
+			RakNet::BitStream probe(data + offset, byteCount - offset, false);
+			if (probe.Read(magic) && magic == OMPPlusProtocol::Magic
+				&& probe.Read(version) && version == OMPPlusProtocol::Version
+				&& probe.Read(message))
+			{
+				headerOffset = offset;
+				foundHeader = true;
+				break;
+			}
+		}
+
+		if (!foundHeader)
+		{
+			DWORD now = GetTickCount();
+			if (now >= dwNextInvalidNativeLog)
+			{
+				char hex[64] = { 0 };
+				char* cursor = hex;
+				const unsigned int preview = byteCount < 12 ? byteCount : 12;
+				for (unsigned int i = 0; i < preview; ++i)
+					cursor += sprintf(cursor, "%02X ", data[i]);
+				CLog::Write("Invalid native OMP+ RPC received: bits=%u bytes=%u head=%s", numberOfBits, byteCount, hex);
+				dwNextInvalidNativeLog = now + 5000;
+			}
+			return;
+		}
+
+		RakNet::BitStream bitStream(data + headerOffset, byteCount - headerOffset, false);
+		if (!bitStream.Read(magic) || magic != OMPPlusProtocol::Magic
+			|| !bitStream.Read(version) || version != OMPPlusProtocol::Version
+			|| !bitStream.Read(message))
+		{
+			CLog::Write("Invalid native OMP+ RPC received");
+			return;
+		}
+
+		switch (static_cast<OMPPlusProtocol::Message>(message))
+		{
+			case OMPPlusProtocol::Message::HelloAck:
+			{
+				uint32_t capabilities;
+				bConnected = true;
+				bServerHasPlugin = true;
+				if (bitStream.Read(capabilities))
+					CLog::Write("Native OMP+ transport ready, server capabilities=%u", capabilities);
+#ifndef SAMPP_SAFE_CLIENT
+				CRPCCallback::Initialize();
+#else
+				CLog::Write("Native OMP+ safe RPC mode enabled");
+#endif
+				break;
+			}
+			case OMPPlusProtocol::Message::ServerRPC:
+			{
+				unsigned short usRpcId;
+				if (!bitStream.Read(usRpcId))
+					return;
+
+#ifndef SAMPP_SAFE_CLIENT
+				CRPC::Process(usRpcId, bitStream);
+#else
+				ProcessSafeRPC(usRpcId, bitStream);
+#endif
+				break;
+			}
+			case OMPPlusProtocol::Message::Error:
+			{
+				uint16_t code;
+				if (bitStream.Read(code))
+					CLog::Write("Native OMP+ server error: %u", code);
+				break;
+			}
+			default:
+				break;
+		}
 	}
 
 	CRakClient* GetRakClient()

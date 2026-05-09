@@ -3,6 +3,7 @@
   <ItemGroup>
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="CCmdlineParams.cpp" />
+    <ClCompile Include="CGameRakClient.cpp" />
     <ClCompile Include="CGame.cpp" />
     <ClCompile Include="CGraphics.cpp" />
     <ClCompile Include="CHUD.cpp" />
@@ -404,6 +405,7 @@
     <ClInclude Include="Box.h">
       <Filter>GUI\Headers</Filter>
     </ClInclude>
+    <ClInclude Include="..\Include\SAMP+\client\CGameRakClient.h" />
     <ClInclude Include="resource.h" />
   </ItemGroup>
   <ItemGroup>

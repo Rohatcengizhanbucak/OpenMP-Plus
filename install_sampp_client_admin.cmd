@@ -17,6 +17,8 @@ if not exist "%SOURCE%" (
 echo [openmpplus] Installing OpenMP-Plus client ASI
 echo [openmpplus] Source: %SOURCE%
 echo [openmpplus] Target: %TARGET%
+echo [openmpplus] This helper copies only sampp_client.asi.
+echo [openmpplus] Install an ASI loader separately if this GTA folder does not already load ASI plugins.
 echo.
 
 copy /Y "%SOURCE%" "%TARGET%"
@@ -29,4 +31,5 @@ if errorlevel 1 (
 
 echo.
 echo [openmpplus] Installed successfully.
+echo [openmpplus] Also make sure the server is running the matching components\omp-plus.dll.
 pause

@@ -36,7 +36,8 @@ static DWORD WINAPI BootstrapThread(LPVOID)
 
 	if (!CCmdlineParams::ArgumentExists("d")
 		&& CCmdlineParams::ArgumentExists("h")
-		&& CCmdlineParams::ArgumentExists("p"))
+		&& CCmdlineParams::ArgumentExists("p")
+		&& CCmdlineParams::ArgumentExists("sampp_legacy_sidechannel"))
 	{
 		const std::string& address = CCmdlineParams::GetArgumentValue("h");
 		unsigned short port = (unsigned short)(atoi(CCmdlineParams::GetArgumentValue("p").c_str()) + 1);
@@ -47,15 +48,15 @@ static DWORD WINAPI BootstrapThread(LPVOID)
 	}
 	else
 	{
-		CLog::Write("SA-MP connection arguments not found; side-channel disabled");
+		CLog::Write("Starting native open.mp RakClient mode");
+		Network::InitializeNative();
+		Network::Connect();
 	}
 
 	while (g_bRunning)
 	{
 		Network::Process();
-#ifdef SAMPP_SAFE_CLIENT
 		CKeyBinds::Process();
-#endif
 		Sleep(10);
 	}
 

@@ -111,7 +111,7 @@ public OnPlayerSAMPPJoin(playerid, bool:has_plugin)
 {
 	if (has_plugin)
 	{
-		SendClientMessage(playerid, SAMPP_TEST_COLOUR, "[SA-MP+] Client side-channel handshake OK.");
+		SendClientMessage(playerid, SAMPP_TEST_COLOUR, "[SA-MP+] Client compatibility handshake OK.");
 		BindSmokeKeys(playerid);
 	}
 	else
@@ -141,7 +141,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
 		if (!connected)
 		{
-			SendClientMessage(playerid, SAMPP_WARN_COLOUR, "[SA-MP+] Install sampp_client.asi and reconnect to test RPCs.");
+			SendClientMessage(playerid, SAMPP_WARN_COLOUR, "[SA-MP+] Install/load sampp_client.asi and use a matching omp-plus.dll, then reconnect.");
 			return 1;
 		}
 

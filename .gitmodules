@@ -1,0 +1,6 @@
+[submodule "ThirdParty/openmp-sdk"]
+	path = ThirdParty/openmp-sdk
+	url = https://github.com/openmultiplayer/open.mp-sdk.git
+[submodule "ThirdParty/openmp-network"]
+	path = ThirdParty/openmp-network
+	url = https://github.com/openmultiplayer/open.mp-network.git

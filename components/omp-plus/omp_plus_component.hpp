@@ -1,0 +1,106 @@
+#pragma once
+
+#include <algorithm>
+#include <array>
+#include <cstdint>
+#include <string>
+#include <vector>
+
+#include <sdk.hpp>
+#include <network.hpp>
+#include <player.hpp>
+#include <bitstream.hpp>
+#include <Server/Components/Pawn/pawn.hpp>
+#include <Server/Components/Vehicles/vehicles.hpp>
+
+#include "omp_plus_protocol.hpp"
+
+struct OMPPlusPlayerState
+{
+	bool ready = false;
+	uint16_t protocolVersion = 0;
+	uint32_t capabilities = 0;
+	uint16_t resolutionX = 0;
+	uint16_t resolutionY = 0;
+	uint8_t radio = 0;
+	bool inPauseMenu = false;
+	float aircraftHeight = 800.0f;
+	float jetpackHeight = 100.0f;
+	bool vehicleBlips = false;
+	TimePoint rateWindow = TimePoint::min();
+	int messagesInWindow = 0;
+};
+
+class OMPPlusComponent final
+	: public IComponent
+	, public PlayerConnectEventHandler
+	, public PawnEventHandler
+	, public SingleNetworkInEventHandler
+{
+public:
+	PROVIDE_UID(0x6f6d70706c757331);
+
+	static OMPPlusComponent* getInstance();
+	~OMPPlusComponent();
+
+	StringView componentName() const override;
+	SemanticVersion componentVersion() const override;
+	void onLoad(ICore* core) override;
+	void onInit(IComponentList* components) override;
+	void onReady() override;
+	void onFree(IComponent* component) override;
+	void free() override;
+	void reset() override;
+
+	void onPlayerConnect(IPlayer& player) override;
+	void onPlayerDisconnect(IPlayer& player, PeerDisconnectReason reason) override;
+
+	void onAmxLoad(IPawnScript& script) override;
+	void onAmxUnload(IPawnScript& script) override;
+
+	bool onReceive(IPlayer& player, NetworkBitStream& stream) override;
+
+	bool isUsingOMPPlus(int playerid) const;
+	bool sendLegacyRPC(int playerid, uint16_t rpc, NetworkBitStream* payload = nullptr);
+	void broadcastLegacyRPC(uint16_t rpc, NetworkBitStream* payload = nullptr);
+
+	OMPPlusPlayerState* getPlayerState(int playerid);
+	IPawnScript* getScript(AMX* amx);
+	std::string getPawnString(AMX* amx, cell address, size_t maxLength);
+	bool setPawnCell(AMX* amx, cell address, cell value);
+
+	template <typename... Args>
+	cell callPublic(const char* name, DefaultReturnValue defaultReturn, Args&&... args)
+	{
+		cell result = defaultReturn == DefaultReturnValue_True ? 1 : 0;
+		for (IPawnScript* script : scripts_)
+		{
+			if (!script || !script->IsLoaded())
+				continue;
+
+			cell current = script->Call(name, defaultReturn, std::forward<Args>(args)...);
+			if (current == 0)
+				result = 0;
+		}
+		return result;
+	}
+
+private:
+	static OMPPlusComponent* instance_;
+
+	ICore* core_ = nullptr;
+	IPawnComponent* pawn_ = nullptr;
+	std::array<OMPPlusPlayerState, PLAYER_POOL_SIZE> states_;
+	std::vector<IPawnScript*> scripts_;
+
+	void resetPlayer(int playerid);
+	bool readHeader(NetworkBitStream& stream, OMPPlusProtocol::Message& message, uint16_t& version);
+	void writeHeader(NetworkBitStream& stream, OMPPlusProtocol::Message message);
+	bool acceptRate(IPlayer& player);
+	bool handleHello(IPlayer& player, NetworkBitStream& stream, uint16_t version);
+	bool handleClientRPC(IPlayer& player, NetworkBitStream& stream);
+	void processClientRPC(IPlayer& player, uint16_t rpc, NetworkBitStream& stream);
+	void sendHelloAck(IPlayer& player);
+	void sendError(IPlayer& player, uint16_t code);
+	IPlayer* getPlayer(int playerid) const;
+};

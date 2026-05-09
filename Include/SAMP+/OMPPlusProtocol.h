@@ -1,0 +1,67 @@
+#pragma once
+
+#include <stdint.h>
+
+namespace OMPPlusProtocol
+{
+	static const uint8_t PacketID = 0x87;
+	static const int RpcID = 220;
+	static const uint32_t Magic = 0x4F4D5050; // OMPP
+	static const uint16_t Version = 1;
+	static const uint32_t DefaultCapabilities = 0x00000001;
+	static const int MaxPayloadBytes = 4096;
+	static const int MaxMessagesPerSecond = 60;
+
+	enum class Message : uint8_t
+	{
+		Hello = 1,
+		HelloAck = 2,
+		ServerRPC = 3,
+		ClientRPC = 4,
+		Error = 5
+	};
+
+	enum LegacyRPC : uint16_t
+	{
+		TOGGLE_HUD_COMPONENT,
+		SET_RADIO_STATION,
+		SET_WAVE_HEIGHT,
+		TOGGLE_PAUSE_MENU,
+		SET_HUD_COMPONENT_COLOUR,
+		TOGGLE_ACTION,
+		SET_CLIP_AMMO,
+		SET_NO_RELOAD,
+		SET_BLUR_INTENSITY,
+		TOGGLE_DRIVE_ON_WATER,
+		SET_GAME_SPEED,
+		TOGGLE_PLAYER_FROZEN,
+		SET_PLAYER_ANIMS,
+		TOGGLE_SWITCH_RELOAD,
+		TOGGLE_INFINITE_RUN,
+		SET_AIRCRAFT_HEIGHT,
+		SET_JETPACK_HEIGHT,
+		SET_CHECKPOINT_EX,
+		SET_RACE_CHECKPOINT_EX,
+		SET_CHECKPOINT_COLOUR,
+		SET_RACE_CHECKPOINT_COLOUR,
+		TOGGLE_VEHICLE_BLIPS,
+		TOGGLE_INFINITE_OXYGEN,
+		TOGGLE_WATER_BUOYANCY,
+		TOGGLE_UNDERWATER_EFFECT,
+		TOGGLE_NIGHTVISION,
+		TOGGLE_THERMALVISION,
+		SET_KEY_BIND,
+		UNBIND_KEY,
+		CLEAR_KEY_BINDS,
+
+		ON_PAUSE_MENU_TOGGLE,
+		ON_PAUSE_MENU_CHANGE,
+		ON_DRIVE_BY_SHOT,
+		ON_STUNT_BONUS,
+		ON_RESOLUTION_CHANGE,
+		ON_MOUSE_CLICK,
+		ON_RADIO_CHANGE,
+		ON_DRINK_SPRUNK,
+		ON_KEY_STATE_CHANGE
+	};
+}

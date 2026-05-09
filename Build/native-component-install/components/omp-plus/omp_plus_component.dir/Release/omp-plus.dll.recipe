@@ -1,0 +1,17 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project>
+  <ProjectOutputs>
+    <ProjectOutput>
+      <FullPath>C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Build\native-component-install\Release\ZERO_CHECK</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Build\native-component-install\ThirdParty\openmp-sdk\Release\OMP-SDK</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Build\Release\omp-plus.dll</FullPath>
+    </ProjectOutput>
+  </ProjectOutputs>
+  <ContentFiles />
+  <SatelliteDlls />
+  <NonRecipeFileRefs />
+</Project>

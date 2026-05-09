@@ -1,9 +1,29 @@
 #include <SAMP+/client/CRPCCallback.h>
 #include <SAMP+/client/CHUD.h>
 #include <SAMP+/client/CGame.h>
+#include <SAMP+/client/CKeyBinds.h>
 #include <SAMP+/client/CHooks.h>
 #include <SAMP+/client/CLocalPlayer.h>
 #include <SAMP+/client/Proxy/CJmpProxy.h>
+
+#include <string>
+
+namespace
+{
+	bool ReadBoundedString(RakNet::BitStream& bsData, std::string& value)
+	{
+		unsigned char length;
+		if (!bsData.Read(length) || length > 31)
+			return false;
+
+		char buffer[32] = { 0 };
+		if (length && !bsData.Read(buffer, length))
+			return false;
+
+		value.assign(buffer, length);
+		return true;
+	}
+}
 
 void CRPCCallback::Initialize()
 {
@@ -34,6 +54,9 @@ void CRPCCallback::Initialize()
 	CRPC::Add(eRPC::TOGGLE_UNDERWATER_EFFECT, ToggleUnderwaterEffect);
 	CRPC::Add(eRPC::TOGGLE_NIGHTVISION, ToggleNightVision);
 	CRPC::Add(eRPC::TOGGLE_THERMALVISION, ToggleThermalVision);
+	CRPC::Add(eRPC::SET_KEY_BIND, SetKeyBind);
+	CRPC::Add(eRPC::UNBIND_KEY, UnbindKey);
+	CRPC::Add(eRPC::CLEAR_KEY_BINDS, ClearKeyBinds);
 
 	CGame::OnResolutionChange(*(int*)0x0C9C040, *(int*)0x0C9C044);
 	CMem::InstallJmp(0x0584770, CJmpProxy::MarkersHook, CJmpProxy::MarkersHookJmpBack, 6);
@@ -60,6 +83,29 @@ RPC_CALLBACK CRPCCallback::SetHUDComponentColour(RPC_ARGS)
 
 		CHUD::SetComponentColour(ucComponent, dwColour);
 	}
+}
+
+RPC_CALLBACK CRPCCallback::SetKeyBind(RPC_ARGS)
+{
+	unsigned short key;
+	unsigned char eventMask;
+	std::string action;
+
+	if (bsData.Read(key) && bsData.Read(eventMask) && ReadBoundedString(bsData, action))
+		CKeyBinds::Bind(key, eventMask, action);
+}
+
+RPC_CALLBACK CRPCCallback::UnbindKey(RPC_ARGS)
+{
+	unsigned short key;
+
+	if (bsData.Read(key))
+		CKeyBinds::Unbind(key);
+}
+
+RPC_CALLBACK CRPCCallback::ClearKeyBinds(RPC_ARGS)
+{
+	CKeyBinds::Clear();
 }
 
 RPC_CALLBACK CRPCCallback::SetRadioStation(RPC_ARGS)

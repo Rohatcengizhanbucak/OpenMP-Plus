@@ -34,7 +34,9 @@ public:
 
 private:
 	static bool IsGameForeground();
+	static bool IsTextInputActive();
 	static bool IsKeyDown(unsigned short key);
+	static void SyncKeyStates();
 	static void SendKeyState(const sKeyBind& bind, unsigned char state);
 
 	static std::map<unsigned short, sKeyBind> m_binds;

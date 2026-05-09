@@ -1,0 +1,54 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="18.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Server\CClientSocketInfo.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Server\CPlayer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Server\CRPCCallback.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Server\CRakServer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Server\CServerConfig.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Server\Callback.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Server\Network.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Server\SDK\amxplugin.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Server\SDK\sampgdk.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Server\Server.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Server\Utility.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Server\plugin.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Server\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Server\plugin.def">
+      <Filter>Source Files</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{47B4C318-55B7-39A1-A03E-B29AB6FD1C74}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

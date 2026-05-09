@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="18.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Build\native-component-install\CMakeFiles\44a5478864b154fac31d445aae01d62e\INSTALL_force.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{A753507B-085F-38DC-A67E-E5407C47DDDB}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

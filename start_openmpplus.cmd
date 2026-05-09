@@ -16,7 +16,8 @@ taskkill /IM omp-server.exe /F >nul 2>nul
 
 echo [openmpplus] Starting server: %CD%\omp-server.exe
 echo [openmpplus] Game address: 127.0.0.1:7777
-echo [openmpplus] SA-MP+ side-channel port: 7778
+echo [openmpplus] Native OMP+ transport uses the existing game connection.
+echo [openmpplus] No SA-MP+ side-channel port is required in native mode.
 echo.
 
 omp-server.exe

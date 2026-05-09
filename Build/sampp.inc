@@ -189,6 +189,7 @@ native TogglePlayerFrozen(playerid, bool:toggle);
 native SetPlayerPedAnims(playerid, bool:toggle);
 native TogglePlayerSwitchReload(playerid, bool:toggle);
 native bool:IsUsingSAMPP(playerid);
+native bool:IsUsingOMPPlus(playerid);
 native GetPlayerResolution(playerid, &X, &Y);
 native SetPlayerNoReload(playerid, bool:toggle);
 native TogglePlayerInfiniteRun(playerid, bool:toggle);
@@ -221,6 +222,8 @@ forward OnPlayerClick(playerid, type, X, Y);
 forward OnPlayerChangeRadioStation(playerid, stationid, vehicleid);
 forward OnPlayerDrinkSprunk(playerid);
 forward OnPlayerSAMPPKey(playerid, keyid, keystate, action[]);
+forward OnPlayerOMPPlusReady(playerid);
+forward OnPlayerOMPPlusKey(playerid, keyid, keystate, action[]);
 
 public OnPlayerConnect(playerid)
 {

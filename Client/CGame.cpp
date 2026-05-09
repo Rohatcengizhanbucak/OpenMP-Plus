@@ -46,7 +46,10 @@ void CGame::OnLoad()
 		//CSystem::GetLoadedModules();
 		CLog::Write("OnLoad success");
 		CGame::UnprotectMemory();
-		Network::Initialize(CCmdlineParams::GetArgumentValue("h"), atoi(CCmdlineParams::GetArgumentValue("p").c_str()) + 1);
+		if (CCmdlineParams::ArgumentExists("sampp_legacy_sidechannel"))
+			Network::Initialize(CCmdlineParams::GetArgumentValue("h"), atoi(CCmdlineParams::GetArgumentValue("p").c_str()) + 1);
+		else
+			Network::InitializeNative();
 		Network::Connect();
 		CHUD::Initialize();
 		

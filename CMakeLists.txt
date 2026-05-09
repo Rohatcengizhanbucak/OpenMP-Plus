@@ -58,3 +58,16 @@ endif()
 
 add_subdirectory(Common)
 add_subdirectory(Server)
+
+option(OMPPLUS_BUILD_COMPONENT "Build the native open.mp component transport" ON)
+
+if(OMPPLUS_BUILD_COMPONENT)
+	set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "Allow older third-party CMake policy ranges" FORCE)
+	add_subdirectory(ThirdParty/openmp-sdk)
+	add_subdirectory(ThirdParty/openmp-network)
+
+	target_compile_features(OMP-SDK INTERFACE cxx_std_17)
+	target_compile_features(OMP-Network PUBLIC cxx_std_17)
+
+	add_subdirectory(components/omp-plus)
+endif()

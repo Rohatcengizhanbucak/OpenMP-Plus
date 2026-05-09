@@ -2,28 +2,32 @@
 
 OpenMP-Plus is an open.mp-focused port and modernization branch of the archived SA-MP+ project.
 
-The current goal is conservative: keep the original SA-MP+ side-channel model, make the server plugin load cleanly under open.mp, and re-enable client features one safe RPC group at a time.
+The current architecture has a native open.mp component transport that uses open.mp's existing `INetwork` / RakServer pipeline. The old SA-MP+ `server_port + 1` side-channel is still present as a legacy fallback, but it is no longer the target transport.
 
 ## Current Status
 
-- Windows open.mp legacy plugin: `Build/Release/sampp_server.dll`
+- Native open.mp component build target: `Build/Release/omp-plus.dll`
+- Windows open.mp legacy plugin fallback: `Build/Release/sampp_server.dll`
 - Safe client ASI: `Build/Release/sampp_client.asi`
 - PAWN include: `Build/sampp.inc`
-- Side-channel port: `server_port + 1`, for example `7778` when the game server uses `7777`
+- Native transport: custom RPC on the existing game connection, no extra UDP port
+- Legacy side-channel fallback: `server_port + 1`, for example `7778` when the game server uses `7777`
 - Safe client mode avoids Direct3D and DirectInput hooks
-- Verified on GTA SA 1.0 US with an open.mp 0.3DL client
+- Client native transport source currently targets known SA-MP/open.mp 0.3.7 and 0.3DL `samp.dll` entry points.
 
-The shipped Windows binaries are current. Linux binaries are not shipped yet for this port because the old `sampp_server.so` artifact was stale and has been removed until it can be rebuilt and tested.
+Prebuilt Windows binaries may need to be rebuilt from this source tree before they include the native component transport. Linux binaries are not shipped yet for this port because the old `sampp_server.so` artifact was stale and has been removed until it can be rebuilt and tested.
 
 ## Verified Features
 
-- open.mp `config.json` support with fallback to legacy `server.cfg`
-- `IsUsingSAMPP(playerid)` side-channel detection
+- Native open.mp component loading through `components\omp-plus.dll`
+- Native RPC `220` handshake over the existing player connection
+- Legacy fallback config reader with open.mp `config.json` and legacy `server.cfg`
+- `IsUsingSAMPP(playerid)` compatibility native detection
 - HUD component toggle RPCs
 - Safe keybind callbacks using WinAPI keyboard polling
 - `OnPlayerSAMPPKey(playerid, keyid, keystate, action[])`
 
-Live smoke tests confirmed:
+Previous smoke tests confirmed the safe feature subset:
 
 - `/sampp` reports `IsUsingSAMPP=1`
 - `/samppmoney` toggles money HUD
@@ -35,11 +39,46 @@ Live smoke tests confirmed:
 
 ## Installation
 
+Install the server component and the client ASI from the same build or release. A
+new client ASI talking to an old server DLL, or the opposite, can leave
+`IsUsingSAMPP(playerid)` at `0` because the native RPC protocol does not match.
+
+Builds that include the native component require the open.mp SDK submodules:
+
+```bat
+git submodule update --init --recursive
+```
+
+Detailed setup notes are also available in [docs/INSTALL.md](docs/INSTALL.md).
+
 ### Server
 
-1. Copy `Build/Release/sampp_server.dll` to your open.mp server `plugins` directory.
-2. Copy `Build/sampp.inc` to your PAWN include directory, for example `qawno/include`.
-3. Add the plugin to `config.json`:
+Native open.mp mode installs these files on the server:
+
+```text
+<openmp-server>\components\omp-plus.dll
+<openmp-server>\qawno\include\sampp.inc
+```
+
+Optional smoke-test files:
+
+```text
+<openmp-server>\filterscripts\sampp_smoketest.amx
+<openmp-server>\filterscripts\sampp_itemdemo.amx
+<openmp-server>\filterscripts\sampp_menudemo.amx
+```
+
+Do not add a top-level `components` list containing only `omp-plus`. On some
+open.mp server packages that disables the default component set, including the
+Pawn component. The recommended install is to copy `omp-plus.dll` into the
+`components` directory and leave the top-level `components` key absent.
+
+If your server intentionally uses an explicit top-level `components` list, add
+`omp-plus` to that full list alongside every default component your package
+needs. Do not replace the list with only `omp-plus`.
+
+Legacy side-channel fallback only: copy `Build/Release/sampp_server.dll` to
+`plugins` and add it as a legacy plugin:
 
 ```json
 "pawn": {
@@ -49,9 +88,10 @@ Live smoke tests confirmed:
 }
 ```
 
-4. Add your gamemode or filterscript as usual.
+Add your gamemode or filterscript as usual. To use the smoke-test filterscript,
+copy the `.amx` file to `filterscripts` and add it to `pawn.side_scripts`.
 
-The plugin reads these open.mp keys:
+The legacy fallback plugin reads these open.mp keys:
 
 - `network.port`
 - `network.bind`
@@ -65,10 +105,40 @@ It also keeps legacy fallback support for:
 
 ### Client
 
-1. Install an ASI loader for GTA San Andreas if you do not already have one.
-2. Copy `Build/Release/sampp_client.asi` next to `gta_sa.exe`.
-3. Join the open.mp server.
-4. Use `/sampp` in-game to confirm the side-channel handshake.
+Native client mode installs these files in the GTA San Andreas folder that
+actually launches the game:
+
+```text
+<gta-sa>\sampp_client.asi
+<gta-sa>\<ASI loader files, if the game does not already load ASI plugins>
+```
+
+The server does not send the ASI to players. Each player who should use
+OpenMP-Plus features must have `sampp_client.asi` in the same directory as the
+`gta_sa.exe` they launch. If you use a launcher or client manager, verify which
+GTA folder it starts before copying the ASI.
+
+Install an ASI loader for GTA San Andreas if one is not already installed. The
+loader package can use different proxy DLL names depending on the loader build.
+Common layouts include `vorbisFile.dll` plus `vorbisHooked.dll`, or a proxy such
+as `dinput8.dll` or `version.dll`. The important rule is that ASI files in the
+GTA folder must actually load at game startup.
+
+After copying the client files:
+
+1. Join the open.mp server.
+2. Use `/sampp` in-game.
+3. Confirm that the server reports `IsUsingSAMPP=1`.
+
+If `/sampp` reports `IsUsingSAMPP=0`, check that:
+
+- `sampp_client.asi` is in the launched GTA folder, not only in a different
+  game copy.
+- An ASI loader is installed and loading ASI plugins.
+- The server has the matching new `components\omp-plus.dll`.
+- The server config still loads the Pawn component.
+
+The ASI now defaults to native RakClient transport. To force the old side-channel while testing, pass `-sampp_legacy_sidechannel`; this re-enables the `server_port + 1` client connection.
 
 No installer is currently shipped. The old SA-MP+ installer was removed because it targeted the archived project and could install unsafe or outdated client files.
 

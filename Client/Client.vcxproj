@@ -60,7 +60,7 @@
       <Optimization>Disabled</Optimization>
       <SDLCheck>false</SDLCheck>
       <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>DEBUG;DIRECTINPUT_VERSION#0x0800;_WIN32_WINNT#0x0500;WIN32_LEAN_AND_MEAN;WIN32;_WINDOWS;_USRDLL;_CRT_SECURE_NO_WARNINGS;_CRT_SECURE_NO_DEPRECATE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>DEBUG;DIRECTINPUT_VERSION#0x0800;_WIN32_WINNT#0x0500;WIN32_LEAN_AND_MEAN;WIN32;_WINDOWS;_USRDLL;_CRT_SECURE_NO_WARNINGS;_CRT_SECURE_NO_DEPRECATE;__BITSTREAM_NATIVE_END;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <CallingConvention>StdCall</CallingConvention>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
@@ -76,7 +76,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <CallingConvention>StdCall</CallingConvention>
-      <PreprocessorDefinitions>DEBUG;DIRECTINPUT_VERSION#0x0800;_WIN32_WINNT#0x0500;WIN32_LEAN_AND_MEAN;WIN32;_WINDOWS;_USRDLL;_CRT_SECURE_NO_WARNINGS;_CRT_SECURE_NO_DEPRECATE;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>DEBUG;DIRECTINPUT_VERSION#0x0800;_WIN32_WINNT#0x0500;WIN32_LEAN_AND_MEAN;WIN32;_WINDOWS;_USRDLL;_CRT_SECURE_NO_WARNINGS;_CRT_SECURE_NO_DEPRECATE;_WINSOCK_DEPRECATED_NO_WARNINGS;__BITSTREAM_NATIVE_END;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
@@ -203,6 +203,7 @@
     <ClCompile Include="..\Common\RakNet\_FindFirst.cpp" />
     <ClCompile Include="Box.cpp" />
     <ClCompile Include="CCmdlineParams.cpp" />
+    <ClCompile Include="CGameRakClient.cpp" />
     <ClCompile Include="CGame.cpp" />
     <ClCompile Include="CGraphics.cpp" />
     <ClCompile Include="CHooks.cpp" />
@@ -228,6 +229,7 @@
   <ItemGroup>
     <ClInclude Include="Box.h" />
     <ClInclude Include="CSprite.h" />
+    <ClInclude Include="..\Include\SAMP+\client\CGameRakClient.h" />
     <ClInclude Include="resource.h" />
   </ItemGroup>
   <ItemGroup>
