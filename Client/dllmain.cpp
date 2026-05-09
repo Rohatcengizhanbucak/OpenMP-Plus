@@ -7,6 +7,7 @@
 #include <SAMP+/client/Network.h>
 
 static HANDLE g_hBootstrapThread = NULL;
+static DWORD g_dwBootstrapThreadId = 0;
 static volatile bool g_bRunning = false;
 static bool g_bHooksApplied = false;
 
@@ -72,7 +73,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved)
 		CLog::Initialize();
 		CCmdlineParams::Process(GetCommandLine());
 		g_bRunning = true;
-		g_hBootstrapThread = CreateThread(NULL, 0, BootstrapThread, NULL, 0, NULL);
+		g_hBootstrapThread = CreateThread(NULL, 0, BootstrapThread, NULL, 0, &g_dwBootstrapThreadId);
 		break;
 
 	case DLL_PROCESS_DETACH:
@@ -83,7 +84,15 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved)
 #endif
 
 		if (g_hBootstrapThread)
+		{
+			if (GetCurrentThreadId() != g_dwBootstrapThreadId)
+				WaitForSingleObject(g_hBootstrapThread, 3000);
 			CloseHandle(g_hBootstrapThread);
+			g_hBootstrapThread = NULL;
+			g_dwBootstrapThreadId = 0;
+		}
+
+		Network::Shutdown();
 
 		CLog::Finalize();
 		break;

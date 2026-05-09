@@ -1,0 +1,22 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="18.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\components\omp-plus\component.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\components\omp-plus\omp_plus_component.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\components\omp-plus\omp_plus_pawn.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\components\omp-plus\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{A484EAA0-761C-36E9-B5FF-27A5C140250D}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

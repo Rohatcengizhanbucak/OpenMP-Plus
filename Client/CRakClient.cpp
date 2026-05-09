@@ -4,12 +4,16 @@ CRakClient::CRakClient()
 {
 	m_pPeer = new RakNet::RakPeer();
 	m_pSocketDescriptor = new RakNet::SocketDescriptor();
+	m_pSystemAddress = NULL;
 	m_bConnected = false;
 }
 
 CRakClient::~CRakClient()
 {
-
+	Shutdown(0);
+	delete m_pPeer;
+	delete m_pSocketDescriptor;
+	delete m_pSystemAddress;
 }
 
 RakNet::StartupResult CRakClient::Startup()
@@ -21,12 +25,14 @@ void CRakClient::Shutdown(int iBlockDuration)
 {
 	Disconnect();
 
-	return m_pPeer->Shutdown(iBlockDuration);
+	if (m_pPeer)
+		m_pPeer->Shutdown(iBlockDuration);
 }
 
 RakNet::ConnectionAttemptResult CRakClient::Connect(const char* szAddress, unsigned short usPort, const char* szPassword)
 {
 	Disconnect();
+	delete m_pSystemAddress;
 
 	m_pSystemAddress = new RakNet::SystemAddress(szAddress, usPort);
 
@@ -64,6 +70,7 @@ void CRakClient::Disconnect()
 	{
 		m_pPeer->CloseConnection(*m_pSystemAddress, true);
 		delete m_pSystemAddress;
+		m_pSystemAddress = NULL;
 		m_bConnected = false;
 	}
 }

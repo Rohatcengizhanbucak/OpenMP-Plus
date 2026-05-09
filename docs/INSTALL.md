@@ -16,7 +16,7 @@ Server files:
 | `Build/Release/omp-plus.dll` | `<openmp-server>/components/omp-plus.dll` | Yes | Native open.mp component. |
 | `Build/sampp.inc` | `<openmp-server>/qawno/include/sampp.inc` | For compiling scripts | Pawn include for old SA-MP+ names and new OMP+ names. |
 | `examples/filterscripts/*.amx` | `<openmp-server>/filterscripts/` | Optional | Smoke-test and demo filterscripts. |
-| `Build/Release/sampp_server.dll` | `<openmp-server>/plugins/sampp_server.dll` | No | Legacy side-channel fallback only. Do not use for native mode. |
+| `Build/Release/sampp_server.dll` | `<openmp-server>/plugins/sampp_server.dll` | No | Legacy side-channel fallback only. Built only with `OMPPLUS_BUILD_LEGACY_PLUGIN=ON`; do not use for native mode. |
 
 Client files:
 
@@ -128,6 +128,16 @@ Native mode should not require:
 - Opening UDP `7778` when the game port is `7777`.
 - Installing `sampp_server.dll` as a legacy plugin.
 - Passing `-sampp_legacy_sidechannel` to the client.
+
+To build the legacy plugin anyway, configure CMake explicitly:
+
+```bat
+cmake -S . -B Build\openmp-legacy-win32 -A Win32 -D OMPPLUS_BUILD_LEGACY_PLUGIN=ON
+cmake --build Build\openmp-legacy-win32 --config Release --target sampp_server
+```
+
+Native transport uses custom RPC `220`. Keep that ID reserved for OpenMP-Plus
+unless you intentionally change and rebuild both the component and the ASI.
 
 ## Troubleshooting
 

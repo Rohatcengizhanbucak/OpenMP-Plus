@@ -6,88 +6,13 @@
 #include <SAMP+/client/Client.h>
 #include <SAMP+/client/CLog.h>
 #include <SAMP+/client/Network.h>
+#include <SAMP+/client/CSampClient.h>
 
 std::map<unsigned short, sKeyBind> CKeyBinds::m_binds;
 
 namespace
 {
 	const size_t MAX_KEY_ACTION_LENGTH = 31;
-
-	enum eSampVersion
-	{
-		SAMP_VERSION_UNKNOWN = -1,
-		SAMP_VERSION_037_R1 = 0,
-		SAMP_VERSION_037_R31,
-		SAMP_VERSION_037_R4,
-		SAMP_VERSION_03DL_R1
-	};
-
-	const DWORD SAMP_CHAT_INPUT_INFO_OFFSETS[] = { 0x21A0E8, 0x26E8CC, 0x26E9FC, 0x2ACA14 };
-	const DWORD SAMP_INPUT_EDITBOX_OFFSET = 0x8;
-	const DWORD SAMP_INPUT_BOX_OPEN_OFFSET = 0x4;
-
-	DWORD GetSampBase()
-	{
-		return reinterpret_cast<DWORD>(GetModuleHandleA("samp.dll"));
-	}
-
-	bool CanRead(DWORD address, size_t size)
-	{
-		if (!address || !size)
-			return false;
-
-		MEMORY_BASIC_INFORMATION mbi;
-		if (!VirtualQuery(reinterpret_cast<LPCVOID>(address), &mbi, sizeof(mbi)))
-			return false;
-
-		if (mbi.State != MEM_COMMIT || (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD)))
-			return false;
-
-		DWORD end = address + static_cast<DWORD>(size);
-		DWORD regionEnd = reinterpret_cast<DWORD>(mbi.BaseAddress) + static_cast<DWORD>(mbi.RegionSize);
-		return end >= address && end <= regionEnd;
-	}
-
-	bool ReadPointer(DWORD address, DWORD& value)
-	{
-		if (!CanRead(address, sizeof(DWORD)))
-			return false;
-
-		value = *reinterpret_cast<DWORD*>(address);
-		return value != 0;
-	}
-
-	eSampVersion GetSampVersion(DWORD base)
-	{
-		if (!base || !CanRead(base, sizeof(IMAGE_DOS_HEADER)))
-			return SAMP_VERSION_UNKNOWN;
-
-		IMAGE_DOS_HEADER* dos = reinterpret_cast<IMAGE_DOS_HEADER*>(base);
-		if (dos->e_magic != IMAGE_DOS_SIGNATURE)
-			return SAMP_VERSION_UNKNOWN;
-
-		DWORD ntAddress = base + dos->e_lfanew;
-		if (!CanRead(ntAddress, sizeof(IMAGE_NT_HEADERS)))
-			return SAMP_VERSION_UNKNOWN;
-
-		IMAGE_NT_HEADERS* nt = reinterpret_cast<IMAGE_NT_HEADERS*>(ntAddress);
-		if (nt->Signature != IMAGE_NT_SIGNATURE)
-			return SAMP_VERSION_UNKNOWN;
-
-		switch (nt->OptionalHeader.AddressOfEntryPoint)
-		{
-		case 0x31DF13:
-			return SAMP_VERSION_037_R1;
-		case 0xCC4D0:
-			return SAMP_VERSION_037_R31;
-		case 0xCBCB0:
-			return SAMP_VERSION_037_R4;
-		case 0xFDB60:
-			return SAMP_VERSION_03DL_R1;
-		default:
-			return SAMP_VERSION_UNKNOWN;
-		}
-	}
 }
 
 void CKeyBinds::Bind(unsigned short key, unsigned char eventMask, const std::string& action)
@@ -161,23 +86,7 @@ bool CKeyBinds::IsGameForeground()
 
 bool CKeyBinds::IsTextInputActive()
 {
-	DWORD base = GetSampBase();
-	eSampVersion version = GetSampVersion(base);
-	if (version == SAMP_VERSION_UNKNOWN)
-		return false;
-
-	DWORD inputInfo;
-	if (!ReadPointer(base + SAMP_CHAT_INPUT_INFO_OFFSETS[version], inputInfo))
-		return false;
-
-	DWORD editBox;
-	if (!ReadPointer(inputInfo + SAMP_INPUT_EDITBOX_OFFSET, editBox))
-		return false;
-
-	if (!CanRead(editBox + SAMP_INPUT_BOX_OPEN_OFFSET, sizeof(unsigned char)))
-		return false;
-
-	return *reinterpret_cast<unsigned char*>(editBox + SAMP_INPUT_BOX_OPEN_OFFSET) != 0;
+	return SampClient::IsChatInputActive();
 }
 
 bool CKeyBinds::IsKeyDown(unsigned short key)

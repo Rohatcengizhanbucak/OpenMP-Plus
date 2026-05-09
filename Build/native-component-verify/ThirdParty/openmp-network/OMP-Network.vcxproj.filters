@@ -1,0 +1,42 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="18.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\ThirdParty\openmp-network\Encoding\huffman_tree.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\ThirdParty\openmp-network\Encoding\str_compress.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\ThirdParty\openmp-network\bitstream.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\ThirdParty\openmp-network\Encoding\huffman_tree.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\ThirdParty\openmp-network\Encoding\huffman_tree_node.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\ThirdParty\openmp-network\Encoding\str_compress.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\ThirdParty\openmp-network\bitstream.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\ThirdParty\openmp-network\packet.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\ThirdParty\openmp-network\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{00895A24-4555-3369-9B3A-5C4388B29014}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{A484EAA0-761C-36E9-B5FF-27A5C140250D}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

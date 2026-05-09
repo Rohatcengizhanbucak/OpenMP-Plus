@@ -23,7 +23,8 @@ namespace Network
 		else
 			Initialize(szHostAddress.c_str(), usPort, iConnections);
 
-		return CRPCCallback::Initialize();
+		if (IsInitialized())
+			CRPCCallback::Initialize();
 	}
 
 	void Initialize(const char* szHostAddress, t_port usPort, int iConnections)
@@ -32,8 +33,11 @@ namespace Network
 		
 		if (pRakServer->Startup(szHostAddress, usPort, iConnections) != RakNet::StartupResult::RAKNET_STARTED)
 		{
-			Utility::Printf("Couldn't start SA-MP+ plugin");
-			exit(EXIT_FAILURE);
+			Utility::Printf("Couldn't start SA-MP+ legacy side-channel; legacy transport disabled");
+			delete pRakServer;
+			pRakServer = NULL;
+			bInitialized = false;
+			return;
 		}
 
 		bInitialized = true;

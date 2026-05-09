@@ -2,93 +2,17 @@
 
 #include <SAMP+/client/CLog.h>
 #include <SAMP+/client/Network.h>
+#include <SAMP+/client/CSampClient.h>
 
 #include <stdio.h>
 
 namespace
 {
-	enum eSampVersion
-	{
-		SAMP_VERSION_UNKNOWN = -1,
-		SAMP_VERSION_037_R1 = 0,
-		SAMP_VERSION_037_R31,
-		SAMP_VERSION_037_R4,
-		SAMP_VERSION_03DL_R1
-	};
-
-	const DWORD SAMP_INFO_OFFSETS[] = { 0x21A0F8, 0x26E8DC, 0x26EA0C, 0x2ACA24 };
-	const DWORD RAKCLIENT_INTERFACE_OFFSETS[] = { 0x3C9, 0x2C, 0x2C, 0x2C };
+	const size_t RAKCLIENT_MIN_VTABLE_METHODS = 28;
 
 	CGameRakClientInterface* g_pRakClient = NULL;
 	int g_iRegisteredRpc = OMPPlusProtocol::RpcID;
 	DWORD g_dwNextUnavailableLog = 0;
-
-	DWORD GetSampBase()
-	{
-		HMODULE hSamp = GetModuleHandleA("samp.dll");
-		return reinterpret_cast<DWORD>(hSamp);
-	}
-
-	eSampVersion GetSampVersion(DWORD base)
-	{
-		if (!base)
-			return SAMP_VERSION_UNKNOWN;
-
-		IMAGE_DOS_HEADER* dos = reinterpret_cast<IMAGE_DOS_HEADER*>(base);
-		if (dos->e_magic != IMAGE_DOS_SIGNATURE)
-			return SAMP_VERSION_UNKNOWN;
-
-		IMAGE_NT_HEADERS* nt = reinterpret_cast<IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
-		if (nt->Signature != IMAGE_NT_SIGNATURE)
-			return SAMP_VERSION_UNKNOWN;
-
-		switch (nt->OptionalHeader.AddressOfEntryPoint)
-		{
-		case 0x31DF13:
-			return SAMP_VERSION_037_R1;
-		case 0xCC4D0:
-			return SAMP_VERSION_037_R31;
-		case 0xCBCB0:
-			return SAMP_VERSION_037_R4;
-		case 0xFDB60:
-			return SAMP_VERSION_03DL_R1;
-		default:
-			return SAMP_VERSION_UNKNOWN;
-		}
-	}
-
-	DWORD GetSampEntryPoint(DWORD base)
-	{
-		if (!base)
-			return 0;
-
-		IMAGE_DOS_HEADER* dos = reinterpret_cast<IMAGE_DOS_HEADER*>(base);
-		if (dos->e_magic != IMAGE_DOS_SIGNATURE)
-			return 0;
-
-		IMAGE_NT_HEADERS* nt = reinterpret_cast<IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
-		if (nt->Signature != IMAGE_NT_SIGNATURE)
-			return 0;
-
-		return nt->OptionalHeader.AddressOfEntryPoint;
-	}
-
-	const char* GetVersionName(eSampVersion version)
-	{
-		switch (version)
-		{
-		case SAMP_VERSION_037_R1:
-			return "0.3.7-R1";
-		case SAMP_VERSION_037_R31:
-			return "0.3.7-R3-1";
-		case SAMP_VERSION_037_R4:
-			return "0.3.7-R4";
-		case SAMP_VERSION_03DL_R1:
-			return "0.3DL-R1";
-		default:
-			return "unknown";
-		}
-	}
 
 	void WriteHeader(RakNet::BitStream& stream, OMPPlusProtocol::Message message)
 	{
@@ -142,7 +66,7 @@ bool CGameRakClient::SendClientRPC(unsigned short rpc, RakNet::BitStream* payloa
 
 void CGameRakClient::Shutdown()
 {
-	if (g_pRakClient)
+	if (g_pRakClient && SampClient::ValidateVTableObject(reinterpret_cast<DWORD>(g_pRakClient), RAKCLIENT_MIN_VTABLE_METHODS))
 		g_pRakClient->UnregisterAsRemoteProcedureCall(&g_iRegisteredRpc);
 
 	g_pRakClient = NULL;
@@ -150,39 +74,45 @@ void CGameRakClient::Shutdown()
 
 CGameRakClientInterface* CGameRakClient::ResolveInterface()
 {
-	DWORD base = GetSampBase();
+	DWORD base = SampClient::GetBase();
 	if (!base)
 	{
 		LogUnavailable("samp.dll module is not loaded; start through the SA-MP/open.mp launcher");
 		return NULL;
 	}
 
-	eSampVersion version = GetSampVersion(base);
-	if (version == SAMP_VERSION_UNKNOWN)
+	SampClient::Version version = SampClient::GetVersion(base);
+	SampClient::Layout layout;
+	if (!SampClient::GetLayout(version, layout))
 	{
 		char reason[96] = { 0 };
-		sprintf(reason, "unsupported samp.dll entry point 0x%08X", GetSampEntryPoint(base));
+		sprintf(reason, "unsupported samp.dll entry point 0x%08X", SampClient::GetEntryPoint(base));
 		LogUnavailable(reason);
 		return NULL;
 	}
 
-	DWORD sampInfoPtrAddress = base + SAMP_INFO_OFFSETS[version];
-	DWORD sampInfo = *reinterpret_cast<DWORD*>(sampInfoPtrAddress);
-	if (!sampInfo)
+	DWORD sampInfo = 0;
+	if (!SampClient::ReadPointer(base + layout.sampInfoOffset, sampInfo))
 	{
 		LogUnavailable("samp info is not ready");
 		return NULL;
 	}
 
-	CGameRakClientInterface** ppRakClient = reinterpret_cast<CGameRakClientInterface**>(sampInfo + RAKCLIENT_INTERFACE_OFFSETS[version]);
-	if (!ppRakClient || !*ppRakClient)
+	DWORD rakClient = 0;
+	if (!SampClient::ReadPointer(sampInfo + layout.rakClientInterfaceOffset, rakClient))
 	{
 		LogUnavailable("RakClientInterface is not ready");
 		return NULL;
 	}
 
-	CLog::Write("Native RakClient transport resolved for SA-MP %s", GetVersionName(version));
-	return *ppRakClient;
+	if (!SampClient::ValidateVTableObject(rakClient, RAKCLIENT_MIN_VTABLE_METHODS))
+	{
+		LogUnavailable("RakClientInterface failed vtable validation");
+		return NULL;
+	}
+
+	CLog::Write("Native RakClient transport resolved for SA-MP %s", layout.name);
+	return reinterpret_cast<CGameRakClientInterface*>(rakClient);
 }
 
 void __cdecl CGameRakClient::OnOMPPlusRPC(OMPPlusRPCParameters* params)
@@ -197,6 +127,13 @@ bool CGameRakClient::SendMessage(OMPPlusProtocol::Message message, unsigned shor
 {
 	if (!g_pRakClient)
 		return false;
+
+	if (!SampClient::ValidateVTableObject(reinterpret_cast<DWORD>(g_pRakClient), RAKCLIENT_MIN_VTABLE_METHODS))
+	{
+		CLog::Write("Native RakClient RPC send blocked: invalid RakClientInterface");
+		g_pRakClient = NULL;
+		return false;
+	}
 
 	RakNet::BitStream stream;
 	WriteHeader(stream, message);

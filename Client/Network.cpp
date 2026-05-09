@@ -7,7 +7,6 @@
 #ifndef SAMPP_SAFE_CLIENT
 #include <SAMP+/client/CHooks.h>
 #include <SAMP+/client/CGame.h>
-#include <SAMP+/client/CRPCCallback.h>
 #endif
 
 #include <RakNet/MessageIdentifiers.h>
@@ -33,8 +32,9 @@ namespace Network
 	static DWORD dwNextInvalidNativeLog;
 	static std::string strAddress;
 	static unsigned short usPort;
-#ifdef SAMPP_SAFE_CLIENT
 	static bool bSafeHUDInitialized;
+
+	void Shutdown();
 
 	static bool ReadSafeString(RakNet::BitStream& bitStream, std::string& value)
 	{
@@ -108,10 +108,10 @@ namespace Network
 				break;
 		}
 	}
-#endif
 
 	void Initialize(std::string address, unsigned short port)
 	{
+		Shutdown();
 		bInitialized = false;
 		transportMode = TRANSPORT_SIDE_CHANNEL;
 
@@ -130,6 +130,7 @@ namespace Network
 
 	void InitializeNative()
 	{
+		Shutdown();
 		bInitialized = false;
 		bConnected = false;
 		bServerHasPlugin = false;
@@ -235,11 +236,7 @@ namespace Network
 				{
 					bConnected = true;
 					bServerHasPlugin = true;
-#ifndef SAMPP_SAFE_CLIENT
-					CRPCCallback::Initialize();
-#else
 					CLog::Write("Safe side-channel registered; limited HUD RPC mode enabled");
-#endif
 
 					break;
 				}
@@ -248,11 +245,7 @@ namespace Network
 					unsigned short usRpcId;
 
 					if (bitStream.Read<unsigned short>(usRpcId))
-#ifndef SAMPP_SAFE_CLIENT
-						CRPC::Process(usRpcId, bitStream);
-#else
 						ProcessSafeRPC(usRpcId, bitStream);
-#endif
 
 					break;
 				}
@@ -260,9 +253,7 @@ namespace Network
 				case ePacketType::PACKET_PLAYER_PROPER_DISCONNECT:
 				{
 					bServerHasPlugin = false;
-#ifdef SAMPP_SAFE_CLIENT
 					CKeyBinds::Clear();
-#endif
 
 					break;
 				}
@@ -270,9 +261,7 @@ namespace Network
 				case ID_CONNECTION_LOST:
 				{
 					bConnected = false;
-#ifdef SAMPP_SAFE_CLIENT
 					CKeyBinds::Clear();
-#endif
 
 					if (ServerHasPlugin())
 						Connect();
@@ -384,11 +373,7 @@ namespace Network
 				bServerHasPlugin = true;
 				if (bitStream.Read(capabilities))
 					CLog::Write("Native OMP+ transport ready, server capabilities=%u", capabilities);
-#ifndef SAMPP_SAFE_CLIENT
-				CRPCCallback::Initialize();
-#else
 				CLog::Write("Native OMP+ safe RPC mode enabled");
-#endif
 				break;
 			}
 			case OMPPlusProtocol::Message::ServerRPC:
@@ -397,11 +382,7 @@ namespace Network
 				if (!bitStream.Read(usRpcId))
 					return;
 
-#ifndef SAMPP_SAFE_CLIENT
-				CRPC::Process(usRpcId, bitStream);
-#else
 				ProcessSafeRPC(usRpcId, bitStream);
-#endif
 				break;
 			}
 			case OMPPlusProtocol::Message::Error:
@@ -419,5 +400,27 @@ namespace Network
 	CRakClient* GetRakClient()
 	{
 		return pRakClient;
+	}
+
+	void Shutdown()
+	{
+		CKeyBinds::Clear();
+
+		if (transportMode == TRANSPORT_NATIVE_RAKCLIENT)
+			CGameRakClient::Shutdown();
+		else if (pRakClient)
+		{
+			pRakClient->Shutdown(100);
+			delete pRakClient;
+			pRakClient = NULL;
+		}
+
+		bInitialized = false;
+		bConnected = false;
+		bServerHasPlugin = false;
+		bSafeHUDInitialized = false;
+		transportMode = TRANSPORT_DISABLED;
+		dwNextHelloAttempt = 0;
+		dwNextNativeInitAttempt = 0;
 	}
 }

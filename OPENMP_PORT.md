@@ -8,6 +8,7 @@ This branch now contains a native open.mp component transport. The legacy SA-MP+
 - Native component mode uses custom RPC `220` over the existing player connection.
 - Native mode does not open a second UDP port and does not create a second server RakPeer.
 - Legacy fallback mode still exists in the tree as `sampp_server.dll`.
+- Legacy fallback is not part of the default CMake build; enable it explicitly with `OMPPLUS_BUILD_LEGACY_PLUGIN=ON`.
 - The legacy fallback plugin reads `config.json` first and falls back to `server.cfg`.
 - These open.mp keys are supported by the legacy fallback:
   - `network.port`
@@ -23,6 +24,8 @@ This branch now contains a native open.mp component transport. The legacy SA-MP+
 - The legacy side-channel client path is available only with the explicit `-sampp_legacy_sidechannel` flag.
 - The safe client enables HUD toggles and keybind callbacks without Direct3D/Input hooks.
 - The safe client supports limited keybind callbacks using WinAPI keyboard polling.
+- Keybind polling is suppressed while SA-MP chat input is active.
+- Native RPC `220` is reserved for OpenMP-Plus unless both the component and ASI are rebuilt with a different protocol value.
 
 ## Smoke Tests
 
@@ -88,14 +91,14 @@ Build/Release/omp-plus.dll
 Legacy fallback plugin, Windows x86:
 
 ```bat
-cmake -S . -B Build\openmp-win32 -A Win32
+cmake -S . -B Build\openmp-win32 -A Win32 -D OMPPLUS_BUILD_LEGACY_PLUGIN=ON
 cmake --build Build\openmp-win32 --config Release --target sampp_server
 ```
 
 Legacy fallback plugin, Linux x86:
 
 ```sh
-cmake -S . -B Build/openmp-linux -DCMAKE_BUILD_TYPE=Release
+cmake -S . -B Build/openmp-linux -DCMAKE_BUILD_TYPE=Release -D OMPPLUS_BUILD_LEGACY_PLUGIN=ON
 cmake --build Build/openmp-linux --target sampp_server
 ```
 

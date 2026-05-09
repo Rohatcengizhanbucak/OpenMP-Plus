@@ -7,13 +7,14 @@ The current architecture has a native open.mp component transport that uses open
 ## Current Status
 
 - Native open.mp component build target: `Build/Release/omp-plus.dll`
-- Windows open.mp legacy plugin fallback: `Build/Release/sampp_server.dll`
+- Windows open.mp legacy plugin fallback: `Build/Release/sampp_server.dll` only when explicitly built with `OMPPLUS_BUILD_LEGACY_PLUGIN=ON`
 - Safe client ASI: `Build/Release/sampp_client.asi`
 - PAWN include: `Build/sampp.inc`
 - Native transport: custom RPC on the existing game connection, no extra UDP port
 - Legacy side-channel fallback: `server_port + 1`, for example `7778` when the game server uses `7777`
-- Safe client mode avoids Direct3D and DirectInput hooks
-- Client native transport source currently targets known SA-MP/open.mp 0.3.7 and 0.3DL `samp.dll` entry points.
+- Safe client mode avoids Direct3D and DirectInput hooks and only enables the verified HUD/keybind RPC subset by default.
+- Client native transport source currently targets known SA-MP/open.mp 0.3.7 and 0.3DL `samp.dll` entry points, with guarded pointer and vtable validation before using the game RakClient interface.
+- Native transport reserves custom RPC `220`; do not reuse that RPC ID in other client/server extensions loaded in the same session.
 
 Prebuilt Windows binaries may need to be rebuilt from this source tree before they include the native component transport. Linux binaries are not shipped yet for this port because the old `sampp_server.so` artifact was stale and has been removed until it can be rebuilt and tested.
 
@@ -25,6 +26,7 @@ Prebuilt Windows binaries may need to be rebuilt from this source tree before th
 - `IsUsingSAMPP(playerid)` compatibility native detection
 - HUD component toggle RPCs
 - Safe keybind callbacks using WinAPI keyboard polling
+- Keybind callbacks are suppressed while SA-MP chat input is active.
 - `OnPlayerSAMPPKey(playerid, keyid, keystate, action[])`
 
 Previous smoke tests confirmed the safe feature subset:
@@ -77,7 +79,8 @@ If your server intentionally uses an explicit top-level `components` list, add
 `omp-plus` to that full list alongside every default component your package
 needs. Do not replace the list with only `omp-plus`.
 
-Legacy side-channel fallback only: copy `Build/Release/sampp_server.dll` to
+Legacy side-channel fallback only: build with `OMPPLUS_BUILD_LEGACY_PLUGIN=ON`,
+then copy `Build/Release/sampp_server.dll` to
 `plugins` and add it as a legacy plugin:
 
 ```json

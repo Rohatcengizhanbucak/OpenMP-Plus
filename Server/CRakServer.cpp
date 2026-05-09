@@ -6,11 +6,15 @@
 CRakServer::CRakServer()
 {
 	m_pPeer = new RakNet::RakPeer();
+	m_pSocketDescriptor = NULL;
 }
 
 CRakServer::~CRakServer()
 {
-
+	if (m_pPeer)
+		m_pPeer->Shutdown(0);
+	delete m_pPeer;
+	delete m_pSocketDescriptor;
 }
 
 RakNet::StartupResult CRakServer::Startup(const char* szHostAddress, t_port usPort, unsigned short iConnections)
@@ -27,7 +31,8 @@ RakNet::StartupResult CRakServer::Startup(const char* szHostAddress, t_port usPo
 
 void CRakServer::Shutdown(unsigned int blockDuration, PacketPriority priority)
 {
-	return m_pPeer->Shutdown(blockDuration, 0, priority);
+	if (m_pPeer)
+		m_pPeer->Shutdown(blockDuration, 0, priority);
 }
 
 unsigned int CRakServer::Send(Network::ePacketType packetType, const RakNet::SystemAddress& systemAddress, RakNet::BitStream* pBitStream, PacketPriority priority, PacketReliability reliability, char cOrderingChannel, bool bBroadcast)

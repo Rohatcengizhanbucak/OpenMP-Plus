@@ -1,0 +1,9 @@
+{
+	"InstallScripts" : 
+	[
+		"C:/Users/Elect/OneDrive/Belgeler/GitHub/OpenMP-Plus/Build/legacy-plugin-verify/cmake_install.cmake",
+		"C:/Users/Elect/OneDrive/Belgeler/GitHub/OpenMP-Plus/Build/legacy-plugin-verify/Common/cmake_install.cmake",
+		"C:/Users/Elect/OneDrive/Belgeler/GitHub/OpenMP-Plus/Build/legacy-plugin-verify/Server/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

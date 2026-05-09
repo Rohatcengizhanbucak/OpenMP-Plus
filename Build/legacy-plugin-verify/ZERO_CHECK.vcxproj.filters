@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="18.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Build\legacy-plugin-verify\CMakeFiles\d0a30bc2ef5dcde3629c69ef7b61f4ed\generate.stamp.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{41B2DDD1-3646-3E27-BAA8-307C990263FF}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

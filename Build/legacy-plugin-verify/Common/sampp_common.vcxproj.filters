@@ -1,0 +1,346 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="18.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\CRPC.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\Base64Encoder.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\BitStream.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\CCRakNetSlidingWindow.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\CCRakNetUDT.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\CheckSum.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\CloudClient.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\CloudCommon.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\CloudServer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\CommandParserInterface.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\ConnectionGraph2.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\ConsoleServer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\DR_SHA1.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\DS_BytePool.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\DS_ByteQueue.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\DS_HuffmanEncodingTree.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\DS_Table.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\DataCompressor.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\DirectoryDeltaTransfer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\DynDNS.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\EmailSender.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\EpochTimeToString.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\FileList.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\FileListTransfer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\FileOperations.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\FormatString.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\FullyConnectedMesh2.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\GetTime.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\Getche.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\Gets.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\GridSectorizer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\HTTPConnection.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\HTTPConnection2.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\IncrementalReadInterface.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\Itoa.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\LinuxStrings.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\LocklessTypes.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\LogCommandParser.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\MessageFilter.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\NatPunchthroughClient.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\NatPunchthroughServer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\NatTypeDetectionClient.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\NatTypeDetectionCommon.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\NatTypeDetectionServer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\NetworkIDManager.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\NetworkIDObject.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\PS4Includes.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\PacketConsoleLogger.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\PacketFileLogger.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\PacketLogger.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\PacketOutputWindowLogger.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\PacketizedTCP.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\PluginInterface2.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\RPC4Plugin.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\Rackspace.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\RakMemoryOverride.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\RakNetCommandParser.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\RakNetSocket.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\RakNetSocket2.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\RakNetSocket2_360_720.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\RakNetSocket2_Berkley.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\RakNetSocket2_Berkley_NativeClient.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\RakNetSocket2_NativeClient.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\RakNetSocket2_PS3_PS4.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\RakNetSocket2_PS4.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\RakNetSocket2_Vita.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\RakNetSocket2_WindowsStore8.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\RakNetSocket2_Windows_Linux.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\RakNetSocket2_Windows_Linux_360.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\RakNetStatistics.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\RakNetTransport2.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\RakNetTypes.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\RakPeer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\RakSleep.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\RakString.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\RakThread.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\RakWString.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\Rand.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\RandSync.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\ReadyEvent.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\RelayPlugin.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\ReliabilityLayer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\ReplicaManager3.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\Router2.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\SecureHandshake.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\SendToThread.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\SignaledEvent.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\SimpleMutex.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\SocketLayer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\StatisticsHistory.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\StringCompressor.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\StringTable.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\SuperFastHash.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\TCPInterface.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\TableSerializer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\TeamBalancer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\TeamManager.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\TelnetTransport.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\ThreadsafePacketLogger.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\TwoWayAuthentication.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\UDPForwarder.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\UDPProxyClient.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\UDPProxyCoordinator.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\UDPProxyServer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\VariableDeltaSerializer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\VariableListDeltaTracker.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\VariadicSQLParser.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\VitaIncludes.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\WSAStartupSingleton.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\_FindFirst.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\RakNet\gettimeofday.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\Common\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{B429E34F-DD79-34C7-92B8-BCE8FA8C8A32}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

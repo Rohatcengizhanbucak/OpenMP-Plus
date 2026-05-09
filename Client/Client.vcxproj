@@ -209,6 +209,7 @@
     <ClCompile Include="CHooks.cpp" />
     <ClCompile Include="CHUD.cpp" />
     <ClCompile Include="CKeyBinds.cpp" />
+    <ClCompile Include="CSampClient.cpp" />
     <ClCompile Include="CLocalPlayer.cpp" />
     <ClCompile Include="CLog.cpp" />
     <ClCompile Include="CMem.cpp" />
@@ -230,6 +231,7 @@
     <ClInclude Include="Box.h" />
     <ClInclude Include="CSprite.h" />
     <ClInclude Include="..\Include\SAMP+\client\CGameRakClient.h" />
+    <ClInclude Include="..\Include\SAMP+\client\CSampClient.h" />
     <ClInclude Include="resource.h" />
   </ItemGroup>
   <ItemGroup>

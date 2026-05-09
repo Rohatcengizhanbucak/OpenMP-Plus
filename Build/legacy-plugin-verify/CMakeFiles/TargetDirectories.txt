@@ -1,0 +1,4 @@
+C:/Users/Elect/OneDrive/Belgeler/GitHub/OpenMP-Plus/Build/legacy-plugin-verify/CMakeFiles/ALL_BUILD.dir
+C:/Users/Elect/OneDrive/Belgeler/GitHub/OpenMP-Plus/Build/legacy-plugin-verify/CMakeFiles/ZERO_CHECK.dir
+C:/Users/Elect/OneDrive/Belgeler/GitHub/OpenMP-Plus/Build/legacy-plugin-verify/Common/CMakeFiles/sampp_common.dir
+C:/Users/Elect/OneDrive/Belgeler/GitHub/OpenMP-Plus/Build/legacy-plugin-verify/Server/CMakeFiles/sampp_server.dir

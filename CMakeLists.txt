@@ -57,9 +57,13 @@ if(MSVC)
 endif()
 
 add_subdirectory(Common)
-add_subdirectory(Server)
 
 option(OMPPLUS_BUILD_COMPONENT "Build the native open.mp component transport" ON)
+option(OMPPLUS_BUILD_LEGACY_PLUGIN "Build the legacy server_port+1 side-channel plugin" OFF)
+
+if(OMPPLUS_BUILD_LEGACY_PLUGIN)
+	add_subdirectory(Server)
+endif()
 
 if(OMPPLUS_BUILD_COMPONENT)
 	set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "Allow older third-party CMake policy ranges" FORCE)
