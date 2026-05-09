@@ -54,6 +54,7 @@ public:
 	static void Process();
 	static void FilterKeyboardState(unsigned long stateSize, void* state);
 	static bool ShouldConsumeDirectInputOffset(unsigned long offset);
+	static bool IsTextInputActive();
 
 private:
 	struct sPendingKeyState
@@ -64,7 +65,6 @@ private:
 	};
 
 	static bool IsGameForeground();
-	static bool IsTextInputActive();
 	static bool IsKeyDown(unsigned short key);
 	static void SyncKeyStates();
 	static void SendKeyState(unsigned short key, unsigned char state, const std::string& action);

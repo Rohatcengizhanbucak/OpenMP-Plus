@@ -1,7 +1,9 @@
 #include <SAMP+/client/CGameRakClient.h>
+#include <SAMP+/client/CCmdlineParams.h>
 
 #include <SAMP+/client/CLog.h>
 #include <SAMP+/client/Network.h>
+#include <SAMP+/client/COverlayRenderer.h>
 #include <SAMP+/client/CSampClient.h>
 
 #include <Wincrypt.h>
@@ -145,13 +147,21 @@ bool CGameRakClient::IsInitialized()
 
 bool CGameRakClient::SendHello()
 {
+	uint32_t capabilities = OMPPlusProtocol::DefaultCapabilities;
+	uint32_t features = OMPPlusProtocol::DefaultFeatures;
+	if (COverlayRenderer::IsEnabled())
+	{
+		capabilities |= OMPPlusProtocol::CapabilityTargetUI;
+		features |= OMPPlusProtocol::FeatureTarget | OMPPlusProtocol::FeatureUI;
+	}
+
 	RakNet::BitStream stream;
-	stream.Write(OMPPlusProtocol::DefaultCapabilities);
+	stream.Write(capabilities);
 	stream.Write(OMPPlusProtocol::ClientInfoVersion);
 	stream.Write(OMPPlusProtocol::ClientVersionMajor);
 	stream.Write(OMPPlusProtocol::ClientVersionMinor);
 	stream.Write(OMPPlusProtocol::ClientVersionPatch);
-	stream.Write(static_cast<uint32_t>(OMPPlusProtocol::DefaultFeatures));
+	stream.Write(features);
 	stream.Write(false);
 
 	std::string hash = ComputeModuleSHA256();

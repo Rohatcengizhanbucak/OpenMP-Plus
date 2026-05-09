@@ -33,7 +33,7 @@ server. They are separate halves of the same protocol.
 1. Copy `Build/Release/omp-plus.dll` to the server `components` directory.
 2. Copy `Build/sampp.inc` to `qawno/include` if you compile Pawn scripts on that
    server install.
-3. Optional: copy smoke-test `.amx` files to `filterscripts`.
+3. Optional: copy smoke-test and demo `.amx` files to `filterscripts`.
 4. Start `omp-server.exe`.
 
 Recommended native component layout:
@@ -49,6 +49,9 @@ Recommended native component layout:
       sampp.inc
   filterscripts/
     sampp_smoketest.amx
+    sampp_itemdemo.amx
+    sampp_capabilitydemo.amx
+    sampp_targetdemo.amx
 ```
 
 Do not add this as the only top-level component list:
@@ -66,15 +69,32 @@ top-level `components` key absent and let open.mp load the directory normally.
 If your server already uses a full explicit top-level `components` list, add
 `omp-plus` to that full list without removing the other required components.
 
-To load the smoke-test filterscript, add it under `pawn.side_scripts`:
+To load the smoke-test and capability demo filterscripts, add them under
+`pawn.side_scripts`:
 
 ```json
 "pawn": {
     "side_scripts": [
-        "filterscripts/sampp_smoketest"
+        "filterscripts/sampp_smoketest",
+        "filterscripts/sampp_capabilitydemo",
+        "filterscripts/sampp_targetdemo"
     ]
 }
 ```
+
+Useful in-game checks:
+
+- `/sampp`: basic native transport and client-info smoke test.
+- `/capinfo`: version, feature flags, capabilities, hash prefix, and launcher
+  verification flag.
+- `/capspawn`: context-priority demo for `E`; item pickup, vehicle entry, and
+  in-vehicle engine action use short-lived capture leases instead of a global
+  keybind.
+- Inside the `/capspawn` demo vehicle, `H` toggles hood/bonnet, `J` toggles
+  trunk/boot, `K` opens/closes physical doors, and `L` locks/unlocks the vehicle.
+- `/targetveh`: server-driven target UI demo. Stand near the spawned vehicle,
+  press `ALT` once to open the mouse menu, and select an option. The server
+  validates the selected `targetid` and `optionid` before Pawn callbacks run.
 
 Expected server log line:
 
@@ -108,6 +128,8 @@ folder, OpenMP-Plus can use the same loader.
 Expected client log lines in the GTA folder `log.txt`:
 
 ```text
+ImGui target UI graphics hook enabled
+ImGui target overlay hook installed through existing D3D9 device
 Starting native open.mp RakClient mode
 Native RakClient transport registered RPC 220
 ```
@@ -151,6 +173,8 @@ the ASI reports:
 
 - OpenMP-Plus client version.
 - Supported feature flags such as HUD, keybind and key capture.
+- Target UI support when the ASI can render the Dear ImGui overlay and suppress
+  mouse camera input while target mode is open.
 - SHA-256 hash of the loaded ASI when Windows CryptoAPI can read it.
 - Launcher verification status. This is currently informational and should not
   be treated as anti-cheat proof.

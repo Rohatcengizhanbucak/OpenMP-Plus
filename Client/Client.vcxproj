@@ -59,7 +59,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>false</SDLCheck>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)\Include;$(SolutionDir)ThirdParty\imgui;$(SolutionDir)ThirdParty\imgui\backends;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>DEBUG;DIRECTINPUT_VERSION#0x0800;_WIN32_WINNT#0x0500;WIN32_LEAN_AND_MEAN;WIN32;_WINDOWS;_USRDLL;_CRT_SECURE_NO_WARNINGS;_CRT_SECURE_NO_DEPRECATE;__BITSTREAM_NATIVE_END;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <CallingConvention>StdCall</CallingConvention>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
@@ -77,7 +77,7 @@
       <SDLCheck>true</SDLCheck>
       <CallingConvention>StdCall</CallingConvention>
       <PreprocessorDefinitions>DEBUG;DIRECTINPUT_VERSION#0x0800;_WIN32_WINNT#0x0500;WIN32_LEAN_AND_MEAN;WIN32;_WINDOWS;_USRDLL;_CRT_SECURE_NO_WARNINGS;_CRT_SECURE_NO_DEPRECATE;_WINSOCK_DEPRECATED_NO_WARNINGS;__BITSTREAM_NATIVE_END;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)\Include;$(SolutionDir)ThirdParty\imgui;$(SolutionDir)ThirdParty\imgui\backends;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
@@ -209,6 +209,7 @@
     <ClCompile Include="CHooks.cpp" />
     <ClCompile Include="CHUD.cpp" />
     <ClCompile Include="CKeyBinds.cpp" />
+    <ClCompile Include="COverlayRenderer.cpp" />
     <ClCompile Include="CSampClient.cpp" />
     <ClCompile Include="CLocalPlayer.cpp" />
     <ClCompile Include="CLog.cpp" />
@@ -217,6 +218,7 @@
     <ClCompile Include="CRakClient.cpp" />
     <ClCompile Include="CRPCCallback.cpp" />
     <ClCompile Include="CSystem.cpp" />
+    <ClCompile Include="CTargetManager.cpp" />
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="Network.cpp" />
     <ClCompile Include="Proxy\CD3D9DeviceProxy.cpp" />
@@ -226,12 +228,20 @@
     <ClCompile Include="Proxy\CJmpProxy.cpp" />
     <ClCompile Include="Proxy\CMessageProxy.cpp" />
     <ClCompile Include="CSprite.cpp" />
+    <ClCompile Include="..\ThirdParty\imgui\imgui.cpp" />
+    <ClCompile Include="..\ThirdParty\imgui\imgui_draw.cpp" />
+    <ClCompile Include="..\ThirdParty\imgui\imgui_tables.cpp" />
+    <ClCompile Include="..\ThirdParty\imgui\imgui_widgets.cpp" />
+    <ClCompile Include="..\ThirdParty\imgui\backends\imgui_impl_dx9.cpp" />
+    <ClCompile Include="..\ThirdParty\imgui\backends\imgui_impl_win32.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Box.h" />
     <ClInclude Include="CSprite.h" />
     <ClInclude Include="..\Include\SAMP+\client\CGameRakClient.h" />
+    <ClInclude Include="..\Include\SAMP+\client\COverlayRenderer.h" />
     <ClInclude Include="..\Include\SAMP+\client\CSampClient.h" />
+    <ClInclude Include="..\Include\SAMP+\client\CTargetManager.h" />
     <ClInclude Include="resource.h" />
   </ItemGroup>
   <ItemGroup>

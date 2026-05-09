@@ -2,6 +2,7 @@
 #include <SAMP+/client/Client.h>
 #include <SAMP+/client/CKeyBinds.h>
 #include <SAMP+/client/CGameRakClient.h>
+#include <SAMP+/client/CTargetManager.h>
 #include <SAMP+/client/Network.h>
 #include <SAMP+/client/CHUD.h>
 #ifndef SAMPP_SAFE_CLIENT
@@ -136,6 +137,16 @@ namespace Network
 			case eRPC::CLEAR_KEY_CAPTURES:
 			{
 				CKeyBinds::ClearCaptures();
+				break;
+			}
+			case eRPC::TARGET_SET_CONTEXT:
+			{
+				CTargetManager::HandleSetContext(bitStream);
+				break;
+			}
+			case eRPC::TARGET_CLEAR_CONTEXT:
+			{
+				CTargetManager::ClearContext();
 				break;
 			}
 			default:
@@ -289,6 +300,7 @@ namespace Network
 				{
 					bServerHasPlugin = false;
 					CKeyBinds::Clear();
+					CTargetManager::ClearContext();
 
 					break;
 				}
@@ -297,6 +309,7 @@ namespace Network
 				{
 					bConnected = false;
 					CKeyBinds::Clear();
+					CTargetManager::ClearContext();
 
 					if (ServerHasPlugin())
 						Connect();
@@ -440,6 +453,7 @@ namespace Network
 	void Shutdown()
 	{
 		CKeyBinds::Clear();
+		CTargetManager::ClearContext();
 
 		if (transportMode == TRANSPORT_NATIVE_RAKCLIENT)
 			CGameRakClient::Shutdown();

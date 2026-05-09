@@ -68,6 +68,8 @@ Optional smoke-test files:
 <openmp-server>\filterscripts\sampp_smoketest.amx
 <openmp-server>\filterscripts\sampp_itemdemo.amx
 <openmp-server>\filterscripts\sampp_menudemo.amx
+<openmp-server>\filterscripts\sampp_capabilitydemo.amx
+<openmp-server>\filterscripts\sampp_targetdemo.amx
 ```
 
 Do not add a top-level `components` list containing only `omp-plus`. On some
@@ -156,6 +158,10 @@ examples/filterscripts/sampp_itemdemo.pwn
 examples/filterscripts/sampp_itemdemo.amx
 examples/filterscripts/sampp_menudemo.pwn
 examples/filterscripts/sampp_menudemo.amx
+examples/filterscripts/sampp_capabilitydemo.pwn
+examples/filterscripts/sampp_capabilitydemo.amx
+examples/filterscripts/sampp_targetdemo.pwn
+examples/filterscripts/sampp_targetdemo.amx
 ```
 
 Copy the `.amx` files you want to test to your open.mp server `filterscripts` directory, then add them to your open.mp config:
@@ -165,7 +171,9 @@ Copy the `.amx` files you want to test to your open.mp server `filterscripts` di
     "side_scripts": [
         "filterscripts/sampp_smoketest",
         "filterscripts/sampp_itemdemo",
-        "filterscripts/sampp_menudemo"
+        "filterscripts/sampp_menudemo",
+        "filterscripts/sampp_capabilitydemo",
+        "filterscripts/sampp_targetdemo"
     ]
 }
 ```
@@ -211,6 +219,45 @@ Menu demo commands:
 Menu demo keybind:
 
 - `M`: open/close a player TextDraw menu through `OnPlayerSAMPPKey`
+
+Capability/context demo commands:
+
+- `/capinfo` or `/ompinfo`: show negotiated client version, feature flags,
+  capabilities, hash prefix, and launcher verification flag
+- `/capspawn`: create one demo item and one demo vehicle for the player
+- `/capitem`: create only the contextual pickup item
+- `/capveh`: create only the contextual vehicle
+- `/cappickup`, `/capenter`, `/capengine`, `/capbonnet`, `/capboot`,
+  `/capdoors`, `/caplock`: fallback commands when key capture is unavailable
+- `/capclear`: remove the player's demo item, vehicle, and active capture leases
+
+Capability/context demo keybind:
+
+- `E`: context-sensitive interaction. Near the item it picks up the item, near
+  the demo vehicle it enters the vehicle, and inside the demo vehicle it runs
+  the engine action. The script leases `E` only while a valid context exists, so
+  normal GTA behavior is left alone outside those contexts.
+- Inside the demo vehicle, `H` toggles the hood/bonnet, `J` toggles the
+  trunk/boot, `K` opens/closes the physical car doors, and `L` locks/unlocks the
+  vehicle doors. These are also short-lived capture leases and are released when
+  the player leaves the demo vehicle.
+
+Target demo commands:
+
+- `/targetinfo`: show client target/UI feature support
+- `/targetveh`: spawn a server-driven target vehicle
+- `/targetclear`: remove the target vehicle and clear the active target context
+
+Target demo flow:
+
+- Stand near the `/targetveh` vehicle. The client receives a short-lived target
+  context and draws the center eye indicator through the client-side ImGui
+  overlay.
+- Press `ALT` once to open target mode. Mouse and movement input are taken by
+  the ImGui overlay, and GTA camera movement is suppressed while the menu is
+  open.
+- Click an option. The client sends only `targetid + optionid`; the component
+  validates that the target context is still active before calling Pawn.
 
 ## Helper Scripts
 
@@ -296,6 +343,17 @@ Client capability API:
 - `SAMPP_GetClientVersion(playerid, &major, &minor, &patch)`
 - `SAMPP_GetClientHash(playerid, dest[], size = sizeof dest)`
 - `SAMPP_IsLauncherVerified(playerid)`
+- `SAMPP_FEATURE_TARGET` indicates support for the client-side ImGui target
+  overlay/menu feature.
+
+Target UI API:
+
+- `SAMPP_TargetBegin(playerid, targetid, const title[], ttl_ms = 500, flags = 0)`
+- `SAMPP_TargetAddOption(playerid, targetid, optionid, const label[], const icon[] = "", bool:enabled = true)`
+- `SAMPP_TargetCommit(playerid, targetid)`
+- `SAMPP_TargetClear(playerid)`
+- `OnPlayerOMPPlusTargetMode(playerid, targetid, bool:opened)`
+- `OnPlayerOMPPlusTargetSelect(playerid, targetid, optionid)`
 
 The native HELLO handshake now reports the client version, supported feature
 flags, a hash of the loaded ASI, and a launcher verification flag. This is for

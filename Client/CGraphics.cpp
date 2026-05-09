@@ -1,4 +1,6 @@
 #include <SAMP+/client/CGraphics.h>
+#include <SAMP+/client/CTargetManager.h>
+#include <SAMP+/client/Network.h>
 
 CPoint2D CGraphics::m_pResolution;
 IDirect3D9* CGraphics::m_pDirect3D;
@@ -28,40 +30,33 @@ void CGraphics::Initialize(IDirect3D9* pDirect3D, IDirect3DDevice9* pDevice)
 	UpdateScreenResolution();
 
 	CLog::Write("CGraphics::Initialize");
+}
 
-	int width = GetSystemMetrics(SM_CXSCREEN);
-	int height = GetSystemMetrics(SM_CYSCREEN);
+void CGraphics::AttachDevice(IDirect3DDevice9* pDevice)
+{
+	if (!pDevice)
+		return;
 
-	logo = new Sprite((float)width / 2, (float)height / 2);
+	m_pDevice = pDevice;
 
-	CLog::Write("Width: %d Height: %d", width, height);
+	D3DVIEWPORT9 viewport = {};
+	if (SUCCEEDED(m_pDevice->GetViewport(&viewport)) && viewport.Width && viewport.Height)
+		SetScreenResolution(viewport.Width, viewport.Height);
+}
 
-	if (!logo->Init(pDevice, IDB_PNG1, 311, 152))
-	{
-		CLog::Write("Couldn't load the SA-MP+ logo");
-	}
-	else
-	{
-		//logo->Resize(311, 152);
-		//logo->Rotate(50);
-		CLog::Write("Loaded the SA-MP+ logo successfully");
-	}
-
-	box = new Box();
-
-	if (!box->Init(pDevice, 100, 100, width / 2, height / 2, D3DCOLOR_ARGB(55, 255, 255, 255)))
-	{
-		CLog::Write("Couldn't load 'box'");
-	}
-	else
-	{
-		CLog::Write("Loaded 'box'");
-	}
-
+IDirect3DDevice9* CGraphics::GetDevice()
+{
+	return m_pDevice;
 }
 
 void CGraphics::UpdateScreenResolution()
 {
+	if (!m_pDirect3D)
+	{
+		AttachDevice(m_pDevice);
+		return;
+	}
+
 	D3DDISPLAYMODE dm;
 	m_pDirect3D->GetAdapterDisplayMode(D3DADAPTER_DEFAULT, &dm);
 	SetScreenResolution(dm.Width, dm.Height);
@@ -70,6 +65,8 @@ void CGraphics::UpdateScreenResolution()
 HRESULT CGraphics::ToggleCursor(bool toggle)
 {
 	m_bCursorEnabled = toggle;
+	if (!m_pDevice)
+		return S_OK;
 	return m_pDevice->ShowCursor(toggle);
 }
 
@@ -81,44 +78,19 @@ bool CGraphics::IsCursorEnabled()
 void CGraphics::OnReset()
 {
 	CLog::Write("CGraphics::OnReset");
-	if (logo)
-		logo->OnLostDevice();
-	if (box)
-		box->OnLostDevice();
+	CTargetManager::OnLostDevice();
 }
 
 void CGraphics::PostDeviceReset()
 {
 	CLog::Write("CGraphics::PostDeviceReset");
-	if (logo)
-		logo->OnResetDevice();
-	if (box)
-		box->OnResetDevice();
+	CTargetManager::OnResetDevice();
 }
 
 void CGraphics::PreEndScene()
 {
-	if (!CGame::IsLoaded())
-	{
-		if (logo->isInitialized())
-		{
-			logo->Draw();
-		}
-	}
-	else
-	{
-		if (logo)
-		{
-			delete logo;
-			logo = nullptr;
-		}
-		if (CGame::Playing())
-		{
-			//Drawing goes here
-			//if (box && box->isInitialized())
-				//box->Draw();
-		}
-	}
+	if (m_pDevice && Network::IsConnected())
+		CTargetManager::Draw(m_pDevice);
 }
 
 void CGraphics::BeginScene()
@@ -139,4 +111,5 @@ void CGraphics::CleanUp()
 		delete box;
 		box = nullptr;
 	}
+	CTargetManager::CleanUp();
 }

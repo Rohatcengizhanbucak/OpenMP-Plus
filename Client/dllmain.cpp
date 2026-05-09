@@ -2,6 +2,8 @@
 #include <SAMP+/client/CCmdlineParams.h>
 #include <SAMP+/client/CGameRakClient.h>
 #include <SAMP+/client/CKeyBinds.h>
+#include <SAMP+/client/COverlayRenderer.h>
+#include <SAMP+/client/CTargetManager.h>
 #ifndef SAMPP_SAFE_CLIENT
 #include <SAMP+/client/CHooks.h>
 #endif
@@ -28,6 +30,11 @@ static DWORD WINAPI BootstrapThread(LPVOID)
 #ifndef SAMPP_SAFE_CLIENT
 	CHooks::ApplySafeInput();
 	g_bInputHooksApplied = true;
+	if (!CCmdlineParams::ArgumentExists("sampp_no_targetui"))
+	{
+		CHooks::ApplySafeGraphics();
+		CLog::Write("ImGui target UI graphics hook enabled");
+	}
 #endif
 
 	Sleep(2500);
@@ -63,8 +70,12 @@ static DWORD WINAPI BootstrapThread(LPVOID)
 
 	while (g_bRunning)
 	{
+#ifndef SAMPP_SAFE_CLIENT
+		COverlayRenderer::TryInstall();
+#endif
 		Network::Process();
 		CKeyBinds::Process();
+		CTargetManager::Process();
 		Sleep(10);
 	}
 

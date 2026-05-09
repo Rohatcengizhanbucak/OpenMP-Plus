@@ -39,11 +39,6 @@ endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for the subdirectory.
-  include("C:/Users/Elect/OneDrive/Belgeler/GitHub/OpenMP-Plus/Build/native-component-install/Server/cmake_install.cmake")
-endif()
-
-if(NOT CMAKE_INSTALL_LOCAL_ONLY)
-  # Include the install script for the subdirectory.
   include("C:/Users/Elect/OneDrive/Belgeler/GitHub/OpenMP-Plus/Build/native-component-install/ThirdParty/openmp-sdk/cmake_install.cmake")
 endif()
 

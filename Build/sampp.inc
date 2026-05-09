@@ -90,6 +90,7 @@
 #define SAMPP_FEATURE_AUDIO 8
 #define SAMPP_FEATURE_EFFECTS 16
 #define SAMPP_FEATURE_UI 32
+#define SAMPP_FEATURE_TARGET 64
 
 #define SAMPP_CAPTURE_CONSUME_GAME_INPUT 1
 #define SAMPP_CAPTURE_BLOCK_SWITCH_WEAPON 2
@@ -100,6 +101,8 @@
 #define SAMPP_CAPTURE_PRIORITY_ITEM 20
 #define SAMPP_CAPTURE_PRIORITY_VEHICLE 40
 #define SAMPP_CAPTURE_PRIORITY_MENU 60
+
+#define SAMPP_TARGET_FLAG_HIDE_PROMPT 1
 
 #define SAMPP_KEY_LBUTTON 0x01
 #define SAMPP_KEY_RBUTTON 0x02
@@ -234,6 +237,10 @@ native SAMPP_ClearKeyBinds(playerid);
 native SAMPP_BeginKeyCapture(playerid, key, event_mask = SAMPP_KEY_EVENT_DOWN, priority = SAMPP_CAPTURE_PRIORITY_LOW, ttl_ms = SAMPP_CAPTURE_LEASE_DEFAULT_MS, flags = SAMPP_CAPTURE_DEFAULT_FLAGS, const action[] = "");
 native SAMPP_EndKeyCapture(playerid, key, const action[] = "");
 native SAMPP_ClearKeyCaptures(playerid);
+native SAMPP_TargetBegin(playerid, targetid, const title[], ttl_ms = 500, flags = 0);
+native SAMPP_TargetAddOption(playerid, targetid, optionid, const label[], const icon[] = "", bool:enabled = true);
+native SAMPP_TargetCommit(playerid, targetid);
+native SAMPP_TargetClear(playerid);
 native SAMPP_ExecuteCallback(type, {Float,_}:...);
 
 stock bool:SAMPP_CaptureKeyNearPoint(playerid, key, Float:x, Float:y, Float:z, Float:radius, const action[], priority = SAMPP_CAPTURE_PRIORITY_ITEM, ttl_ms = SAMPP_CAPTURE_LEASE_DEFAULT_MS, flags = SAMPP_CAPTURE_DEFAULT_FLAGS, event_mask = SAMPP_KEY_EVENT_DOWN)
@@ -287,6 +294,32 @@ stock bool:SAMPP_CaptureKeyNearVehicle(playerid, vehicleid, key, Float:radius, c
 	return SAMPP_CaptureKeyNearPoint(playerid, key, x, y, z, radius, action, priority, ttl_ms, flags, event_mask);
 }
 
+stock bool:SAMPP_TargetHasUI(playerid)
+{
+	return IsUsingSAMPP(playerid) && SAMPP_HasFeature(playerid, SAMPP_FEATURE_TARGET);
+}
+
+stock bool:SAMPP_TargetBeginNearPoint(playerid, targetid, Float:x, Float:y, Float:z, Float:radius, const title[], ttl_ms = 500, flags = 0)
+{
+	if (!SAMPP_TargetHasUI(playerid))
+	{
+		return false;
+	}
+
+	if (GetPlayerDistanceFromPoint(playerid, x, y, z) > radius)
+	{
+		SAMPP_TargetClear(playerid);
+		return false;
+	}
+
+	if (!SAMPP_TargetBegin(playerid, targetid, title, ttl_ms, flags))
+	{
+		return false;
+	}
+
+	return true;
+}
+
 forward OnPlayerOpenPauseMenu(playerid);
 forward OnPlayerClosePauseMenu(playerid);
 forward OnPlayerEnterPauseSubmenu(playerid, from, to);
@@ -301,6 +334,10 @@ forward OnPlayerDrinkSprunk(playerid);
 forward OnPlayerSAMPPKey(playerid, keyid, keystate, action[]);
 forward OnPlayerOMPPlusReady(playerid);
 forward OnPlayerOMPPlusKey(playerid, keyid, keystate, action[]);
+forward OnPlayerSAMPPTargetMode(playerid, targetid, bool:opened);
+forward OnPlayerSAMPPTargetSelect(playerid, targetid, optionid);
+forward OnPlayerOMPPlusTargetMode(playerid, targetid, bool:opened);
+forward OnPlayerOMPPlusTargetSelect(playerid, targetid, optionid);
 
 public OnPlayerConnect(playerid)
 {

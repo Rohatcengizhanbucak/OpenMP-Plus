@@ -4,6 +4,29 @@
 
 OMPPlusComponent* OMPPlusComponent::instance_ = nullptr;
 
+namespace
+{
+	constexpr size_t MaxTargetOptions = 8;
+	constexpr size_t MaxTargetTitleLength = 48;
+	constexpr size_t MaxTargetLabelLength = 48;
+	constexpr size_t MaxTargetIconLength = 24;
+	constexpr uint16_t DefaultTargetTtlMs = 500;
+	constexpr uint16_t MaxTargetTtlMs = 5000;
+
+	std::string BoundString(const std::string& value, size_t maxLength)
+	{
+		return value.length() > maxLength ? value.substr(0, maxLength) : value;
+	}
+
+	void WriteBoundString(NetworkBitStream& stream, const std::string& value, size_t maxLength)
+	{
+		std::string bounded = BoundString(value, maxLength);
+		stream.Write(static_cast<uint8_t>(bounded.length()));
+		if (!bounded.empty())
+			stream.Write(bounded.c_str(), static_cast<int>(bounded.length()));
+	}
+}
+
 OMPPlusComponent* OMPPlusComponent::getInstance()
 {
 	if (!instance_)
@@ -60,6 +83,8 @@ void OMPPlusComponent::reset()
 {
 	for (auto& state : states_)
 		state = OMPPlusPlayerState();
+	for (auto& context : targetContexts_)
+		context = OMPPlusTargetContext();
 }
 
 void OMPPlusComponent::onPlayerConnect(IPlayer& player)
@@ -205,10 +230,89 @@ bool OMPPlusComponent::setPawnString(AMX* amx, cell address, cell size, const st
 	return script->SetString(physical, StringView(value.c_str(), value.length()), false, false, static_cast<size_t>(size)) == AMX_ERR_NONE;
 }
 
+bool OMPPlusComponent::beginTargetContext(int playerid, uint32_t targetid, const std::string& title, uint16_t ttlMs, uint32_t flags)
+{
+	if (playerid < 0 || playerid >= PLAYER_POOL_SIZE || !isUsingOMPPlus(playerid) || targetid == 0)
+		return false;
+
+	if (ttlMs == 0)
+		ttlMs = DefaultTargetTtlMs;
+	ttlMs = std::min<uint16_t>(ttlMs, MaxTargetTtlMs);
+
+	OMPPlusTargetContext& context = targetContexts_[playerid];
+	context.active = true;
+	context.targetId = targetid;
+	context.flags = flags;
+	context.ttlMs = ttlMs;
+	context.expiresAt = Time::now() + Milliseconds(ttlMs);
+	context.title = BoundString(title, MaxTargetTitleLength);
+	context.options.clear();
+	return true;
+}
+
+bool OMPPlusComponent::addTargetOption(int playerid, uint32_t targetid, uint32_t optionid, const std::string& label, const std::string& icon, bool enabled)
+{
+	if (playerid < 0 || playerid >= PLAYER_POOL_SIZE || targetid == 0 || optionid == 0)
+		return false;
+
+	OMPPlusTargetContext& context = targetContexts_[playerid];
+	if (!context.active || context.targetId != targetid || context.options.size() >= MaxTargetOptions)
+		return false;
+
+	OMPPlusTargetOption option;
+	option.optionId = optionid;
+	option.enabled = enabled;
+	option.label = BoundString(label, MaxTargetLabelLength);
+	option.icon = BoundString(icon, MaxTargetIconLength);
+	context.options.push_back(option);
+	return true;
+}
+
+bool OMPPlusComponent::commitTargetContext(int playerid, uint32_t targetid)
+{
+	if (playerid < 0 || playerid >= PLAYER_POOL_SIZE || !isUsingOMPPlus(playerid))
+		return false;
+
+	OMPPlusTargetContext& context = targetContexts_[playerid];
+	if (!context.active || context.targetId != targetid || context.options.empty())
+		return false;
+
+	context.expiresAt = Time::now() + Milliseconds(context.ttlMs);
+
+	NetworkBitStream stream;
+	stream.Write(context.targetId);
+	stream.Write(context.ttlMs);
+	stream.Write(context.flags);
+	WriteBoundString(stream, context.title, MaxTargetTitleLength);
+	stream.Write(static_cast<uint8_t>(context.options.size()));
+
+	for (const OMPPlusTargetOption& option : context.options)
+	{
+		stream.Write(option.optionId);
+		stream.Write(option.enabled);
+		WriteBoundString(stream, option.label, MaxTargetLabelLength);
+		WriteBoundString(stream, option.icon, MaxTargetIconLength);
+	}
+
+	return sendLegacyRPC(playerid, OMPPlusProtocol::TARGET_SET_CONTEXT, &stream);
+}
+
+bool OMPPlusComponent::clearTargetContext(int playerid)
+{
+	if (playerid < 0 || playerid >= PLAYER_POOL_SIZE)
+		return false;
+
+	targetContexts_[playerid] = OMPPlusTargetContext();
+	return sendLegacyRPC(playerid, OMPPlusProtocol::TARGET_CLEAR_CONTEXT) != 0;
+}
+
 void OMPPlusComponent::resetPlayer(int playerid)
 {
 	if (playerid >= 0 && playerid < PLAYER_POOL_SIZE)
+	{
 		states_[playerid] = OMPPlusPlayerState();
+		targetContexts_[playerid] = OMPPlusTargetContext();
+	}
 }
 
 bool OMPPlusComponent::readHeader(NetworkBitStream& stream, OMPPlusProtocol::Message& message, uint16_t& version)
@@ -368,6 +472,8 @@ uint32_t OMPPlusComponent::deriveLegacyFeatures(uint32_t capabilities) const
 		features |= OMPPlusProtocol::FeatureHUD | OMPPlusProtocol::FeatureKeybind;
 	if (capabilities & OMPPlusProtocol::CapabilityKeyCapture)
 		features |= OMPPlusProtocol::FeatureKeyCapture;
+	if (capabilities & OMPPlusProtocol::CapabilityTargetUI)
+		features |= OMPPlusProtocol::FeatureTarget | OMPPlusProtocol::FeatureUI;
 	return features;
 }
 
@@ -483,9 +589,52 @@ void OMPPlusComponent::processClientRPC(IPlayer& player, uint16_t rpc, NetworkBi
 		callPublic("OnPlayerOMPPlusKey", DefaultReturnValue_True, playerid, static_cast<int>(key), static_cast<int>(keyState), StringView(action, actionLength));
 		break;
 	}
+	case OMPPlusProtocol::ON_TARGET_SELECT:
+		processTargetSelect(player, stream);
+		break;
+	case OMPPlusProtocol::ON_TARGET_MODE:
+	{
+		uint32_t targetid = 0;
+		bool opened = false;
+		if (stream.Read(targetid) && stream.Read(opened))
+		{
+			callPublic("OnPlayerSAMPPTargetMode", DefaultReturnValue_True, playerid, static_cast<int>(targetid), opened ? 1 : 0);
+			callPublic("OnPlayerOMPPlusTargetMode", DefaultReturnValue_True, playerid, static_cast<int>(targetid), opened ? 1 : 0);
+		}
+		break;
+	}
 	default:
 		break;
 	}
+}
+
+void OMPPlusComponent::processTargetSelect(IPlayer& player, NetworkBitStream& stream)
+{
+	const int playerid = player.getID();
+	uint32_t targetid = 0;
+	uint32_t optionid = 0;
+	if (!stream.Read(targetid) || !stream.Read(optionid))
+		return;
+
+	if (playerid < 0 || playerid >= PLAYER_POOL_SIZE)
+		return;
+
+	OMPPlusTargetContext& context = targetContexts_[playerid];
+	if (!context.active || context.targetId != targetid || Time::now() > context.expiresAt)
+		return;
+
+	const auto optionIt = std::find_if(context.options.begin(), context.options.end(), [optionid](const OMPPlusTargetOption& option)
+	{
+		return option.optionId == optionid && option.enabled;
+	});
+	if (optionIt == context.options.end())
+		return;
+
+	targetContexts_[playerid] = OMPPlusTargetContext();
+	sendLegacyRPC(playerid, OMPPlusProtocol::TARGET_CLEAR_CONTEXT);
+
+	callPublic("OnPlayerSAMPPTargetSelect", DefaultReturnValue_True, playerid, static_cast<int>(targetid), static_cast<int>(optionid));
+	callPublic("OnPlayerOMPPlusTargetSelect", DefaultReturnValue_True, playerid, static_cast<int>(targetid), static_cast<int>(optionid));
 }
 
 void OMPPlusComponent::sendHelloAck(IPlayer& player)

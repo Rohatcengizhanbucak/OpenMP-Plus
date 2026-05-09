@@ -3,8 +3,6 @@ C:/Users/Elect/OneDrive/Belgeler/GitHub/OpenMP-Plus/Build/native-component-insta
 C:/Users/Elect/OneDrive/Belgeler/GitHub/OpenMP-Plus/Build/native-component-install/CMakeFiles/ZERO_CHECK.dir
 C:/Users/Elect/OneDrive/Belgeler/GitHub/OpenMP-Plus/Build/native-component-install/Common/CMakeFiles/sampp_common.dir
 C:/Users/Elect/OneDrive/Belgeler/GitHub/OpenMP-Plus/Build/native-component-install/Common/CMakeFiles/INSTALL.dir
-C:/Users/Elect/OneDrive/Belgeler/GitHub/OpenMP-Plus/Build/native-component-install/Server/CMakeFiles/sampp_server.dir
-C:/Users/Elect/OneDrive/Belgeler/GitHub/OpenMP-Plus/Build/native-component-install/Server/CMakeFiles/INSTALL.dir
 C:/Users/Elect/OneDrive/Belgeler/GitHub/OpenMP-Plus/Build/native-component-install/ThirdParty/openmp-sdk/CMakeFiles/OMP-SDK.dir
 C:/Users/Elect/OneDrive/Belgeler/GitHub/OpenMP-Plus/Build/native-component-install/ThirdParty/openmp-sdk/CMakeFiles/INSTALL.dir
 C:/Users/Elect/OneDrive/Belgeler/GitHub/OpenMP-Plus/Build/native-component-install/ThirdParty/openmp-sdk/CMakeFiles/ALL_BUILD.dir

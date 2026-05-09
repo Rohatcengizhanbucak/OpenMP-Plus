@@ -38,6 +38,25 @@ struct OMPPlusPlayerState
 	int messagesInWindow = 0;
 };
 
+struct OMPPlusTargetOption
+{
+	uint32_t optionId = 0;
+	bool enabled = true;
+	std::string label;
+	std::string icon;
+};
+
+struct OMPPlusTargetContext
+{
+	bool active = false;
+	uint32_t targetId = 0;
+	uint32_t flags = 0;
+	uint16_t ttlMs = 0;
+	TimePoint expiresAt = TimePoint::min();
+	std::string title;
+	std::vector<OMPPlusTargetOption> options;
+};
+
 class OMPPlusComponent final
 	: public IComponent
 	, public PlayerConnectEventHandler
@@ -76,6 +95,10 @@ public:
 	std::string getPawnString(AMX* amx, cell address, size_t maxLength);
 	bool setPawnString(AMX* amx, cell address, cell size, const std::string& value);
 	bool setPawnCell(AMX* amx, cell address, cell value);
+	bool beginTargetContext(int playerid, uint32_t targetid, const std::string& title, uint16_t ttlMs, uint32_t flags);
+	bool addTargetOption(int playerid, uint32_t targetid, uint32_t optionid, const std::string& label, const std::string& icon, bool enabled);
+	bool commitTargetContext(int playerid, uint32_t targetid);
+	bool clearTargetContext(int playerid);
 
 	template <typename... Args>
 	cell callPublic(const char* name, DefaultReturnValue defaultReturn, Args&&... args)
@@ -99,6 +122,7 @@ private:
 	ICore* core_ = nullptr;
 	IPawnComponent* pawn_ = nullptr;
 	std::array<OMPPlusPlayerState, PLAYER_POOL_SIZE> states_;
+	std::array<OMPPlusTargetContext, PLAYER_POOL_SIZE> targetContexts_;
 	std::vector<IPawnScript*> scripts_;
 
 	void resetPlayer(int playerid);
@@ -108,6 +132,7 @@ private:
 	bool handleHello(IPlayer& player, NetworkBitStream& stream, uint16_t version);
 	bool handleClientRPC(IPlayer& player, NetworkBitStream& stream);
 	void processClientRPC(IPlayer& player, uint16_t rpc, NetworkBitStream& stream);
+	void processTargetSelect(IPlayer& player, NetworkBitStream& stream);
 	uint32_t deriveLegacyFeatures(uint32_t capabilities) const;
 	void sendHelloAck(IPlayer& player);
 	void sendError(IPlayer& player, uint16_t code);

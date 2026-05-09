@@ -10,11 +10,12 @@ namespace OMPPlusProtocol
 	static const uint16_t Version = 1;
 	static const uint32_t CapabilityNativeTransport = 0x00000001;
 	static const uint32_t CapabilityKeyCapture = 0x00000002;
+	static const uint32_t CapabilityTargetUI = 0x00000004;
 	static const uint32_t DefaultCapabilities = CapabilityNativeTransport | CapabilityKeyCapture;
 	static const uint8_t ClientInfoVersion = 1;
 	static const uint16_t ClientVersionMajor = 0;
 	static const uint16_t ClientVersionMinor = 1;
-	static const uint16_t ClientVersionPatch = 4;
+	static const uint16_t ClientVersionPatch = 5;
 	static const uint8_t MaxClientHashLength = 64;
 	static const int MaxPayloadBytes = 4096;
 	static const int MaxMessagesPerSecond = 60;
@@ -27,8 +28,14 @@ namespace OMPPlusProtocol
 		FeatureAudio = 1 << 3,
 		FeatureEffects = 1 << 4,
 		FeatureUI = 1 << 5,
+		FeatureTarget = 1 << 6,
 
 		DefaultFeatures = FeatureHUD | FeatureKeybind | FeatureKeyCapture
+	};
+
+	enum TargetFlags : uint32_t
+	{
+		TargetFlagHidePrompt = 1 << 0
 	};
 
 	enum class Message : uint8_t
@@ -85,6 +92,11 @@ namespace OMPPlusProtocol
 
 		SET_KEY_CAPTURE,
 		CLEAR_KEY_CAPTURE,
-		CLEAR_KEY_CAPTURES
+		CLEAR_KEY_CAPTURES,
+
+		TARGET_SET_CONTEXT,
+		TARGET_CLEAR_CONTEXT,
+		ON_TARGET_SELECT,
+		ON_TARGET_MODE
 	};
 }

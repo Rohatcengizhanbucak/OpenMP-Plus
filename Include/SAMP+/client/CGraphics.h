@@ -20,6 +20,8 @@ public:
 	static HRESULT ToggleCursor(bool toggle);
 	static bool IsCursorEnabled();
 	static void Initialize(IDirect3D9* pDirect3D, IDirect3DDevice9* pDevice);
+	static void AttachDevice(IDirect3DDevice9* pDevice);
+	static IDirect3DDevice9* GetDevice();
 	static void OnReset();
 
 	//DirectX

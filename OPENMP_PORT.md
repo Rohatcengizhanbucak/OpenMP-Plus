@@ -51,6 +51,18 @@ the native transport:
 - `SAMPP_CAPTURE_DEFAULT_FLAGS` also blocks the GTA switch-weapon action while
   the lease is active, because GTA can process that action outside the observed
   key callback path.
+- `/capinfo` shows the negotiated client version, feature flags, capabilities,
+  ASI hash prefix and launcher verification flag.
+- `/capspawn` creates a per-player item and vehicle scenario. The demo leases
+  `E` only inside the active context: pickup near the item, enter near the
+  vehicle, and engine action inside the vehicle. Higher-priority vehicle actions
+  intentionally win over lower-priority item actions.
+- The same capability demo leases in-vehicle `H`, `J`, `K` and `L` for
+  hood/bonnet, trunk/boot, physical car doors and door lock tests.
+- `/targetveh` creates a server-driven target UI scenario. The server publishes
+  a short-lived target context, the client renders the center eye/menu through
+  a Dear ImGui D3D9 overlay, and option selection is validated server-side
+  before Pawn callbacks run.
 
 Previously live verified in the safe feature subset:
 
@@ -65,6 +77,11 @@ Previously live verified in the safe feature subset:
 - Keybind callback: `F2` returned `key=113 state=1 action=help` and displayed help.
 - Item demo uses `SAMPP_BeginKeyCapture` instead of a global `E` bind, so GTA
   default `E` behavior is blocked only while the pickup context is active.
+- Capability demo verifies feature-gated Pawn code paths and context priority
+  for item, vehicle-near and in-vehicle interactions.
+- Target demo verifies target UI capability negotiation, ALT press-to-open menu
+  mode, client-side mouse/camera suppression and server-side `targetid/optionid`
+  validation.
 - `/sampp` reports `SAMPP_HasFeature`, version and hash smoke information.
 
 ## Porting Order

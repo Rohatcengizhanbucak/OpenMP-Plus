@@ -1,6 +1,7 @@
 #include <SAMP+/client/Client.h>
 #include <SAMP+/client/CHooks.h>
 #include <SAMP+/client/CLog.h>
+#include <SAMP+/client/COverlayRenderer.h>
 #include <SAMP+/client/Proxy/CJmpProxy.h>
 
 #include <Detours/detours.h>
@@ -23,11 +24,18 @@ void CHooks::ApplySafeInput()
 	ApplyDirectInput();
 }
 
+void CHooks::ApplySafeGraphics()
+{
+	COverlayRenderer::Enable();
+	ApplyCursorPos();
+}
+
 void CHooks::Remove()
 {
 	RemoveDirectInput();
 	RemoveDirect3D();
 	RemoveCursorPos();
+	COverlayRenderer::Shutdown();
 }
 
 void CHooks::InstallJmp()

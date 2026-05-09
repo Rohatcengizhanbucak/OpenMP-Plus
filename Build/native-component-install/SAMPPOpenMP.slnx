@@ -13,7 +13,6 @@
 		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
 		<BuildDependency Project="components/omp-plus/omp_plus_component.vcxproj"/>
 		<BuildDependency Project="Common/sampp_common.vcxproj"/>
-		<BuildDependency Project="Server/sampp_server.vcxproj"/>
 	</Project>
 	<Project Path="INSTALL.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="3a80982d-d955-3aeb-bf42-b76cf8c8f159">
 		<BuildDependency Project="ALL_BUILD.vcxproj"/>
@@ -38,9 +37,5 @@
 	</Project>
 	<Project Path="Common/sampp_common.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="326af747-9c2f-3005-9170-5d1847292c3a">
 		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
-	</Project>
-	<Project Path="Server/sampp_server.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="6771110c-2515-35c6-b206-87bde697f4f5">
-		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
-		<BuildDependency Project="Common/sampp_common.vcxproj"/>
 	</Project>
 </Solution>

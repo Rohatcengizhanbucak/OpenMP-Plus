@@ -17,6 +17,7 @@ class CHooks
 public:
 	static void Apply();
 	static void ApplySafeInput();
+	static void ApplySafeGraphics();
 	static void InstallJmp();
 	static void Remove();
 

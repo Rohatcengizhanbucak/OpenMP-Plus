@@ -278,6 +278,9 @@ OMP-SDK_SOURCE_DIR:STATIC=C:/Users/Elect/OneDrive/Belgeler/GitHub/OpenMP-Plus/Th
 //Build the native open.mp component transport
 OMPPLUS_BUILD_COMPONENT:BOOL=ON
 
+//Build the legacy server_port+1 side-channel plugin
+OMPPLUS_BUILD_LEGACY_PLUGIN:BOOL=OFF
+
 //Value Computed by CMake
 SAMPPOpenMP_BINARY_DIR:STATIC=C:/Users/Elect/OneDrive/Belgeler/GitHub/OpenMP-Plus/Build/native-component-install
 
@@ -478,7 +481,7 @@ CMAKE_MODULE_LINKER_FLAGS_RELWITHDEBINFO-ADVANCED:INTERNAL=1
 //ADVANCED property for variable: CMAKE_MT
 CMAKE_MT-ADVANCED:INTERNAL=1
 //number of local generators
-CMAKE_NUMBER_OF_MAKEFILES:INTERNAL=11
+CMAKE_NUMBER_OF_MAKEFILES:INTERNAL=10
 //Platform information initialized
 CMAKE_PLATFORM_INFO_INITIALIZED:INTERNAL=1
 //noop for ranlib

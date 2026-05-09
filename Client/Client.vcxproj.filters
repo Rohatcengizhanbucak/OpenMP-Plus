@@ -8,6 +8,7 @@
     <ClCompile Include="CGraphics.cpp" />
     <ClCompile Include="CHUD.cpp" />
     <ClCompile Include="CKeyBinds.cpp" />
+    <ClCompile Include="COverlayRenderer.cpp" />
     <ClCompile Include="CSampClient.cpp" />
     <ClCompile Include="CLocalPlayer.cpp" />
     <ClCompile Include="CLog.cpp" />
@@ -16,6 +17,7 @@
     <ClCompile Include="CRakClient.cpp" />
     <ClCompile Include="CRPCCallback.cpp" />
     <ClCompile Include="CSystem.cpp" />
+    <ClCompile Include="CTargetManager.cpp" />
     <ClCompile Include="Network.cpp" />
     <ClCompile Include="Proxy\CD3D9DeviceProxy.cpp">
       <Filter>Proxy</Filter>
@@ -36,6 +38,24 @@
       <Filter>Proxy</Filter>
     </ClCompile>
     <ClCompile Include="CHooks.cpp" />
+    <ClCompile Include="..\ThirdParty\imgui\imgui.cpp">
+      <Filter>ThirdParty\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ThirdParty\imgui\imgui_draw.cpp">
+      <Filter>ThirdParty\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ThirdParty\imgui\imgui_tables.cpp">
+      <Filter>ThirdParty\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ThirdParty\imgui\imgui_widgets.cpp">
+      <Filter>ThirdParty\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ThirdParty\imgui\backends\imgui_impl_dx9.cpp">
+      <Filter>ThirdParty\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ThirdParty\imgui\backends\imgui_impl_win32.cpp">
+      <Filter>ThirdParty\imgui</Filter>
+    </ClCompile>
     <ClCompile Include="..\Common\RakNet\_FindFirst.cpp">
       <Filter>Common\RakNet</Filter>
     </ClCompile>
@@ -398,6 +418,9 @@
     <Filter Include="GUI\Shaders">
       <UniqueIdentifier>{bc1a97c1-1cc9-4c75-85e4-02e2f3b92b68}</UniqueIdentifier>
     </Filter>
+    <Filter Include="ThirdParty\imgui">
+      <UniqueIdentifier>{c8e504cf-78aa-4f98-8c60-83ee16b21678}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CSprite.h">
@@ -407,7 +430,9 @@
       <Filter>GUI\Headers</Filter>
     </ClInclude>
     <ClInclude Include="..\Include\SAMP+\client\CGameRakClient.h" />
+    <ClInclude Include="..\Include\SAMP+\client\COverlayRenderer.h" />
     <ClInclude Include="..\Include\SAMP+\client\CSampClient.h" />
+    <ClInclude Include="..\Include\SAMP+\client\CTargetManager.h" />
     <ClInclude Include="resource.h" />
   </ItemGroup>
   <ItemGroup>

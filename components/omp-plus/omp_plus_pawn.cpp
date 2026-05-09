@@ -446,6 +446,37 @@ namespace
 	{
 		return SendEmpty(params[1], CLEAR_KEY_CAPTURES);
 	}
+
+	cell AMX_NATIVE_CALL TargetBeginProc(AMX* amx, cell* params)
+	{
+		const int playerid = static_cast<int>(params[1]);
+		const uint32_t targetid = static_cast<uint32_t>(params[2]);
+		const std::string title = Component()->getPawnString(amx, params[3], 48);
+		const uint16_t ttlMs = static_cast<uint16_t>(std::max<cell>(0, std::min<cell>(5000, params[4])));
+		const uint32_t flags = ParamCount(params) >= 5 ? static_cast<uint32_t>(params[5]) : 0;
+		return Component()->beginTargetContext(playerid, targetid, title, ttlMs, flags) ? 1 : 0;
+	}
+
+	cell AMX_NATIVE_CALL TargetAddOptionProc(AMX* amx, cell* params)
+	{
+		const int playerid = static_cast<int>(params[1]);
+		const uint32_t targetid = static_cast<uint32_t>(params[2]);
+		const uint32_t optionid = static_cast<uint32_t>(params[3]);
+		const std::string label = Component()->getPawnString(amx, params[4], 48);
+		const std::string icon = ParamCount(params) >= 5 ? Component()->getPawnString(amx, params[5], 24) : std::string();
+		const bool enabled = ParamCount(params) >= 6 ? params[6] != 0 : true;
+		return Component()->addTargetOption(playerid, targetid, optionid, label, icon, enabled) ? 1 : 0;
+	}
+
+	cell AMX_NATIVE_CALL TargetCommitProc(AMX*, cell* params)
+	{
+		return Component()->commitTargetContext(static_cast<int>(params[1]), static_cast<uint32_t>(params[2])) ? 1 : 0;
+	}
+
+	cell AMX_NATIVE_CALL TargetClearProc(AMX*, cell* params)
+	{
+		return Component()->clearTargetContext(static_cast<int>(params[1])) ? 1 : 0;
+	}
 }
 
 AMX_NATIVE_INFO OMPPlusNatives[] =
@@ -499,5 +530,9 @@ AMX_NATIVE_INFO OMPPlusNatives[] =
 	{ "SAMPP_BeginKeyCapture", BeginKeyCaptureProc },
 	{ "SAMPP_EndKeyCapture", EndKeyCaptureProc },
 	{ "SAMPP_ClearKeyCaptures", ClearKeyCapturesProc },
+	{ "SAMPP_TargetBegin", TargetBeginProc },
+	{ "SAMPP_TargetAddOption", TargetAddOptionProc },
+	{ "SAMPP_TargetCommit", TargetCommitProc },
+	{ "SAMPP_TargetClear", TargetClearProc },
 	{ nullptr, nullptr }
 };
