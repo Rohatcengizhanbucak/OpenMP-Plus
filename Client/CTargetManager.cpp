@@ -13,6 +13,7 @@
 #include <imgui.h>
 
 #include <algorithm>
+#include <cstring>
 
 bool CTargetManager::m_hasContext = false;
 bool CTargetManager::m_menuOpen = false;
@@ -81,6 +82,14 @@ namespace
 	const unsigned char MaxTargetOptions = 8;
 	const float MenuWidth = 238.0f;
 	const float MenuOffsetX = 124.0f;
+	const float TargetOffsetX = 68.0f;
+	const float PromptLegendOffsetX = 64.0f;
+	const float PromptTitleHeight = 24.0f;
+	const float PromptKeyWidth = 36.0f;
+	const float PromptKeyHeight = 22.0f;
+	const float PromptLegendGap = 4.0f;
+	const float PromptTitleMinWidth = 82.0f;
+	const float PromptTitleMaxWidth = 220.0f;
 	const float HeaderHeight = 30.0f;
 	const float RowHeight = 30.0f;
 	const float RowGap = 4.0f;
@@ -281,13 +290,16 @@ void CTargetManager::Draw(IDirect3DDevice9* device)
 	EnsureFont(device);
 
 	CPoint2D& resolution = CGraphics::GetScreenResolution();
-	const float cx = static_cast<float>(resolution.X()) * 0.5f;
+	const float cx = static_cast<float>(resolution.X()) * 0.5f + TargetOffsetX;
 	const float cy = static_cast<float>(resolution.Y()) * 0.5f;
 
 	if (m_menuOpen)
 		DrawMenu(device, cx, cy);
 	else if (ShouldDrawPrompt())
+	{
 		DrawEye(device, cx, cy);
+		DrawPromptLegend(device, cx, cy);
+	}
 }
 
 void CTargetManager::OnDeviceInit(IDirect3DDevice9* device)
@@ -534,7 +546,7 @@ void CTargetManager::RenderImGui()
 	ImGuiIO& io = ImGui::GetIO();
 	ApplyImGuiInput();
 
-	const float cx = io.DisplaySize.x * 0.5f;
+	const float cx = io.DisplaySize.x * 0.5f + TargetOffsetX;
 	const float cy = io.DisplaySize.y * 0.5f;
 	const ImU32 black = IM_COL32(5, 7, 8, 220);
 	const ImU32 blackSoft = IM_COL32(0, 0, 0, 128);
@@ -561,11 +573,23 @@ void CTargetManager::RenderImGui()
 	{
 		if (drawPrompt)
 		{
-			const ImVec2 keyMin(cx + 45.0f, cy - 11.0f);
-			const ImVec2 keyMax(cx + 81.0f, cy + 11.0f);
+			const char* title = m_title.empty() ? "Target" : m_title.c_str();
+			const ImVec2 titleSize = ImGui::CalcTextSize(title);
+			const float titleWidth = (std::min)(PromptTitleMaxWidth, (std::max)(PromptTitleMinWidth, titleSize.x + 18.0f));
+			const float stackHeight = PromptTitleHeight + PromptLegendGap + PromptKeyHeight;
+			const float stackTop = cy - stackHeight * 0.5f;
+			const ImVec2 titleMin(cx + PromptLegendOffsetX, stackTop);
+			const ImVec2 titleMax(titleMin.x + titleWidth, titleMin.y + PromptTitleHeight);
+			const ImVec4 titleClip(titleMin.x + 8.0f, titleMin.y, titleMax.x - 8.0f, titleMax.y);
+			draw->AddRectFilled(titleMin, titleMax, black, 5.0f);
+			draw->AddRect(titleMin, titleMax, accentSoft, 5.0f);
+			draw->AddText(ImGui::GetFont(), ImGui::GetFontSize(), ImVec2(titleMin.x + 9.0f, titleMin.y + 5.0f), textSoft, title, title + std::strlen(title), 0.0f, &titleClip);
+
+			const ImVec2 keyMin(cx + PromptLegendOffsetX, stackTop + PromptTitleHeight + PromptLegendGap);
+			const ImVec2 keyMax(keyMin.x + PromptKeyWidth, keyMin.y + PromptKeyHeight);
 			draw->AddRectFilled(keyMin, keyMax, black, 5.0f);
 			draw->AddRect(keyMin, keyMax, accentSoft, 5.0f);
-			draw->AddText(ImVec2(cx + 54.0f, cy - 8.0f), textSoft, "ALT");
+			draw->AddText(ImVec2(keyMin.x + 9.0f, keyMin.y + 3.0f), textSoft, "ALT");
 		}
 		return;
 	}
@@ -791,7 +815,7 @@ void CTargetManager::InitializeVirtualCursor()
 	if (height <= 0.0f)
 		height = 720.0f;
 
-	const float cx = width * 0.5f;
+	const float cx = width * 0.5f + TargetOffsetX;
 	const float cy = height * 0.5f;
 	const float totalHeight = HeaderHeight + RowGap + (RowHeight + RowGap) * static_cast<float>(m_options.size()) + 10.0f;
 	const float menuX = cx + MenuOffsetX;
@@ -886,7 +910,7 @@ void CTargetManager::UpdateHover()
 		ScreenToClient(hwnd, &m_cursor);
 
 	CPoint2D& resolution = CGraphics::GetScreenResolution();
-	const float cx = static_cast<float>(resolution.X()) * 0.5f;
+	const float cx = static_cast<float>(resolution.X()) * 0.5f + TargetOffsetX;
 	const float cy = static_cast<float>(resolution.Y()) * 0.5f;
 	const float x = cx + MenuOffsetX;
 	const float y = cy - (HeaderHeight + (RowHeight + RowGap) * static_cast<float>(m_options.size())) * 0.5f;
@@ -997,9 +1021,25 @@ void CTargetManager::DrawEye(IDirect3DDevice9* device, float cx, float cy)
 	DrawLine(device, cx + 24.0f, cy, cx + 39.0f, cy, blackLine);
 	DrawLine(device, cx - 36.0f, cy, cx - 24.0f, cy, accentDim);
 	DrawLine(device, cx + 24.0f, cy, cx + 36.0f, cy, accentDim);
-	DrawFilledRect(device, cx + 45.0f, cy - 11.0f, 36.0f, 22.0f, black);
-	DrawOutlineRect(device, cx + 45.0f, cy - 11.0f, 36.0f, 22.0f, accentDim);
-	DrawTextLine("ALT", static_cast<int>(cx + 54.0f), static_cast<int>(cy - 10.0f), 30, 20, accent);
+}
+
+void CTargetManager::DrawPromptLegend(IDirect3DDevice9* device, float cx, float cy)
+{
+	const std::string title = m_title.empty() ? "Target" : m_title;
+	const float stackHeight = PromptTitleHeight + PromptLegendGap + PromptKeyHeight;
+	const float stackTop = cy - stackHeight * 0.5f;
+	const float width = (std::min)(PromptTitleMaxWidth, (std::max)(PromptTitleMinWidth, static_cast<float>(title.length()) * 7.5f + 18.0f));
+	const float x = cx + PromptLegendOffsetX;
+	const float y = stackTop;
+
+	DrawFilledRect(device, x, y, width, PromptTitleHeight, D3DCOLOR_ARGB(220, 5, 7, 8));
+	DrawOutlineRect(device, x, y, width, PromptTitleHeight, D3DCOLOR_ARGB(92, 245, 248, 246));
+	DrawTextLine(title, static_cast<int>(x + 9.0f), static_cast<int>(y), static_cast<int>(width - 18.0f), static_cast<int>(PromptTitleHeight), D3DCOLOR_ARGB(220, 232, 234, 232));
+
+	const float keyY = y + PromptTitleHeight + PromptLegendGap;
+	DrawFilledRect(device, x, keyY, PromptKeyWidth, PromptKeyHeight, D3DCOLOR_ARGB(220, 5, 7, 8));
+	DrawOutlineRect(device, x, keyY, PromptKeyWidth, PromptKeyHeight, D3DCOLOR_ARGB(92, 245, 248, 246));
+	DrawTextLine("ALT", static_cast<int>(x + 9.0f), static_cast<int>(keyY), 30, static_cast<int>(PromptKeyHeight), D3DCOLOR_ARGB(220, 232, 234, 232));
 }
 
 void CTargetManager::DrawMenu(IDirect3DDevice9* device, float cx, float cy)

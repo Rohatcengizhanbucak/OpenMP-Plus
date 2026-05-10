@@ -67,6 +67,7 @@ private:
 	static void DrawLine(IDirect3DDevice9* device, float x1, float y1, float x2, float y2, D3DCOLOR colour);
 	static void DrawTextLine(const std::string& text, int x, int y, int w, int h, D3DCOLOR colour);
 	static void DrawEye(IDirect3DDevice9* device, float cx, float cy);
+	static void DrawPromptLegend(IDirect3DDevice9* device, float cx, float cy);
 	static void DrawMenu(IDirect3DDevice9* device, float cx, float cy);
 
 	static bool m_hasContext;
