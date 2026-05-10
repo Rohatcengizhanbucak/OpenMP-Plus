@@ -217,7 +217,7 @@ namespace
 
 	unsigned char NormalizeTargetLayout(unsigned char layout)
 	{
-		return layout <= OMPPlusProtocol::TargetLayoutMinimal ? layout : OMPPlusProtocol::TargetLayoutAuto;
+		return layout <= OMPPlusProtocol::TargetLayoutCategory ? layout : OMPPlusProtocol::TargetLayoutAuto;
 	}
 
 	unsigned char NormalizeTargetRowType(unsigned char rowType)
@@ -1040,6 +1040,7 @@ bool CTargetManager::UseLeftAlignedRows()
 {
 	switch (m_layout)
 	{
+	case OMPPlusProtocol::TargetLayoutCategory:
 	case OMPPlusProtocol::TargetLayoutDialog:
 	case OMPPlusProtocol::TargetLayoutWide:
 		return true;
@@ -1092,6 +1093,8 @@ float CTargetManager::GetMenuWidth()
 		return 350.0f;
 	case OMPPlusProtocol::TargetLayoutMinimal:
 		return 220.0f;
+	case OMPPlusProtocol::TargetLayoutCategory:
+		return 292.0f;
 	case OMPPlusProtocol::TargetLayoutStandard:
 	default:
 		return 248.0f;
@@ -1100,11 +1103,34 @@ float CTargetManager::GetMenuWidth()
 
 float CTargetManager::GetHeaderHeight()
 {
-	return m_layout == OMPPlusProtocol::TargetLayoutMinimal ? 26.0f : HeaderHeight;
+	if (m_layout == OMPPlusProtocol::TargetLayoutMinimal)
+		return 26.0f;
+
+	if (m_layout == OMPPlusProtocol::TargetLayoutCategory)
+		return 32.0f;
+
+	return HeaderHeight;
 }
 
 float CTargetManager::GetRowHeight(const sTargetOption& option)
 {
+	if (m_layout == OMPPlusProtocol::TargetLayoutCategory)
+	{
+		switch (option.rowType)
+		{
+		case OMPPlusProtocol::TargetRowHeader:
+			return 22.0f;
+		case OMPPlusProtocol::TargetRowInfo:
+			return 30.0f;
+		case OMPPlusProtocol::TargetRowDialog:
+			return 56.0f;
+		case OMPPlusProtocol::TargetRowDivider:
+			return 8.0f;
+		default:
+			return 29.0f;
+		}
+	}
+
 	switch (option.rowType)
 	{
 	case OMPPlusProtocol::TargetRowDialog:

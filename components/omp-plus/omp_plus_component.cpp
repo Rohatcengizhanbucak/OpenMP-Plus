@@ -35,7 +35,7 @@ namespace
 
 	bool IsValidTargetLayout(uint8_t layout)
 	{
-		return layout <= OMPPlusProtocol::TargetLayoutMinimal;
+		return layout <= OMPPlusProtocol::TargetLayoutCategory;
 	}
 
 	bool IsValidTargetRowType(uint8_t rowType)

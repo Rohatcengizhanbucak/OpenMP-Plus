@@ -16,7 +16,7 @@ namespace OMPPlusProtocol
 	static const uint8_t ClientInfoVersion = 1;
 	static const uint16_t ClientVersionMajor = 0;
 	static const uint16_t ClientVersionMinor = 1;
-	static const uint16_t ClientVersionPatch = 16;
+	static const uint16_t ClientVersionPatch = 17;
 	static const uint8_t MaxClientHashLength = 64;
 	static const int MaxPayloadBytes = 4096;
 	static const int MaxMessagesPerSecond = 60;
@@ -60,7 +60,8 @@ namespace OMPPlusProtocol
 		TargetLayoutStandard = 2,
 		TargetLayoutDialog = 3,
 		TargetLayoutWide = 4,
-		TargetLayoutMinimal = 5
+		TargetLayoutMinimal = 5,
+		TargetLayoutCategory = 6
 	};
 
 	enum TargetRowType : uint8_t

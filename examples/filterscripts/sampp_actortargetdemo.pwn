@@ -30,6 +30,7 @@
 
 static gActorTarget[MAX_PLAYERS];
 static gActorType[MAX_PLAYERS];
+static gActorLayout[MAX_PLAYERS];
 static bool:gActorContextActive[MAX_PLAYERS];
 static gActorNextRefresh[MAX_PLAYERS];
 static Float:gActorX[MAX_PLAYERS];
@@ -46,6 +47,7 @@ stock ResetActorDemoPlayer(playerid)
 {
 	gActorTarget[playerid] = INVALID_ACTOR_ID;
 	gActorType[playerid] = ACTOR_TYPE_DOCTOR;
+	gActorLayout[playerid] = SAMPP_TARGET_LAYOUT_STANDARD;
 	gActorContextActive[playerid] = false;
 	gActorNextRefresh[playerid] = 0;
 	gActorX[playerid] = 0.0;
@@ -62,6 +64,49 @@ stock ClearActorTargetContext(playerid)
 		SAMPP_TargetClear(playerid);
 		gActorContextActive[playerid] = false;
 	}
+	return 1;
+}
+
+stock GetActorLayoutName(layout, name[], size = sizeof name)
+{
+	switch (layout)
+	{
+		case SAMPP_TARGET_LAYOUT_CATEGORY:
+		{
+			format(name, size, "category");
+		}
+		case SAMPP_TARGET_LAYOUT_DIALOG:
+		{
+			format(name, size, "dialog");
+		}
+		case SAMPP_TARGET_LAYOUT_WIDE:
+		{
+			format(name, size, "wide");
+		}
+		case SAMPP_TARGET_LAYOUT_COMPACT:
+		{
+			format(name, size, "compact");
+		}
+		default:
+		{
+			format(name, size, "standard");
+		}
+	}
+	return 1;
+}
+
+stock SetActorMenuLayout(playerid, layout)
+{
+	gActorLayout[playerid] = layout;
+	ClearActorTargetContext(playerid);
+	gActorNextRefresh[playerid] = 0;
+
+	new name[24], message[128];
+	GetActorLayoutName(layout, name);
+	format(message, sizeof message, "[ActorTarget] Actor menu layout set to %s. Move close and press ALT.", name);
+	SendClientMessage(playerid, ACTOR_DEMO_COLOUR, message);
+
+	RefreshActorTarget(playerid, true);
 	return 1;
 }
 
@@ -278,7 +323,7 @@ stock SpawnActorTarget(playerid, actorType = ACTOR_TYPE_DOCTOR)
 	GetActorTypeTitle(actorType, title);
 	format(message, sizeof message, "[ActorTarget] %s spawned. Move close, look at the actor, press ALT once.", title);
 	SendClientMessage(playerid, ACTOR_DEMO_OK_COLOUR, message);
-	SendClientMessage(playerid, ACTOR_DEMO_COLOUR, "[ActorTarget] Category rows are Pawn-driven; the stable vehicle-style menu renderer is unchanged.");
+	SendClientMessage(playerid, ACTOR_DEMO_COLOUR, "[ActorTarget] Default layout is standard. Try /actorlayoutcategory for the optional actor template.");
 	return 1;
 }
 
@@ -355,7 +400,7 @@ stock PublishActorTarget(playerid)
 		return 1;
 	}
 
-	SAMPP_TargetSetLayout(playerid, targetid, SAMPP_TARGET_LAYOUT_STANDARD);
+	SAMPP_TargetSetLayout(playerid, targetid, gActorLayout[playerid]);
 	SAMPP_TargetSetDescription(playerid, targetid, description);
 
 	switch (gActorType[playerid])
@@ -500,7 +545,8 @@ stock SendActorTargetHelp(playerid)
 {
 	SendClientMessage(playerid, ACTOR_DEMO_COLOUR, "[ActorTarget] /targetactor or /targetdoctor spawns Doctor Maria.");
 	SendClientMessage(playerid, ACTOR_DEMO_COLOUR, "[ActorTarget] Extra types: /targetmechanic /targettrader /targetguard.");
-	SendClientMessage(playerid, ACTOR_DEMO_COLOUR, "[ActorTarget] Stand close to her and press ALT once to open the standard target menu.");
+	SendClientMessage(playerid, ACTOR_DEMO_COLOUR, "[ActorTarget] Layouts: /actorlayoutstandard /actorlayoutcategory /actorlayoutcompact /actorlayoutwide.");
+	SendClientMessage(playerid, ACTOR_DEMO_COLOUR, "[ActorTarget] Stand close to the actor and press ALT once to open the current target menu.");
 	SendClientMessage(playerid, ACTOR_DEMO_COLOUR, "[ActorTarget] /actorclear removes her. /actorinfo checks Target UI support.");
 	return 1;
 }
@@ -508,7 +554,7 @@ stock SendActorTargetHelp(playerid)
 stock SendActorTargetInfo(playerid)
 {
 	new message[144];
-	format(message, sizeof message, "[ActorTarget] IsUsingSAMPP=%d TargetFeature=%d UIFeature=%d actorid=%d type=%d", IsUsingSAMPP(playerid), SAMPP_HasFeature(playerid, SAMPP_FEATURE_TARGET), SAMPP_HasFeature(playerid, SAMPP_FEATURE_UI), gActorTarget[playerid], gActorType[playerid]);
+	format(message, sizeof message, "[ActorTarget] IsUsingSAMPP=%d TargetFeature=%d UIFeature=%d actorid=%d type=%d layout=%d", IsUsingSAMPP(playerid), SAMPP_HasFeature(playerid, SAMPP_FEATURE_TARGET), SAMPP_HasFeature(playerid, SAMPP_FEATURE_UI), gActorTarget[playerid], gActorType[playerid], gActorLayout[playerid]);
 	SendClientMessage(playerid, ACTOR_DEMO_COLOUR, message);
 	return 1;
 }
@@ -568,6 +614,31 @@ public OnPlayerCommandText(playerid, cmdtext[])
 	if (!strcmp(cmdtext, "/actorinfo", true))
 	{
 		return SendActorTargetInfo(playerid);
+	}
+
+	if (!strcmp(cmdtext, "/actorlayoutstandard", true) || !strcmp(cmdtext, "/actorlayoutdefault", true))
+	{
+		return SetActorMenuLayout(playerid, SAMPP_TARGET_LAYOUT_STANDARD);
+	}
+
+	if (!strcmp(cmdtext, "/actorlayoutcategory", true))
+	{
+		return SetActorMenuLayout(playerid, SAMPP_TARGET_LAYOUT_CATEGORY);
+	}
+
+	if (!strcmp(cmdtext, "/actorlayoutcompact", true))
+	{
+		return SetActorMenuLayout(playerid, SAMPP_TARGET_LAYOUT_COMPACT);
+	}
+
+	if (!strcmp(cmdtext, "/actorlayoutwide", true))
+	{
+		return SetActorMenuLayout(playerid, SAMPP_TARGET_LAYOUT_WIDE);
+	}
+
+	if (!strcmp(cmdtext, "/actorlayoutdialog", true))
+	{
+		return SetActorMenuLayout(playerid, SAMPP_TARGET_LAYOUT_DIALOG);
 	}
 
 	if (!strcmp(cmdtext, "/targetactor", true) || !strcmp(cmdtext, "/actortarget", true) || !strcmp(cmdtext, "/targetdoctor", true))
