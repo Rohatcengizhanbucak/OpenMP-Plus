@@ -151,7 +151,7 @@ bool CGameRakClient::SendHello()
 	uint32_t features = OMPPlusProtocol::DefaultFeatures;
 	if (COverlayRenderer::IsEnabled())
 	{
-		capabilities |= OMPPlusProtocol::CapabilityTargetUI;
+		capabilities |= OMPPlusProtocol::CapabilityTargetUI | OMPPlusProtocol::CapabilityTargetUIV2;
 		features |= OMPPlusProtocol::FeatureTarget | OMPPlusProtocol::FeatureUI;
 	}
 

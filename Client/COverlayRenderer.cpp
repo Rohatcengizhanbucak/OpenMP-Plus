@@ -200,6 +200,11 @@ bool COverlayRenderer::IsReady()
 	return IsEnabled() && g_initialized && g_hooksInstalled;
 }
 
+bool COverlayRenderer::HasRenderHook()
+{
+	return IsEnabled() && g_hooksInstalled;
+}
+
 bool COverlayRenderer::ValidateDevice(IDirect3DDevice9* device)
 {
 	if (!device || !IsReadableAddress(device, sizeof(void*)))

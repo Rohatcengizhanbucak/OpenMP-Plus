@@ -41,6 +41,7 @@ struct OMPPlusPlayerState
 struct OMPPlusTargetOption
 {
 	uint32_t optionId = 0;
+	uint8_t rowType = OMPPlusProtocol::TargetRowAction;
 	bool enabled = true;
 	std::string label;
 	std::string icon;
@@ -49,11 +50,15 @@ struct OMPPlusTargetOption
 struct OMPPlusTargetContext
 {
 	bool active = false;
+	bool advanced = false;
 	uint32_t targetId = 0;
 	uint32_t flags = 0;
+	uint8_t targetType = OMPPlusProtocol::TargetTypeGeneric;
+	uint8_t layout = OMPPlusProtocol::TargetLayoutAuto;
 	uint16_t ttlMs = 0;
 	TimePoint expiresAt = TimePoint::min();
 	std::string title;
+	std::string description;
 	std::vector<OMPPlusTargetOption> options;
 };
 
@@ -96,7 +101,11 @@ public:
 	bool setPawnString(AMX* amx, cell address, cell size, const std::string& value);
 	bool setPawnCell(AMX* amx, cell address, cell value);
 	bool beginTargetContext(int playerid, uint32_t targetid, const std::string& title, uint16_t ttlMs, uint32_t flags);
+	bool beginTargetContextEx(int playerid, uint32_t targetid, uint8_t targetType, const std::string& title, uint16_t ttlMs, uint32_t flags);
+	bool setTargetLayout(int playerid, uint32_t targetid, uint8_t layout);
+	bool setTargetDescription(int playerid, uint32_t targetid, const std::string& description);
 	bool addTargetOption(int playerid, uint32_t targetid, uint32_t optionid, const std::string& label, const std::string& icon, bool enabled);
+	bool addTargetRow(int playerid, uint32_t targetid, uint32_t optionid, uint8_t rowType, const std::string& label, const std::string& icon, bool enabled);
 	bool commitTargetContext(int playerid, uint32_t targetid);
 	bool clearTargetContext(int playerid);
 

@@ -10,6 +10,7 @@
 struct sTargetOption
 {
 	unsigned int optionId;
+	unsigned char rowType;
 	bool enabled;
 	std::string label;
 	std::string icon;
@@ -40,6 +41,7 @@ public:
 	static bool ShouldReleaseDirectInputOffset(DWORD offset);
 	static DWORD GetKeyboardReleaseOffsets(DWORD* offsets, DWORD capacity);
 	static void AddMouseDelta(LONG x, LONG y, LONG wheel = 0);
+	static void SetWindowMousePosition(LONG x, LONG y);
 	static void SetMouseButton(unsigned int button, bool down);
 
 private:
@@ -49,6 +51,8 @@ private:
 	static bool IsMouseSuppressed();
 	static bool HasKeyboardReleaseLease();
 	static bool ShouldDrawPrompt();
+	static bool IsSelectableRow(unsigned char rowType);
+	static bool UseLeftAlignedRows();
 	static void SuppressMouseInput(unsigned long durationMs);
 	static void BeginKeyboardReleaseLease();
 	static void UpdateKeyboardReleaseLease();
@@ -60,6 +64,11 @@ private:
 	static void SendMode(bool opened);
 	static void SendSelect(unsigned int optionId);
 	static void UpdateHover();
+	static float GetMenuWidth();
+	static float GetHeaderHeight();
+	static float GetRowHeight(const sTargetOption& option);
+	static float GetDescriptionHeight(float width);
+	static float GetMenuHeight(float width);
 	static bool ReadBoundString(RakNet::BitStream& bitStream, std::string& value, unsigned char maxLength);
 	static void EnsureFont(IDirect3DDevice9* device);
 	static void DrawFilledRect(IDirect3DDevice9* device, float x, float y, float w, float h, D3DCOLOR colour);
@@ -84,6 +93,8 @@ private:
 	static bool m_mouseButtons[5];
 	static unsigned int m_targetId;
 	static unsigned int m_flags;
+	static unsigned char m_targetType;
+	static unsigned char m_layout;
 	static unsigned long m_expiresAt;
 	static unsigned long m_lastContextTick;
 	static unsigned long m_mouseSuppressUntil;
@@ -91,6 +102,7 @@ private:
 	static bool m_keyboardReleaseActive;
 	static bool m_keyboardReleaseOffsets[256];
 	static std::string m_title;
+	static std::string m_description;
 	static std::vector<sTargetOption> m_options;
 	static int m_hoverIndex;
 	static POINT m_cursor;

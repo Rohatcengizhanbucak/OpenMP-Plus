@@ -92,6 +92,11 @@
 #define SAMPP_FEATURE_UI 32
 #define SAMPP_FEATURE_TARGET 64
 
+#define SAMPP_CAPABILITY_NATIVE_TRANSPORT 1
+#define SAMPP_CAPABILITY_KEY_CAPTURE 2
+#define SAMPP_CAPABILITY_TARGET_UI 4
+#define SAMPP_CAPABILITY_TARGET_UI_V2 8
+
 #define SAMPP_CAPTURE_CONSUME_GAME_INPUT 1
 #define SAMPP_CAPTURE_BLOCK_SWITCH_WEAPON 2
 #define SAMPP_CAPTURE_DEFAULT_FLAGS (SAMPP_CAPTURE_CONSUME_GAME_INPUT | SAMPP_CAPTURE_BLOCK_SWITCH_WEAPON)
@@ -103,6 +108,33 @@
 #define SAMPP_CAPTURE_PRIORITY_MENU 60
 
 #define SAMPP_TARGET_FLAG_HIDE_PROMPT 1
+#define SAMPP_TARGET_FLAG_PAYLOAD_V2 1073741824
+
+#define SAMPP_TARGET_TYPE_GENERIC 0
+#define SAMPP_TARGET_TYPE_VEHICLE 1
+#define SAMPP_TARGET_TYPE_HOUSE 2
+#define SAMPP_TARGET_TYPE_NPC 3
+#define SAMPP_TARGET_TYPE_ACTOR 4
+#define SAMPP_TARGET_TYPE_OBJECT 5
+#define SAMPP_TARGET_TYPE_ITEM 6
+#define SAMPP_TARGET_TYPE_PLAYER 7
+#define SAMPP_TARGET_TYPE_CUSTOM 8
+
+#define SAMPP_TARGET_LAYOUT_AUTO 0
+#define SAMPP_TARGET_LAYOUT_COMPACT 1
+#define SAMPP_TARGET_LAYOUT_STANDARD 2
+#define SAMPP_TARGET_LAYOUT_DIALOG 3
+#define SAMPP_TARGET_LAYOUT_WIDE 4
+#define SAMPP_TARGET_LAYOUT_MINIMAL 5
+
+#define SAMPP_TARGET_ROW_ACTION 0
+#define SAMPP_TARGET_ROW_INFO 1
+#define SAMPP_TARGET_ROW_DIALOG 2
+#define SAMPP_TARGET_ROW_DIVIDER 3
+#define SAMPP_TARGET_ROW_HEADER 4
+#define SAMPP_TARGET_ROW_DISABLED 5
+#define SAMPP_TARGET_ROW_TOGGLE 6
+#define SAMPP_TARGET_ROW_DANGER 7
 
 #define SAMPP_KEY_LBUTTON 0x01
 #define SAMPP_KEY_RBUTTON 0x02
@@ -238,10 +270,54 @@ native SAMPP_BeginKeyCapture(playerid, key, event_mask = SAMPP_KEY_EVENT_DOWN, p
 native SAMPP_EndKeyCapture(playerid, key, const action[] = "");
 native SAMPP_ClearKeyCaptures(playerid);
 native SAMPP_TargetBegin(playerid, targetid, const title[], ttl_ms = 500, flags = 0);
+native SAMPP_TargetBeginEx(playerid, targetid, target_type, const title[], ttl_ms = 500, flags = 0);
+native SAMPP_TargetSetLayout(playerid, targetid, layout);
+native SAMPP_TargetSetDescription(playerid, targetid, const description[]);
 native SAMPP_TargetAddOption(playerid, targetid, optionid, const label[], const icon[] = "", bool:enabled = true);
+native SAMPP_TargetAddRow(playerid, targetid, optionid, row_type, const label[], const icon[] = "", bool:enabled = true);
 native SAMPP_TargetCommit(playerid, targetid);
 native SAMPP_TargetClear(playerid);
 native SAMPP_ExecuteCallback(type, {Float,_}:...);
+
+stock bool:SAMPP_TargetAddAction(playerid, targetid, optionid, const label[], const icon[] = "")
+{
+	return SAMPP_TargetAddRow(playerid, targetid, optionid, SAMPP_TARGET_ROW_ACTION, label, icon, true) != 0;
+}
+
+stock bool:SAMPP_TargetAddInfo(playerid, targetid, const text[])
+{
+	return SAMPP_TargetAddRow(playerid, targetid, 0, SAMPP_TARGET_ROW_INFO, text, "", false) != 0;
+}
+
+stock bool:SAMPP_TargetAddDialog(playerid, targetid, const text[])
+{
+	return SAMPP_TargetAddRow(playerid, targetid, 0, SAMPP_TARGET_ROW_DIALOG, text, "", false) != 0;
+}
+
+stock bool:SAMPP_TargetAddDivider(playerid, targetid)
+{
+	return SAMPP_TargetAddRow(playerid, targetid, 0, SAMPP_TARGET_ROW_DIVIDER, "", "", false) != 0;
+}
+
+stock bool:SAMPP_TargetAddHeader(playerid, targetid, const text[])
+{
+	return SAMPP_TargetAddRow(playerid, targetid, 0, SAMPP_TARGET_ROW_HEADER, text, "", false) != 0;
+}
+
+stock bool:SAMPP_TargetAddDisabled(playerid, targetid, optionid, const label[], const icon[] = "")
+{
+	return SAMPP_TargetAddRow(playerid, targetid, optionid, SAMPP_TARGET_ROW_DISABLED, label, icon, false) != 0;
+}
+
+stock bool:SAMPP_TargetAddToggle(playerid, targetid, optionid, const label[], const icon[] = "")
+{
+	return SAMPP_TargetAddRow(playerid, targetid, optionid, SAMPP_TARGET_ROW_TOGGLE, label, icon, true) != 0;
+}
+
+stock bool:SAMPP_TargetAddDanger(playerid, targetid, optionid, const label[], const icon[] = "")
+{
+	return SAMPP_TargetAddRow(playerid, targetid, optionid, SAMPP_TARGET_ROW_DANGER, label, icon, true) != 0;
+}
 
 stock bool:SAMPP_CaptureKeyNearPoint(playerid, key, Float:x, Float:y, Float:z, Float:radius, const action[], priority = SAMPP_CAPTURE_PRIORITY_ITEM, ttl_ms = SAMPP_CAPTURE_LEASE_DEFAULT_MS, flags = SAMPP_CAPTURE_DEFAULT_FLAGS, event_mask = SAMPP_KEY_EVENT_DOWN)
 {

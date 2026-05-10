@@ -457,6 +457,33 @@ namespace
 		return Component()->beginTargetContext(playerid, targetid, title, ttlMs, flags) ? 1 : 0;
 	}
 
+	cell AMX_NATIVE_CALL TargetBeginExProc(AMX* amx, cell* params)
+	{
+		const int playerid = static_cast<int>(params[1]);
+		const uint32_t targetid = static_cast<uint32_t>(params[2]);
+		const uint8_t targetType = static_cast<uint8_t>(std::max<cell>(0, std::min<cell>(255, params[3])));
+		const std::string title = Component()->getPawnString(amx, params[4], 48);
+		const uint16_t ttlMs = static_cast<uint16_t>(std::max<cell>(0, std::min<cell>(5000, params[5])));
+		const uint32_t flags = ParamCount(params) >= 6 ? static_cast<uint32_t>(params[6]) : 0;
+		return Component()->beginTargetContextEx(playerid, targetid, targetType, title, ttlMs, flags) ? 1 : 0;
+	}
+
+	cell AMX_NATIVE_CALL TargetSetLayoutProc(AMX*, cell* params)
+	{
+		const int playerid = static_cast<int>(params[1]);
+		const uint32_t targetid = static_cast<uint32_t>(params[2]);
+		const uint8_t layout = static_cast<uint8_t>(std::max<cell>(0, std::min<cell>(255, params[3])));
+		return Component()->setTargetLayout(playerid, targetid, layout) ? 1 : 0;
+	}
+
+	cell AMX_NATIVE_CALL TargetSetDescriptionProc(AMX* amx, cell* params)
+	{
+		const int playerid = static_cast<int>(params[1]);
+		const uint32_t targetid = static_cast<uint32_t>(params[2]);
+		const std::string description = Component()->getPawnString(amx, params[3], 128);
+		return Component()->setTargetDescription(playerid, targetid, description) ? 1 : 0;
+	}
+
 	cell AMX_NATIVE_CALL TargetAddOptionProc(AMX* amx, cell* params)
 	{
 		const int playerid = static_cast<int>(params[1]);
@@ -466,6 +493,18 @@ namespace
 		const std::string icon = ParamCount(params) >= 5 ? Component()->getPawnString(amx, params[5], 24) : std::string();
 		const bool enabled = ParamCount(params) >= 6 ? params[6] != 0 : true;
 		return Component()->addTargetOption(playerid, targetid, optionid, label, icon, enabled) ? 1 : 0;
+	}
+
+	cell AMX_NATIVE_CALL TargetAddRowProc(AMX* amx, cell* params)
+	{
+		const int playerid = static_cast<int>(params[1]);
+		const uint32_t targetid = static_cast<uint32_t>(params[2]);
+		const uint32_t optionid = static_cast<uint32_t>(params[3]);
+		const uint8_t rowType = static_cast<uint8_t>(std::max<cell>(0, std::min<cell>(255, params[4])));
+		const std::string label = Component()->getPawnString(amx, params[5], 96);
+		const std::string icon = ParamCount(params) >= 6 ? Component()->getPawnString(amx, params[6], 24) : std::string();
+		const bool enabled = ParamCount(params) >= 7 ? params[7] != 0 : true;
+		return Component()->addTargetRow(playerid, targetid, optionid, rowType, label, icon, enabled) ? 1 : 0;
 	}
 
 	cell AMX_NATIVE_CALL TargetCommitProc(AMX*, cell* params)
@@ -531,7 +570,11 @@ AMX_NATIVE_INFO OMPPlusNatives[] =
 	{ "SAMPP_EndKeyCapture", EndKeyCaptureProc },
 	{ "SAMPP_ClearKeyCaptures", ClearKeyCapturesProc },
 	{ "SAMPP_TargetBegin", TargetBeginProc },
+	{ "SAMPP_TargetBeginEx", TargetBeginExProc },
+	{ "SAMPP_TargetSetLayout", TargetSetLayoutProc },
+	{ "SAMPP_TargetSetDescription", TargetSetDescriptionProc },
 	{ "SAMPP_TargetAddOption", TargetAddOptionProc },
+	{ "SAMPP_TargetAddRow", TargetAddRowProc },
 	{ "SAMPP_TargetCommit", TargetCommitProc },
 	{ "SAMPP_TargetClear", TargetClearProc },
 	{ nullptr, nullptr }

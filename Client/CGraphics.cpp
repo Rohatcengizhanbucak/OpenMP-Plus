@@ -90,7 +90,7 @@ void CGraphics::PostDeviceReset()
 
 void CGraphics::PreEndScene()
 {
-	if (m_pDevice && Network::IsConnected() && !COverlayRenderer::IsReady())
+	if (m_pDevice && Network::IsConnected() && !COverlayRenderer::HasRenderHook())
 		CTargetManager::Draw(m_pDevice);
 }
 

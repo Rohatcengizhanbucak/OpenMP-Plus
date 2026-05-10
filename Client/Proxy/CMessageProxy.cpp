@@ -44,6 +44,33 @@ WNDPROC CMessageProxy::GetOriginalProcedure()
 //TODO: use Process for something useful
 LRESULT CALLBACK CMessageProxy::Process(HWND wnd, UINT umsg, WPARAM wparam, LPARAM lparam)
 {
+	switch (umsg)
+	{
+	case WM_MOUSEMOVE:
+		CTargetManager::SetWindowMousePosition(GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam));
+		break;
+	case WM_LBUTTONDOWN:
+		CTargetManager::SetMouseButton(0, true);
+		break;
+	case WM_LBUTTONUP:
+		CTargetManager::SetMouseButton(0, false);
+		break;
+	case WM_RBUTTONDOWN:
+		CTargetManager::SetMouseButton(1, true);
+		break;
+	case WM_RBUTTONUP:
+		CTargetManager::SetMouseButton(1, false);
+		break;
+	case WM_MBUTTONDOWN:
+		CTargetManager::SetMouseButton(2, true);
+		break;
+	case WM_MBUTTONUP:
+		CTargetManager::SetMouseButton(2, false);
+		break;
+	default:
+		break;
+	}
+
 	if (COverlayRenderer::HandleWndProc(wnd, umsg, wparam, lparam))
 		return 0;
 

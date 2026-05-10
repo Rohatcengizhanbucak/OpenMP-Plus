@@ -11,11 +11,12 @@ namespace OMPPlusProtocol
 	static const uint32_t CapabilityNativeTransport = 0x00000001;
 	static const uint32_t CapabilityKeyCapture = 0x00000002;
 	static const uint32_t CapabilityTargetUI = 0x00000004;
+	static const uint32_t CapabilityTargetUIV2 = 0x00000008;
 	static const uint32_t DefaultCapabilities = CapabilityNativeTransport | CapabilityKeyCapture;
 	static const uint8_t ClientInfoVersion = 1;
 	static const uint16_t ClientVersionMajor = 0;
 	static const uint16_t ClientVersionMinor = 1;
-	static const uint16_t ClientVersionPatch = 5;
+	static const uint16_t ClientVersionPatch = 16;
 	static const uint8_t MaxClientHashLength = 64;
 	static const int MaxPayloadBytes = 4096;
 	static const int MaxMessagesPerSecond = 60;
@@ -35,7 +36,43 @@ namespace OMPPlusProtocol
 
 	enum TargetFlags : uint32_t
 	{
-		TargetFlagHidePrompt = 1 << 0
+		TargetFlagHidePrompt = 1 << 0,
+		TargetFlagPayloadV2 = 1u << 30
+	};
+
+	enum TargetType : uint8_t
+	{
+		TargetTypeGeneric = 0,
+		TargetTypeVehicle = 1,
+		TargetTypeHouse = 2,
+		TargetTypeNPC = 3,
+		TargetTypeActor = 4,
+		TargetTypeObject = 5,
+		TargetTypeItem = 6,
+		TargetTypePlayer = 7,
+		TargetTypeCustom = 8
+	};
+
+	enum TargetLayout : uint8_t
+	{
+		TargetLayoutAuto = 0,
+		TargetLayoutCompact = 1,
+		TargetLayoutStandard = 2,
+		TargetLayoutDialog = 3,
+		TargetLayoutWide = 4,
+		TargetLayoutMinimal = 5
+	};
+
+	enum TargetRowType : uint8_t
+	{
+		TargetRowAction = 0,
+		TargetRowInfo = 1,
+		TargetRowDialog = 2,
+		TargetRowDivider = 3,
+		TargetRowHeader = 4,
+		TargetRowDisabled = 5,
+		TargetRowToggle = 6,
+		TargetRowDanger = 7
 	};
 
 	enum class Message : uint8_t

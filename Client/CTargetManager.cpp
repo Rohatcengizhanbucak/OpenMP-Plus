@@ -13,6 +13,7 @@
 #include <imgui.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 
 bool CTargetManager::m_hasContext = false;
@@ -29,6 +30,8 @@ LONG CTargetManager::m_virtualWheel = 0;
 bool CTargetManager::m_mouseButtons[5] = {};
 unsigned int CTargetManager::m_targetId = 0;
 unsigned int CTargetManager::m_flags = 0;
+unsigned char CTargetManager::m_targetType = OMPPlusProtocol::TargetTypeGeneric;
+unsigned char CTargetManager::m_layout = OMPPlusProtocol::TargetLayoutAuto;
 unsigned long CTargetManager::m_expiresAt = 0;
 unsigned long CTargetManager::m_lastContextTick = 0;
 unsigned long CTargetManager::m_mouseSuppressUntil = 0;
@@ -36,6 +39,7 @@ unsigned long CTargetManager::m_keyboardReleaseUntil = 0;
 bool CTargetManager::m_keyboardReleaseActive = false;
 bool CTargetManager::m_keyboardReleaseOffsets[256] = {};
 std::string CTargetManager::m_title;
+std::string CTargetManager::m_description;
 std::vector<sTargetOption> CTargetManager::m_options;
 int CTargetManager::m_hoverIndex = -1;
 POINT CTargetManager::m_cursor = { 0, 0 };
@@ -80,7 +84,7 @@ namespace
 	};
 
 	const unsigned char MaxTargetOptions = 8;
-	const float MenuWidth = 238.0f;
+	const unsigned char MaxTargetRows = 12;
 	const float MenuOffsetX = 58.0f;
 	const float TargetOffsetX = 87.0f;
 	const float PromptLegendOffsetX = 45.0f;
@@ -92,8 +96,10 @@ namespace
 	const float PromptTitleMaxWidth = 220.0f;
 	const float HeaderHeight = 30.0f;
 	const float RowHeight = 30.0f;
+	const float DialogRowHeight = 64.0f;
+	const float InfoRowHeight = 34.0f;
+	const float DividerRowHeight = 10.0f;
 	const float RowGap = 4.0f;
-	const unsigned long OpenContextGraceMs = 900;
 	const unsigned long PostMouseSuppressMs = 180;
 	const float VirtualMouseSensitivity = 1.0f;
 
@@ -133,6 +139,91 @@ namespace
 	{
 		return (GetAsyncKeyState(virtualKey) & 0x8000) != 0;
 	}
+
+	ImVec2 ScaleClientPointToDisplay(HWND window, const POINT& point)
+	{
+		ImVec2 scaled(static_cast<float>(point.x), static_cast<float>(point.y));
+		if (!window)
+			return scaled;
+
+		RECT client = {};
+		if (!GetClientRect(window, &client))
+			return scaled;
+
+		const float clientWidth = static_cast<float>(client.right - client.left);
+		const float clientHeight = static_cast<float>(client.bottom - client.top);
+		if (clientWidth <= 1.0f || clientHeight <= 1.0f)
+			return scaled;
+
+		CPoint2D& resolution = CGraphics::GetScreenResolution();
+		const float displayWidth = static_cast<float>(resolution.X());
+		const float displayHeight = static_cast<float>(resolution.Y());
+		if (displayWidth <= 1.0f || displayHeight <= 1.0f)
+			return scaled;
+
+		scaled.x *= displayWidth / clientWidth;
+		scaled.y *= displayHeight / clientHeight;
+		return scaled;
+	}
+
+	bool TryReadWindowCursor(ImVec2& point)
+	{
+		HWND window = CMessageProxy::GetWindowHandle();
+		if (!window)
+			return false;
+
+		POINT cursor = {};
+		if (!GetCursorPos(&cursor) || !ScreenToClient(window, &cursor))
+			return false;
+
+		point = ScaleClientPointToDisplay(window, cursor);
+		return true;
+	}
+
+	void MoveWindowCursorToDisplayPoint(const ImVec2& point)
+	{
+		HWND window = CMessageProxy::GetWindowHandle();
+		if (!window)
+			return;
+
+		RECT client = {};
+		if (!GetClientRect(window, &client))
+			return;
+
+		const float clientWidth = static_cast<float>(client.right - client.left);
+		const float clientHeight = static_cast<float>(client.bottom - client.top);
+		CPoint2D& resolution = CGraphics::GetScreenResolution();
+		const float displayWidth = static_cast<float>(resolution.X());
+		const float displayHeight = static_cast<float>(resolution.Y());
+		if (clientWidth <= 1.0f || clientHeight <= 1.0f || displayWidth <= 1.0f || displayHeight <= 1.0f)
+			return;
+
+		POINT cursor = {};
+		cursor.x = static_cast<LONG>((std::max)(0.0f, (std::min)(point.x * clientWidth / displayWidth, clientWidth - 1.0f)));
+		cursor.y = static_cast<LONG>((std::max)(0.0f, (std::min)(point.y * clientHeight / displayHeight, clientHeight - 1.0f)));
+		if (ClientToScreen(window, &cursor))
+			SetCursorPos(cursor.x, cursor.y);
+	}
+
+	float ClampFloat(float value, float minValue, float maxValue)
+	{
+		return (std::max)(minValue, (std::min)(value, maxValue));
+	}
+
+	unsigned char NormalizeTargetType(unsigned char targetType)
+	{
+		return targetType <= OMPPlusProtocol::TargetTypeCustom ? targetType : OMPPlusProtocol::TargetTypeGeneric;
+	}
+
+	unsigned char NormalizeTargetLayout(unsigned char layout)
+	{
+		return layout <= OMPPlusProtocol::TargetLayoutMinimal ? layout : OMPPlusProtocol::TargetLayoutAuto;
+	}
+
+	unsigned char NormalizeTargetRowType(unsigned char rowType)
+	{
+		return rowType <= OMPPlusProtocol::TargetRowDanger ? rowType : OMPPlusProtocol::TargetRowAction;
+	}
 }
 
 void CTargetManager::HandleSetContext(RakNet::BitStream& bitStream)
@@ -140,32 +231,82 @@ void CTargetManager::HandleSetContext(RakNet::BitStream& bitStream)
 	unsigned int targetId = 0;
 	unsigned short ttlMs = 0;
 	unsigned int flags = 0;
+	unsigned char targetType = OMPPlusProtocol::TargetTypeGeneric;
+	unsigned char layout = OMPPlusProtocol::TargetLayoutAuto;
 	std::string title;
+	std::string description;
 	unsigned char optionCount = 0;
 
 	if (!bitStream.Read(targetId)
 		|| !bitStream.Read(ttlMs)
 		|| !bitStream.Read(flags)
-		|| !ReadBoundString(bitStream, title, 48)
-		|| !bitStream.Read(optionCount)
-		|| targetId == 0
-		|| optionCount > MaxTargetOptions)
+		|| targetId == 0)
 	{
 		return;
+	}
+
+	const bool payloadV2 = (flags & OMPPlusProtocol::TargetFlagPayloadV2) != 0;
+	if (payloadV2)
+	{
+		if (!bitStream.Read(targetType)
+			|| !bitStream.Read(layout)
+			|| !ReadBoundString(bitStream, title, 48)
+			|| !ReadBoundString(bitStream, description, 128)
+			|| !bitStream.Read(optionCount)
+			|| optionCount > MaxTargetRows)
+		{
+			return;
+		}
+		targetType = NormalizeTargetType(targetType);
+		layout = NormalizeTargetLayout(layout);
+	}
+	else
+	{
+		if (!ReadBoundString(bitStream, title, 48)
+			|| !bitStream.Read(optionCount)
+			|| optionCount > MaxTargetOptions)
+		{
+			return;
+		}
 	}
 
 	std::vector<sTargetOption> options;
 	for (unsigned char i = 0; i < optionCount; ++i)
 	{
 		sTargetOption option;
-		if (!bitStream.Read(option.optionId)
-			|| !bitStream.Read(option.enabled)
-			|| !ReadBoundString(bitStream, option.label, 48)
-			|| !ReadBoundString(bitStream, option.icon, 24)
-			|| option.optionId == 0)
+		option.rowType = OMPPlusProtocol::TargetRowAction;
+
+		if (!bitStream.Read(option.optionId))
 		{
 			return;
 		}
+
+		if (payloadV2)
+		{
+			if (!bitStream.Read(option.rowType)
+				|| !bitStream.Read(option.enabled)
+				|| !ReadBoundString(bitStream, option.label, 96)
+				|| !ReadBoundString(bitStream, option.icon, 24))
+			{
+				return;
+			}
+			option.rowType = NormalizeTargetRowType(option.rowType);
+		}
+		else
+		{
+			if (!bitStream.Read(option.enabled)
+				|| !ReadBoundString(bitStream, option.label, 48)
+				|| !ReadBoundString(bitStream, option.icon, 24)
+				|| option.optionId == 0)
+			{
+				return;
+			}
+			if (!option.enabled)
+				option.rowType = OMPPlusProtocol::TargetRowDisabled;
+		}
+
+		if (IsSelectableRow(option.rowType) && option.optionId == 0)
+			return;
 		options.push_back(option);
 	}
 
@@ -178,8 +319,11 @@ void CTargetManager::HandleSetContext(RakNet::BitStream& bitStream)
 
 	m_hasContext = true;
 	m_targetId = targetId;
-	m_flags = flags;
+	m_flags = flags & ~OMPPlusProtocol::TargetFlagPayloadV2;
+	m_targetType = targetType;
+	m_layout = layout;
 	m_title = title;
+	m_description = description;
 	m_options = options;
 	m_expiresAt = GetTickCount() + ttlMs;
 	m_lastContextTick = GetTickCount();
@@ -197,15 +341,18 @@ void CTargetManager::ClearContext()
 
 void CTargetManager::ClearContextUnlocked()
 {
+	CloseMenu(true);
 	m_hasContext = false;
 	m_targetId = 0;
 	m_flags = 0;
+	m_targetType = OMPPlusProtocol::TargetTypeGeneric;
+	m_layout = OMPPlusProtocol::TargetLayoutAuto;
 	m_expiresAt = 0;
 	m_title.clear();
+	m_description.clear();
 	m_options.clear();
 	m_hoverIndex = -1;
 	m_lastContextTick = 0;
-	CloseMenu(true);
 }
 
 void CTargetManager::Process()
@@ -243,13 +390,17 @@ void CTargetManager::Process()
 	if (altDown && !m_lastAltDown)
 	{
 		if (m_menuOpen)
+		{
 			CloseMenu(true);
+			m_expiresAt = 0;
+		}
 		else
 			OpenMenu();
 	}
 	else if (m_menuOpen && ((escapeDown && !m_lastEscapeDown) || (rightDown && !m_lastRightDown)))
 	{
 		CloseMenu(true);
+		m_expiresAt = 0;
 	}
 
 	m_lastAltDown = altDown;
@@ -274,7 +425,7 @@ void CTargetManager::Process()
 	if (leftDown && !m_lastLeftDown && m_hoverIndex >= 0 && m_hoverIndex < static_cast<int>(m_options.size()))
 	{
 		const sTargetOption& option = m_options[m_hoverIndex];
-		if (option.enabled)
+		if (option.enabled && IsSelectableRow(option.rowType))
 			SendSelect(option.optionId);
 	}
 	m_lastLeftDown = leftDown;
@@ -524,6 +675,20 @@ void CTargetManager::AddMouseDelta(LONG x, LONG y, LONG wheel)
 	m_virtualWheel += wheel;
 }
 
+void CTargetManager::SetWindowMousePosition(LONG x, LONG y)
+{
+	cScopedTargetStateLock lock;
+
+	if (!m_menuOpen)
+		return;
+
+	POINT point = { x, y };
+	const ImVec2 scaled = ScaleClientPointToDisplay(CMessageProxy::GetWindowHandle(), point);
+	m_virtualCursorX = scaled.x;
+	m_virtualCursorY = scaled.y;
+	m_virtualCursorInitialized = true;
+}
+
 void CTargetManager::SetMouseButton(unsigned int button, bool down)
 {
 	cScopedTargetStateLock lock;
@@ -594,8 +759,8 @@ void CTargetManager::RenderImGui()
 		return;
 	}
 
-	const float width = MenuWidth;
-	const float totalHeight = HeaderHeight + RowGap + (RowHeight + RowGap) * static_cast<float>(m_options.size()) + 10.0f;
+	const float width = GetMenuWidth();
+	const float totalHeight = GetMenuHeight(width);
 	ImGui::SetNextWindowPos(ImVec2(cx + MenuOffsetX, cy - totalHeight * 0.5f), ImGuiCond_Always);
 	ImGui::SetNextWindowSize(ImVec2(width, totalHeight), ImGuiCond_Always);
 	ImGui::SetNextWindowBgAlpha(0.96f);
@@ -614,6 +779,9 @@ void CTargetManager::RenderImGui()
 	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.025f, 0.035f, 0.040f, 0.94f));
 	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.20f, 0.21f, 0.21f, 0.98f));
 	ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.30f, 0.31f, 0.31f, 1.00f));
+	ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.025f, 0.035f, 0.040f, 0.94f));
+	ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.20f, 0.21f, 0.21f, 0.98f));
+	ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.30f, 0.31f, 0.31f, 1.00f));
 	ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(0.92f, 0.94f, 0.92f, 0.24f));
 	ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.91f, 1.00f, 0.98f, 1.00f));
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 7.0f);
@@ -622,30 +790,134 @@ void CTargetManager::RenderImGui()
 	ImGui::TextUnformatted(m_title.empty() ? "Target" : m_title.c_str());
 	ImGui::Separator();
 
+	m_hoverIndex = -1;
+
+	if (!m_description.empty())
+	{
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.82f, 0.84f, 0.82f, 0.96f));
+		ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + width - 22.0f);
+		ImGui::TextWrapped("%s", m_description.c_str());
+		ImGui::PopTextWrapPos();
+		ImGui::PopStyleColor();
+		ImGui::Dummy(ImVec2(0.0f, 2.0f));
+	}
+
 	for (size_t i = 0; i < m_options.size(); ++i)
 	{
 		const sTargetOption& option = m_options[i];
+
+		if (option.rowType == OMPPlusProtocol::TargetRowDivider)
+		{
+			ImGui::Dummy(ImVec2(0.0f, 2.0f));
+			ImGui::Separator();
+			ImGui::Dummy(ImVec2(0.0f, 2.0f));
+			continue;
+		}
+
 		std::string label = option.label;
 		if (!option.icon.empty())
 			label = option.icon + "  " + label;
-		label += "##";
-		label += std::to_string(option.optionId);
+		const std::string visibleLabel = label;
 
-		if (!option.enabled)
+		if (option.rowType == OMPPlusProtocol::TargetRowInfo || option.rowType == OMPPlusProtocol::TargetRowDialog || option.rowType == OMPPlusProtocol::TargetRowHeader)
+		{
+			const ImVec4 rowText = option.rowType == OMPPlusProtocol::TargetRowHeader
+				? ImVec4(0.96f, 0.97f, 0.96f, 1.00f)
+				: ImVec4(0.78f, 0.80f, 0.78f, 0.96f);
+			ImGui::PushStyleColor(ImGuiCol_Text, rowText);
+			ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + width - 22.0f);
+			ImGui::TextWrapped("%s", label.c_str());
+			ImGui::PopTextWrapPos();
+			ImGui::PopStyleColor();
+			ImGui::Dummy(ImVec2(0.0f, option.rowType == OMPPlusProtocol::TargetRowDialog ? 4.0f : 1.0f));
+			continue;
+		}
+
+		const bool selectable = option.enabled && IsSelectableRow(option.rowType);
+		const float rowHeight = GetRowHeight(option);
+		const float rowWidth = (std::max)(1.0f, ImGui::GetContentRegionAvail().x);
+		const ImVec2 itemSize(rowWidth, rowHeight);
+		const bool drawAsButton = selectable || option.rowType == OMPPlusProtocol::TargetRowDisabled;
+
+		if (!drawAsButton)
+		{
+			ImGui::Dummy(itemSize);
+			continue;
+		}
+
+		const ImVec4 buttonColour = option.rowType == OMPPlusProtocol::TargetRowDanger
+			? ImVec4(0.14f, 0.04f, 0.04f, 0.94f)
+			: ImVec4(0.025f, 0.035f, 0.040f, 0.94f);
+		const ImVec4 hoverColour = option.rowType == OMPPlusProtocol::TargetRowDanger
+			? ImVec4(0.50f, 0.16f, 0.16f, 1.00f)
+			: ImVec4(0.42f, 0.43f, 0.43f, 1.00f);
+		const ImVec4 activeColour = option.rowType == OMPPlusProtocol::TargetRowDanger
+			? ImVec4(0.62f, 0.20f, 0.20f, 1.00f)
+			: ImVec4(0.56f, 0.57f, 0.57f, 1.00f);
+		const ImVec4 textColour = selectable
+			? ImVec4(0.91f, 1.00f, 0.98f, 1.00f)
+			: ImVec4(0.70f, 0.74f, 0.72f, 0.86f);
+
+		ImGui::PushID(static_cast<int>(i));
+		ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, UseLeftAlignedRows() ? ImVec2(0.0f, 0.5f) : ImVec2(0.5f, 0.5f));
+		ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
+		ImGui::PushStyleColor(ImGuiCol_Button, buttonColour);
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hoverColour);
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, activeColour);
+		ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.92f, 0.94f, 0.92f, 0.22f));
+		ImGui::PushStyleColor(ImGuiCol_Text, textColour);
+
+		if (!selectable)
 			ImGui::BeginDisabled();
-
-		if (ImGui::Button(label.c_str(), ImVec2(-1.0f, RowHeight)))
-			selectedOption = option.optionId;
-		if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
-			selectedOption = option.optionId;
-
-		if (!option.enabled)
+		const bool pressed = ImGui::Button(visibleLabel.c_str(), itemSize);
+		if (!selectable)
 			ImGui::EndDisabled();
+
+		const ImVec2 itemMin = ImGui::GetItemRectMin();
+		const ImVec2 itemMax = ImGui::GetItemRectMax();
+		const ImVec2 mouse = io.MousePos;
+		const bool rectHovered = selectable
+			&& mouse.x >= itemMin.x && mouse.x <= itemMax.x
+			&& mouse.y >= itemMin.y && mouse.y <= itemMax.y;
+		const bool rowHovered = selectable
+			&& (rectHovered
+				|| ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem)
+				|| ImGui::IsItemActive());
+		if (rowHovered)
+		{
+			m_hoverIndex = static_cast<int>(i);
+			ImDrawList* rowDraw = ImGui::GetWindowDrawList();
+			const ImU32 overlay = option.rowType == OMPPlusProtocol::TargetRowDanger
+				? IM_COL32(128, 42, 42, 240)
+				: IM_COL32(108, 110, 110, 245);
+			const ImU32 overlayBorder = option.rowType == OMPPlusProtocol::TargetRowDanger
+				? IM_COL32(255, 228, 228, 210)
+				: IM_COL32(248, 250, 248, 220);
+			rowDraw->AddRectFilled(itemMin, itemMax, overlay, 5.0f);
+			rowDraw->AddRect(itemMin, itemMax, overlayBorder, 5.0f);
+
+			const ImVec2 textSize = ImGui::CalcTextSize(visibleLabel.c_str());
+			const float textX = UseLeftAlignedRows()
+				? itemMin.x + 12.0f
+				: itemMin.x + (std::max)(0.0f, (itemMax.x - itemMin.x - textSize.x) * 0.5f);
+			const float textY = itemMin.y + (std::max)(0.0f, (rowHeight - textSize.y) * 0.5f);
+			rowDraw->AddText(ImVec2(textX, textY), IM_COL32(255, 255, 255, 255), visibleLabel.c_str());
+		}
+
+		ImGui::PopStyleColor(5);
+		ImGui::PopStyleVar(2);
+		ImGui::PopID();
+
+		if (selectable && pressed)
+		{
+			selectedOption = option.optionId;
+			break;
+		}
 	}
 
 	ImGui::End();
 	ImGui::PopStyleVar(2);
-	ImGui::PopStyleColor(7);
+	ImGui::PopStyleColor(10);
 
 	if (selectedOption != 0)
 		SendSelect(selectedOption);
@@ -657,10 +929,7 @@ bool CTargetManager::HasValidContext()
 		return false;
 
 	const unsigned long now = GetTickCount();
-	if (static_cast<long>(now - m_expiresAt) < 0)
-		return true;
-
-	return m_menuOpen && m_lastContextTick != 0 && (now - m_lastContextTick) <= OpenContextGraceMs;
+	return static_cast<long>(now - m_expiresAt) < 0;
 }
 
 bool CTargetManager::InputAllowed()
@@ -760,6 +1029,118 @@ bool CTargetManager::ShouldDrawPrompt()
 	return (m_flags & OMPPlusProtocol::TargetFlagHidePrompt) == 0;
 }
 
+bool CTargetManager::IsSelectableRow(unsigned char rowType)
+{
+	return rowType == OMPPlusProtocol::TargetRowAction
+		|| rowType == OMPPlusProtocol::TargetRowToggle
+		|| rowType == OMPPlusProtocol::TargetRowDanger;
+}
+
+bool CTargetManager::UseLeftAlignedRows()
+{
+	switch (m_layout)
+	{
+	case OMPPlusProtocol::TargetLayoutDialog:
+	case OMPPlusProtocol::TargetLayoutWide:
+		return true;
+	case OMPPlusProtocol::TargetLayoutCompact:
+	case OMPPlusProtocol::TargetLayoutStandard:
+	case OMPPlusProtocol::TargetLayoutMinimal:
+		return false;
+	default:
+		break;
+	}
+
+	return m_targetType == OMPPlusProtocol::TargetTypeNPC
+		|| m_targetType == OMPPlusProtocol::TargetTypeActor
+		|| m_targetType == OMPPlusProtocol::TargetTypeHouse;
+}
+
+float CTargetManager::GetMenuWidth()
+{
+	unsigned char layout = m_layout;
+	if (layout == OMPPlusProtocol::TargetLayoutAuto)
+	{
+		switch (m_targetType)
+		{
+		case OMPPlusProtocol::TargetTypeVehicle:
+			layout = OMPPlusProtocol::TargetLayoutStandard;
+			break;
+		case OMPPlusProtocol::TargetTypeNPC:
+		case OMPPlusProtocol::TargetTypeActor:
+			layout = OMPPlusProtocol::TargetLayoutDialog;
+			break;
+		case OMPPlusProtocol::TargetTypeHouse:
+			layout = OMPPlusProtocol::TargetLayoutWide;
+			break;
+		case OMPPlusProtocol::TargetTypeItem:
+			layout = OMPPlusProtocol::TargetLayoutCompact;
+			break;
+		default:
+			layout = OMPPlusProtocol::TargetLayoutStandard;
+			break;
+		}
+	}
+
+	switch (layout)
+	{
+	case OMPPlusProtocol::TargetLayoutCompact:
+		return 212.0f;
+	case OMPPlusProtocol::TargetLayoutDialog:
+		return 318.0f;
+	case OMPPlusProtocol::TargetLayoutWide:
+		return 350.0f;
+	case OMPPlusProtocol::TargetLayoutMinimal:
+		return 220.0f;
+	case OMPPlusProtocol::TargetLayoutStandard:
+	default:
+		return 248.0f;
+	}
+}
+
+float CTargetManager::GetHeaderHeight()
+{
+	return m_layout == OMPPlusProtocol::TargetLayoutMinimal ? 26.0f : HeaderHeight;
+}
+
+float CTargetManager::GetRowHeight(const sTargetOption& option)
+{
+	switch (option.rowType)
+	{
+	case OMPPlusProtocol::TargetRowDialog:
+		return DialogRowHeight;
+	case OMPPlusProtocol::TargetRowInfo:
+	case OMPPlusProtocol::TargetRowHeader:
+		return InfoRowHeight;
+	case OMPPlusProtocol::TargetRowDivider:
+		return DividerRowHeight;
+	default:
+		return RowHeight;
+	}
+}
+
+float CTargetManager::GetDescriptionHeight(float width)
+{
+	if (m_description.empty())
+		return 0.0f;
+
+	const float textWidth = (std::max)(1.0f, width - 24.0f);
+	const float charsPerLine = (std::max)(12.0f, textWidth / 7.0f);
+	const float lines = std::ceil(static_cast<float>(m_description.length()) / charsPerLine);
+	return ClampFloat(lines * 17.0f + 8.0f, 26.0f, 82.0f);
+}
+
+float CTargetManager::GetMenuHeight(float width)
+{
+	float height = GetHeaderHeight() + RowGap + GetDescriptionHeight(width) + 34.0f;
+	for (size_t i = 0; i < m_options.size(); ++i)
+		height += GetRowHeight(m_options[i]) + RowGap;
+
+	CPoint2D& resolution = CGraphics::GetScreenResolution();
+	const float maxHeight = (std::max)(260.0f, static_cast<float>(resolution.Y()) - 80.0f);
+	return ClampFloat(height, 80.0f, maxHeight);
+}
+
 void CTargetManager::OpenMenu()
 {
 	m_mouseSuppressUntil = 0;
@@ -769,10 +1150,7 @@ void CTargetManager::OpenMenu()
 	m_hoverIndex = -1;
 	m_virtualCursorInitialized = false;
 	m_cursorOwned = !CGraphics::IsCursorEnabled();
-	if (m_cursorOwned)
-	{
-		CGraphics::ToggleCursor(true);
-	}
+	CGraphics::ToggleCursor(true);
 	SendMode(true);
 }
 
@@ -817,49 +1195,44 @@ void CTargetManager::InitializeVirtualCursor()
 
 	const float cx = width * 0.5f + TargetOffsetX;
 	const float cy = height * 0.5f;
-	const float totalHeight = HeaderHeight + RowGap + (RowHeight + RowGap) * static_cast<float>(m_options.size()) + 10.0f;
+	const float menuWidth = GetMenuWidth();
+	const float totalHeight = GetMenuHeight(menuWidth);
 	const float menuX = cx + MenuOffsetX;
 	const float menuY = cy - totalHeight * 0.5f;
+	float rowY = menuY + GetHeaderHeight() + RowGap + GetDescriptionHeight(menuWidth);
+	float cursorY = menuY + totalHeight * 0.5f;
 
-	m_virtualCursorX = menuX + MenuWidth * 0.5f;
-	m_virtualCursorY = menuY + HeaderHeight + RowGap + RowHeight * 0.5f;
+	for (size_t i = 0; i < m_options.size(); ++i)
+	{
+		const sTargetOption& option = m_options[i];
+		const float rowHeight = GetRowHeight(option);
+		if (option.enabled && IsSelectableRow(option.rowType))
+		{
+			cursorY = rowY + rowHeight * 0.5f;
+			break;
+		}
+		rowY += rowHeight + RowGap;
+	}
+
+	m_virtualCursorX = menuX + menuWidth * 0.5f;
+	m_virtualCursorY = cursorY;
 	m_virtualCursorInitialized = true;
+	MoveWindowCursorToDisplayPoint(ImVec2(m_virtualCursorX, m_virtualCursorY));
 }
 
 void CTargetManager::ApplyImGuiInput()
 {
 	ImGuiIO& io = ImGui::GetIO();
 
-	if (m_menuOpen)
-	{
-		HWND hwnd = CMessageProxy::GetWindowHandle();
-		POINT cursor = {};
-		if (hwnd && GetCursorPos(&cursor))
-		{
-			ScreenToClient(hwnd, &cursor);
-			const float maxX = (std::max)(1.0f, io.DisplaySize.x - 1.0f);
-			const float maxY = (std::max)(1.0f, io.DisplaySize.y - 1.0f);
-			io.MousePos = ImVec2(
-				(std::max)(0.0f, (std::min)(static_cast<float>(cursor.x), maxX)),
-				(std::max)(0.0f, (std::min)(static_cast<float>(cursor.y), maxY)));
-		}
-
-		io.MouseDown[0] = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
-		io.MouseDown[1] = (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
-		io.MouseDown[2] = (GetAsyncKeyState(VK_MBUTTON) & 0x8000) != 0;
-		for (int i = 3; i < 5; ++i)
-			io.MouseDown[i] = false;
-
-		if (m_virtualWheel != 0)
-		{
-			io.MouseWheel += static_cast<float>(m_virtualWheel) / 120.0f;
-			m_virtualWheel = 0;
-		}
-		return;
-	}
-
 	if (!m_virtualCursorInitialized)
 		InitializeVirtualCursor();
+
+	ImVec2 windowCursor;
+	if (m_menuOpen && TryReadWindowCursor(windowCursor))
+	{
+		m_virtualCursorX = windowCursor.x;
+		m_virtualCursorY = windowCursor.y;
+	}
 
 	const float maxX = (std::max)(1.0f, io.DisplaySize.x - 1.0f);
 	const float maxY = (std::max)(1.0f, io.DisplaySize.y - 1.0f);
@@ -868,7 +1241,11 @@ void CTargetManager::ApplyImGuiInput()
 	m_virtualCursorY = (std::max)(0.0f, (std::min)(m_virtualCursorY, maxY));
 
 	io.MousePos = ImVec2(m_virtualCursorX, m_virtualCursorY);
-	for (int i = 0; i < 5; ++i)
+
+	io.MouseDown[0] = m_menuOpen && (m_mouseButtons[0] || (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0);
+	io.MouseDown[1] = m_menuOpen && (m_mouseButtons[1] || (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0);
+	io.MouseDown[2] = m_menuOpen && (m_mouseButtons[2] || (GetAsyncKeyState(VK_MBUTTON) & 0x8000) != 0);
+	for (int i = 3; i < 5; ++i)
 		io.MouseDown[i] = m_menuOpen && m_mouseButtons[i];
 
 	if (m_virtualWheel != 0)
@@ -904,26 +1281,46 @@ void CTargetManager::SendSelect(unsigned int optionId)
 
 void CTargetManager::UpdateHover()
 {
-	HWND hwnd = CMessageProxy::GetWindowHandle();
-	GetCursorPos(&m_cursor);
-	if (hwnd)
-		ScreenToClient(hwnd, &m_cursor);
-
 	CPoint2D& resolution = CGraphics::GetScreenResolution();
 	const float cx = static_cast<float>(resolution.X()) * 0.5f + TargetOffsetX;
 	const float cy = static_cast<float>(resolution.Y()) * 0.5f;
+	const float menuWidth = GetMenuWidth();
+	const float totalHeight = GetMenuHeight(menuWidth);
 	const float x = cx + MenuOffsetX;
-	const float y = cy - (HeaderHeight + (RowHeight + RowGap) * static_cast<float>(m_options.size())) * 0.5f;
+	const float y = cy - totalHeight * 0.5f;
+	float rowY = y + GetHeaderHeight() + RowGap + GetDescriptionHeight(menuWidth);
+
+	if (m_menuOpen)
+	{
+		if (!m_virtualCursorInitialized)
+			InitializeVirtualCursor();
+
+		const float maxX = (std::max)(1.0f, static_cast<float>(resolution.X()) - 1.0f);
+		const float maxY = (std::max)(1.0f, static_cast<float>(resolution.Y()) - 1.0f);
+		m_virtualCursorX = (std::max)(0.0f, (std::min)(m_virtualCursorX, maxX));
+		m_virtualCursorY = (std::max)(0.0f, (std::min)(m_virtualCursorY, maxY));
+		m_cursor.x = static_cast<LONG>(m_virtualCursorX);
+		m_cursor.y = static_cast<LONG>(m_virtualCursorY);
+	}
+	else
+	{
+		HWND hwnd = CMessageProxy::GetWindowHandle();
+		GetCursorPos(&m_cursor);
+		if (hwnd)
+			ScreenToClient(hwnd, &m_cursor);
+	}
 
 	m_hoverIndex = -1;
 	for (size_t i = 0; i < m_options.size(); ++i)
 	{
-		const float rowY = y + HeaderHeight + RowGap + static_cast<float>(i) * (RowHeight + RowGap);
-		if (m_cursor.x >= x && m_cursor.x <= x + MenuWidth && m_cursor.y >= rowY && m_cursor.y <= rowY + RowHeight)
+		const sTargetOption& option = m_options[i];
+		const float height = GetRowHeight(option);
+		if (IsSelectableRow(option.rowType) && option.enabled && m_cursor.x >= x && m_cursor.x <= x + menuWidth && m_cursor.y >= rowY && m_cursor.y <= rowY + height)
 		{
 			m_hoverIndex = static_cast<int>(i);
 			break;
 		}
+		rowY += height + RowGap;
 	}
 }
 
@@ -933,7 +1330,7 @@ bool CTargetManager::ReadBoundString(RakNet::BitStream& bitStream, std::string& 
 	if (!bitStream.Read(length) || length > maxLength)
 		return false;
 
-	char buffer[64] = {};
+	char buffer[160] = {};
 	if (length && !bitStream.Read(buffer, length))
 		return false;
 
@@ -1044,31 +1441,52 @@ void CTargetManager::DrawPromptLegend(IDirect3DDevice9* device, float cx, float 
 
 void CTargetManager::DrawMenu(IDirect3DDevice9* device, float cx, float cy)
 {
+	const float menuWidth = GetMenuWidth();
+	const float headerHeight = GetHeaderHeight();
 	const float x = cx + MenuOffsetX;
-	const float totalHeight = HeaderHeight + RowGap + (RowHeight + RowGap) * static_cast<float>(m_options.size());
+	const float totalHeight = GetMenuHeight(menuWidth);
 	const float y = cy - totalHeight * 0.5f;
 
-	if (ShouldDrawPrompt())
-		DrawEye(device, cx, cy);
-	DrawFilledRect(device, x, y, MenuWidth, HeaderHeight, D3DCOLOR_ARGB(205, 20, 34, 38));
-	DrawOutlineRect(device, x, y, MenuWidth, HeaderHeight, D3DCOLOR_ARGB(180, 235, 238, 235));
-	DrawTextLine(m_title.empty() ? "Target" : m_title, static_cast<int>(x + 10.0f), static_cast<int>(y), static_cast<int>(MenuWidth - 20.0f), static_cast<int>(HeaderHeight), D3DCOLOR_ARGB(255, 232, 255, 252));
+	DrawFilledRect(device, x, y, menuWidth, headerHeight, D3DCOLOR_ARGB(205, 8, 10, 11));
+	DrawOutlineRect(device, x, y, menuWidth, headerHeight, D3DCOLOR_ARGB(160, 235, 238, 235));
+	DrawTextLine(m_title.empty() ? "Target" : m_title, static_cast<int>(x + 10.0f), static_cast<int>(y), static_cast<int>(menuWidth - 20.0f), static_cast<int>(headerHeight), D3DCOLOR_ARGB(255, 232, 255, 252));
+
+	float rowY = y + headerHeight + RowGap;
+	if (!m_description.empty())
+	{
+		const float descriptionHeight = GetDescriptionHeight(menuWidth);
+		DrawFilledRect(device, x, rowY, menuWidth, descriptionHeight, D3DCOLOR_ARGB(160, 10, 12, 13));
+		DrawTextLine(m_description, static_cast<int>(x + 10.0f), static_cast<int>(rowY), static_cast<int>(menuWidth - 20.0f), static_cast<int>(descriptionHeight), D3DCOLOR_ARGB(220, 210, 214, 210));
+		rowY += descriptionHeight + RowGap;
+	}
 
 	for (size_t i = 0; i < m_options.size(); ++i)
 	{
 		const sTargetOption& option = m_options[i];
-		const float rowY = y + HeaderHeight + RowGap + static_cast<float>(i) * (RowHeight + RowGap);
-		const bool hovered = static_cast<int>(i) == m_hoverIndex;
-		const D3DCOLOR bg = hovered ? D3DCOLOR_ARGB(230, 48, 50, 50) : D3DCOLOR_ARGB(205, 17, 20, 22);
-		const D3DCOLOR border = hovered ? D3DCOLOR_ARGB(230, 245, 248, 246) : D3DCOLOR_ARGB(105, 235, 238, 235);
-		const D3DCOLOR text = option.enabled ? D3DCOLOR_ARGB(255, 232, 255, 252) : D3DCOLOR_ARGB(150, 190, 202, 202);
+		const float rowHeight = GetRowHeight(option);
+		if (option.rowType == OMPPlusProtocol::TargetRowDivider)
+		{
+			DrawLine(device, x + 10.0f, rowY + rowHeight * 0.5f, x + menuWidth - 10.0f, rowY + rowHeight * 0.5f, D3DCOLOR_ARGB(90, 235, 238, 235));
+			rowY += rowHeight + RowGap;
+			continue;
+		}
 
-		DrawFilledRect(device, x, rowY, MenuWidth, RowHeight, bg);
-		DrawOutlineRect(device, x, rowY, MenuWidth, RowHeight, border);
+		const bool hovered = static_cast<int>(i) == m_hoverIndex && IsSelectableRow(option.rowType);
+		const bool selectable = option.enabled && IsSelectableRow(option.rowType);
+		const D3DCOLOR bg = hovered ? D3DCOLOR_ARGB(230, 48, 50, 50) : D3DCOLOR_ARGB(205, 8, 10, 11);
+		const D3DCOLOR border = hovered ? D3DCOLOR_ARGB(230, 245, 248, 246) : D3DCOLOR_ARGB(70, 235, 238, 235);
+		const D3DCOLOR text = selectable ? D3DCOLOR_ARGB(255, 232, 255, 252) : D3DCOLOR_ARGB(175, 190, 196, 194);
+
+		if (selectable || option.rowType == OMPPlusProtocol::TargetRowDisabled)
+		{
+			DrawFilledRect(device, x, rowY, menuWidth, rowHeight, bg);
+			DrawOutlineRect(device, x, rowY, menuWidth, rowHeight, border);
+		}
 
 		std::string label = option.label;
 		if (!option.icon.empty())
 			label = option.icon + "  " + label;
-		DrawTextLine(label, static_cast<int>(x + 10.0f), static_cast<int>(rowY), static_cast<int>(MenuWidth - 20.0f), static_cast<int>(RowHeight), text);
+		DrawTextLine(label, static_cast<int>(x + 10.0f), static_cast<int>(rowY), static_cast<int>(menuWidth - 20.0f), static_cast<int>(rowHeight), text);
+		rowY += rowHeight + RowGap;
 	}
 }

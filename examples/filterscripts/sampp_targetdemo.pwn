@@ -7,6 +7,7 @@
 
 #define TARGET_DEMO_VEHICLE_MODEL 445
 #define TARGET_DEMO_RANGE 2.75
+#define TARGET_DEMO_CLEAR_RANGE 3.20
 #define TARGET_DEMO_TTL_MS 1200
 #define TARGET_DEMO_REFRESH_MS 120
 #define TARGET_DEMO_BASE_ID 910000
@@ -92,10 +93,7 @@ stock bool:IsLookingAtTargetVehicle(playerid)
 		return false;
 	}
 
-	if (GetPlayerCameraTargetVehicle(playerid) == gTargetVehicle[playerid])
-	{
-		return true;
-	}
+	new bool:cameraTargetMatches = GetPlayerCameraTargetVehicle(playerid) == gTargetVehicle[playerid];
 
 	new Float:camX, Float:camY, Float:camZ;
 	new Float:frontX, Float:frontY, Float:frontZ;
@@ -121,7 +119,7 @@ stock bool:IsLookingAtTargetVehicle(playerid)
 	toZ /= length;
 
 	new Float:dot = (toX * frontX) + (toY * frontY) + (toZ * frontZ);
-	return dot >= 0.88;
+	return dot >= (cameraTargetMatches ? 0.82 : 0.88);
 }
 
 stock bool:IsNearTargetVehicle(playerid)
@@ -149,6 +147,33 @@ stock bool:IsNearTargetVehicle(playerid)
 
 	return GetPlayerDistanceFromPoint(playerid, x, y, z) <= TARGET_DEMO_RANGE
 		&& IsLookingAtTargetVehicle(playerid);
+}
+
+stock bool:ShouldForceClearTargetVehicle(playerid)
+{
+	if (!HasTargetVehicle(playerid))
+	{
+		return true;
+	}
+
+	if (IsPlayerInVehicle(playerid, gTargetVehicle[playerid]))
+	{
+		return false;
+	}
+
+	if (IsPlayerInAnyVehicle(playerid))
+	{
+		return true;
+	}
+
+	new Float:x, Float:y, Float:z;
+	if (!GetVehiclePos(gTargetVehicle[playerid], x, y, z))
+	{
+		return true;
+	}
+
+	return GetPlayerDistanceFromPoint(playerid, x, y, z) > TARGET_DEMO_CLEAR_RANGE
+		|| !IsLookingAtTargetVehicle(playerid);
 }
 
 stock bool:RequireTargetVehicle(playerid)
@@ -238,22 +263,25 @@ stock PublishTargetContext(playerid)
 
 	new targetid = TargetDemoId(playerid);
 	new flags = IsPlayerInVehicle(playerid, gTargetVehicle[playerid]) ? SAMPP_TARGET_FLAG_HIDE_PROMPT : 0;
-	if (!SAMPP_TargetBegin(playerid, targetid, "Demo Vehicle", TARGET_DEMO_TTL_MS, flags))
+	if (!SAMPP_TargetBeginEx(playerid, targetid, SAMPP_TARGET_TYPE_VEHICLE, "Demo Vehicle", TARGET_DEMO_TTL_MS, flags))
 	{
 		ClearTargetDemoContext(playerid);
 		return 1;
 	}
+	SAMPP_TargetSetLayout(playerid, targetid, SAMPP_TARGET_LAYOUT_STANDARD);
+	SAMPP_TargetSetDescription(playerid, targetid, "Manage this vehicle. Every action is validated by the server before it runs.");
 
 	if (!IsPlayerInAnyVehicle(playerid))
 	{
-		SAMPP_TargetAddOption(playerid, targetid, TARGET_OPTION_ENTER, "Seat in Vehicle", "seat");
+		SAMPP_TargetAddAction(playerid, targetid, TARGET_OPTION_ENTER, "Seat in Vehicle", "seat");
+		SAMPP_TargetAddDivider(playerid, targetid);
 	}
 
-	SAMPP_TargetAddOption(playerid, targetid, TARGET_OPTION_ENGINE, gTargetEngine[playerid] ? ("Turn Engine Off") : ("Turn Engine On"), "engine");
-	SAMPP_TargetAddOption(playerid, targetid, TARGET_OPTION_HOOD, gTargetHood[playerid] ? ("Close Hood") : ("Open Hood"), "hood");
-	SAMPP_TargetAddOption(playerid, targetid, TARGET_OPTION_TRUNK, gTargetTrunk[playerid] ? ("Close Trunk") : ("Open Trunk"), "trunk");
-	SAMPP_TargetAddOption(playerid, targetid, TARGET_OPTION_DOORS, gTargetDoors[playerid] ? ("Close Doors") : ("Open Doors"), "doors");
-	SAMPP_TargetAddOption(playerid, targetid, TARGET_OPTION_LOCK, gTargetLocked[playerid] ? ("Unlock Vehicle") : ("Lock Vehicle"), "lock");
+	SAMPP_TargetAddToggle(playerid, targetid, TARGET_OPTION_ENGINE, gTargetEngine[playerid] ? ("Turn Engine Off") : ("Turn Engine On"), "engine");
+	SAMPP_TargetAddToggle(playerid, targetid, TARGET_OPTION_HOOD, gTargetHood[playerid] ? ("Close Hood") : ("Open Hood"), "hood");
+	SAMPP_TargetAddToggle(playerid, targetid, TARGET_OPTION_TRUNK, gTargetTrunk[playerid] ? ("Close Trunk") : ("Open Trunk"), "trunk");
+	SAMPP_TargetAddToggle(playerid, targetid, TARGET_OPTION_DOORS, gTargetDoors[playerid] ? ("Close Doors") : ("Open Doors"), "doors");
+	SAMPP_TargetAddAction(playerid, targetid, TARGET_OPTION_LOCK, gTargetLocked[playerid] ? ("Unlock Vehicle") : ("Lock Vehicle"), "lock");
 
 	SAMPP_TargetCommit(playerid, targetid);
 	gTargetContextActive[playerid] = true;
@@ -263,6 +291,13 @@ stock PublishTargetContext(playerid)
 stock RefreshTargetContext(playerid, bool:force = false)
 {
 	new now = GetTickCount();
+	if (gTargetContextActive[playerid] && ShouldForceClearTargetVehicle(playerid))
+	{
+		ClearTargetDemoContext(playerid);
+		gTargetNextRefresh[playerid] = now + TARGET_DEMO_REFRESH_MS;
+		return 1;
+	}
+
 	if (!force && now < gTargetNextRefresh[playerid])
 	{
 		return 1;

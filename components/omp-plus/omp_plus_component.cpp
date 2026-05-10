@@ -7,9 +7,11 @@ OMPPlusComponent* OMPPlusComponent::instance_ = nullptr;
 namespace
 {
 	constexpr size_t MaxTargetOptions = 8;
+	constexpr size_t MaxTargetRows = 12;
 	constexpr size_t MaxTargetTitleLength = 48;
-	constexpr size_t MaxTargetLabelLength = 48;
+	constexpr size_t MaxTargetLabelLength = 96;
 	constexpr size_t MaxTargetIconLength = 24;
+	constexpr size_t MaxTargetDescriptionLength = 128;
 	constexpr uint16_t DefaultTargetTtlMs = 500;
 	constexpr uint16_t MaxTargetTtlMs = 5000;
 
@@ -24,6 +26,28 @@ namespace
 		stream.Write(static_cast<uint8_t>(bounded.length()));
 		if (!bounded.empty())
 			stream.Write(bounded.c_str(), static_cast<int>(bounded.length()));
+	}
+
+	bool IsValidTargetType(uint8_t targetType)
+	{
+		return targetType <= OMPPlusProtocol::TargetTypeCustom;
+	}
+
+	bool IsValidTargetLayout(uint8_t layout)
+	{
+		return layout <= OMPPlusProtocol::TargetLayoutMinimal;
+	}
+
+	bool IsValidTargetRowType(uint8_t rowType)
+	{
+		return rowType <= OMPPlusProtocol::TargetRowDanger;
+	}
+
+	bool IsSelectableTargetRow(uint8_t rowType)
+	{
+		return rowType == OMPPlusProtocol::TargetRowAction
+			|| rowType == OMPPlusProtocol::TargetRowToggle
+			|| rowType == OMPPlusProtocol::TargetRowDanger;
 	}
 }
 
@@ -241,26 +265,89 @@ bool OMPPlusComponent::beginTargetContext(int playerid, uint32_t targetid, const
 
 	OMPPlusTargetContext& context = targetContexts_[playerid];
 	context.active = true;
+	context.advanced = false;
 	context.targetId = targetid;
 	context.flags = flags;
+	context.targetType = OMPPlusProtocol::TargetTypeGeneric;
+	context.layout = OMPPlusProtocol::TargetLayoutAuto;
 	context.ttlMs = ttlMs;
 	context.expiresAt = Time::now() + Milliseconds(ttlMs);
 	context.title = BoundString(title, MaxTargetTitleLength);
+	context.description.clear();
 	context.options.clear();
+	return true;
+}
+
+bool OMPPlusComponent::beginTargetContextEx(int playerid, uint32_t targetid, uint8_t targetType, const std::string& title, uint16_t ttlMs, uint32_t flags)
+{
+	if (!IsValidTargetType(targetType))
+		targetType = OMPPlusProtocol::TargetTypeGeneric;
+
+	if (!beginTargetContext(playerid, targetid, title, ttlMs, flags))
+		return false;
+
+	OMPPlusTargetContext& context = targetContexts_[playerid];
+	context.advanced = true;
+	context.targetType = targetType;
+	return true;
+}
+
+bool OMPPlusComponent::setTargetLayout(int playerid, uint32_t targetid, uint8_t layout)
+{
+	if (playerid < 0 || playerid >= PLAYER_POOL_SIZE || targetid == 0)
+		return false;
+
+	OMPPlusTargetContext& context = targetContexts_[playerid];
+	if (!context.active || context.targetId != targetid)
+		return false;
+
+	if (!IsValidTargetLayout(layout))
+		layout = OMPPlusProtocol::TargetLayoutAuto;
+
+	context.advanced = true;
+	context.layout = layout;
+	return true;
+}
+
+bool OMPPlusComponent::setTargetDescription(int playerid, uint32_t targetid, const std::string& description)
+{
+	if (playerid < 0 || playerid >= PLAYER_POOL_SIZE || targetid == 0)
+		return false;
+
+	OMPPlusTargetContext& context = targetContexts_[playerid];
+	if (!context.active || context.targetId != targetid)
+		return false;
+
+	context.advanced = true;
+	context.description = BoundString(description, MaxTargetDescriptionLength);
 	return true;
 }
 
 bool OMPPlusComponent::addTargetOption(int playerid, uint32_t targetid, uint32_t optionid, const std::string& label, const std::string& icon, bool enabled)
 {
-	if (playerid < 0 || playerid >= PLAYER_POOL_SIZE || targetid == 0 || optionid == 0)
+	if (optionid == 0)
+		return false;
+	return addTargetRow(playerid, targetid, optionid, enabled ? OMPPlusProtocol::TargetRowAction : OMPPlusProtocol::TargetRowDisabled, label, icon, enabled);
+}
+
+bool OMPPlusComponent::addTargetRow(int playerid, uint32_t targetid, uint32_t optionid, uint8_t rowType, const std::string& label, const std::string& icon, bool enabled)
+{
+	if (playerid < 0 || playerid >= PLAYER_POOL_SIZE || targetid == 0)
 		return false;
 
 	OMPPlusTargetContext& context = targetContexts_[playerid];
-	if (!context.active || context.targetId != targetid || context.options.size() >= MaxTargetOptions)
+	if (!context.active || context.targetId != targetid || context.options.size() >= MaxTargetRows)
+		return false;
+
+	if (!IsValidTargetRowType(rowType))
+		rowType = OMPPlusProtocol::TargetRowAction;
+
+	if (IsSelectableTargetRow(rowType) && optionid == 0)
 		return false;
 
 	OMPPlusTargetOption option;
 	option.optionId = optionid;
+	option.rowType = rowType;
 	option.enabled = enabled;
 	option.label = BoundString(label, MaxTargetLabelLength);
 	option.icon = BoundString(icon, MaxTargetIconLength);
@@ -278,19 +365,57 @@ bool OMPPlusComponent::commitTargetContext(int playerid, uint32_t targetid)
 		return false;
 
 	context.expiresAt = Time::now() + Milliseconds(context.ttlMs);
+	OMPPlusPlayerState* state = getPlayerState(playerid);
+	const bool useV2 = context.advanced && state && (state->capabilities & OMPPlusProtocol::CapabilityTargetUIV2);
 
 	NetworkBitStream stream;
 	stream.Write(context.targetId);
 	stream.Write(context.ttlMs);
-	stream.Write(context.flags);
-	WriteBoundString(stream, context.title, MaxTargetTitleLength);
-	stream.Write(static_cast<uint8_t>(context.options.size()));
+	stream.Write(useV2 ? (context.flags | OMPPlusProtocol::TargetFlagPayloadV2) : (context.flags & ~OMPPlusProtocol::TargetFlagPayloadV2));
 
+	if (useV2)
+	{
+		stream.Write(context.targetType);
+		stream.Write(context.layout);
+		WriteBoundString(stream, context.title, MaxTargetTitleLength);
+		WriteBoundString(stream, context.description, MaxTargetDescriptionLength);
+		stream.Write(static_cast<uint8_t>(context.options.size()));
+
+		for (const OMPPlusTargetOption& option : context.options)
+		{
+			stream.Write(option.optionId);
+			stream.Write(option.rowType);
+			stream.Write(option.enabled);
+			WriteBoundString(stream, option.label, MaxTargetLabelLength);
+			WriteBoundString(stream, option.icon, MaxTargetIconLength);
+		}
+
+		return sendLegacyRPC(playerid, OMPPlusProtocol::TARGET_SET_CONTEXT, &stream);
+	}
+
+	WriteBoundString(stream, context.title, MaxTargetTitleLength);
+
+	std::vector<OMPPlusTargetOption> legacyOptions;
 	for (const OMPPlusTargetOption& option : context.options)
 	{
+		if (legacyOptions.size() >= MaxTargetOptions)
+			break;
+		if (option.rowType == OMPPlusProtocol::TargetRowDivider)
+			continue;
+		if (option.optionId == 0)
+			continue;
+		legacyOptions.push_back(option);
+	}
+
+	if (legacyOptions.empty())
+		return false;
+
+	stream.Write(static_cast<uint8_t>(legacyOptions.size()));
+	for (const OMPPlusTargetOption& option : legacyOptions)
+	{
 		stream.Write(option.optionId);
-		stream.Write(option.enabled);
-		WriteBoundString(stream, option.label, MaxTargetLabelLength);
+		stream.Write(option.enabled && IsSelectableTargetRow(option.rowType));
+		WriteBoundString(stream, option.label, 48);
 		WriteBoundString(stream, option.icon, MaxTargetIconLength);
 	}
 
@@ -472,7 +597,7 @@ uint32_t OMPPlusComponent::deriveLegacyFeatures(uint32_t capabilities) const
 		features |= OMPPlusProtocol::FeatureHUD | OMPPlusProtocol::FeatureKeybind;
 	if (capabilities & OMPPlusProtocol::CapabilityKeyCapture)
 		features |= OMPPlusProtocol::FeatureKeyCapture;
-	if (capabilities & OMPPlusProtocol::CapabilityTargetUI)
+	if (capabilities & (OMPPlusProtocol::CapabilityTargetUI | OMPPlusProtocol::CapabilityTargetUIV2))
 		features |= OMPPlusProtocol::FeatureTarget | OMPPlusProtocol::FeatureUI;
 	return features;
 }
@@ -625,7 +750,7 @@ void OMPPlusComponent::processTargetSelect(IPlayer& player, NetworkBitStream& st
 
 	const auto optionIt = std::find_if(context.options.begin(), context.options.end(), [optionid](const OMPPlusTargetOption& option)
 	{
-		return option.optionId == optionid && option.enabled;
+		return option.optionId == optionid && option.enabled && IsSelectableTargetRow(option.rowType);
 	});
 	if (optionIt == context.options.end())
 		return;
@@ -641,7 +766,7 @@ void OMPPlusComponent::sendHelloAck(IPlayer& player)
 {
 	NetworkBitStream stream;
 	writeHeader(stream, OMPPlusProtocol::Message::HelloAck);
-	stream.Write(OMPPlusProtocol::DefaultCapabilities);
+	stream.Write(OMPPlusProtocol::DefaultCapabilities | OMPPlusProtocol::CapabilityTargetUI | OMPPlusProtocol::CapabilityTargetUIV2);
 	player.sendRPC(OMPPlusProtocol::RpcID, Span<uint8_t>(stream.GetData(), stream.GetNumberOfBitsUsed()), OMPPlusProtocol::Channel);
 }
 
