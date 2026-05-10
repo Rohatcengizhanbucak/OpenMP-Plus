@@ -32,10 +32,13 @@ public:
 	static bool ShouldCaptureMouse();
 	static bool ShouldSuppressKeyboard();
 	static bool ShouldNeutralizeKeyboard();
+	static bool ShouldBlockGameControls();
 	static bool ShouldConsumeDirectInputOffset(DWORD offset);
 	static bool ShouldConsumeDirectInputEvent(DWORD offset, DWORD data);
 	static void FilterKeyboardState(DWORD size, LPVOID state);
 	static void FilterMouseState(DWORD size, LPVOID state);
+	static bool ShouldReleaseDirectInputOffset(DWORD offset);
+	static DWORD GetKeyboardReleaseOffsets(DWORD* offsets, DWORD capacity);
 	static void AddMouseDelta(LONG x, LONG y, LONG wheel = 0);
 	static void SetMouseButton(unsigned int button, bool down);
 
@@ -43,9 +46,12 @@ private:
 	static bool HasValidContext();
 	static bool InputAllowed();
 	static bool IsMouseSuppressed();
-	static bool IsKeyboardReleaseActive();
+	static bool HasKeyboardReleaseLease();
 	static bool ShouldDrawPrompt();
 	static void SuppressMouseInput(unsigned long durationMs);
+	static void BeginKeyboardReleaseLease();
+	static void UpdateKeyboardReleaseLease();
+	static void ClearKeyboardReleaseLease();
 	static void OpenMenu();
 	static void CloseMenu(bool clearCursor);
 	static void InitializeVirtualCursor();
@@ -80,6 +86,8 @@ private:
 	static unsigned long m_lastContextTick;
 	static unsigned long m_mouseSuppressUntil;
 	static unsigned long m_keyboardReleaseUntil;
+	static bool m_keyboardReleaseActive;
+	static bool m_keyboardReleaseOffsets[256];
 	static std::string m_title;
 	static std::vector<sTargetOption> m_options;
 	static int m_hoverIndex;

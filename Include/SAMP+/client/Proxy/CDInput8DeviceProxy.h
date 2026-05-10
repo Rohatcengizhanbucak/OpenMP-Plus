@@ -10,6 +10,7 @@ class CDInput8DeviceProxy : public IDirectInputDevice8A
 public:
 	CDInput8DeviceProxy(IDirectInput8A* pInput, IDirectInputDevice8A* pDevice);
 	~CDInput8DeviceProxy();
+	static void RequestInputReset();
     STDMETHOD(QueryInterface)(THIS_ REFIID riid, LPVOID * ppvObj);
     STDMETHOD_(ULONG,AddRef)(THIS);
     STDMETHOD_(ULONG,Release)(THIS);
@@ -47,5 +48,9 @@ private:
 	IDirectInputDevice8A* m_pDevice;
 	IDirectInput8A* m_pInput;
 	DWORD m_dwType;
+	LONG m_lResetGeneration;
+
+	void ResetIfRequested();
+	void FlushBufferedData();
 
 };

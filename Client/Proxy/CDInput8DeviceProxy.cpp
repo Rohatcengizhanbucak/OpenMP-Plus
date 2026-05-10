@@ -8,17 +8,7 @@ namespace
 {
 	DWORD g_keyboardReleaseCursor = 0;
 	DWORD g_mouseReleaseCursor = 0;
-
-	const DWORD KeyboardReleaseOffsets[] =
-	{
-		DIK_W, DIK_A, DIK_S, DIK_D,
-		DIK_UP, DIK_DOWN, DIK_LEFT, DIK_RIGHT,
-		DIK_LMENU, DIK_RMENU,
-		DIK_LSHIFT, DIK_RSHIFT,
-		DIK_LCONTROL, DIK_RCONTROL,
-		DIK_SPACE, DIK_RETURN,
-		DIK_LBRACKET, DIK_RBRACKET
-	};
+	volatile LONG g_inputResetGeneration = 0;
 
 	const DWORD MouseReleaseOffsets[] =
 	{
@@ -52,6 +42,7 @@ CDInput8DeviceProxy::CDInput8DeviceProxy(IDirectInput8A* pInput, IDirectInputDev
 	m_pInput = pInput;
     m_pDevice = pDevice;
 	m_dwType = 0;
+	m_lResetGeneration = 0;
 
 	DIDEVICEINSTANCEA di;
 	di.dwSize = sizeof(di);
@@ -61,6 +52,41 @@ CDInput8DeviceProxy::CDInput8DeviceProxy(IDirectInput8A* pInput, IDirectInputDev
 }
 
 CDInput8DeviceProxy::~CDInput8DeviceProxy() { }
+
+void CDInput8DeviceProxy::RequestInputReset()
+{
+	InterlockedIncrement(&g_inputResetGeneration);
+}
+
+void CDInput8DeviceProxy::ResetIfRequested()
+{
+	if (!m_pDevice || (m_dwType != DI8DEVTYPE_KEYBOARD && m_dwType != DI8DEVTYPE_MOUSE))
+		return;
+
+	const LONG requested = g_inputResetGeneration;
+	if (m_lResetGeneration == requested)
+		return;
+
+	m_pDevice->Unacquire();
+	m_pDevice->Acquire();
+	FlushBufferedData();
+	m_lResetGeneration = requested;
+}
+
+void CDInput8DeviceProxy::FlushBufferedData()
+{
+	if (!m_pDevice)
+		return;
+
+	DIDEVICEOBJECTDATA events[32] = {};
+	for (unsigned int i = 0; i < 8; ++i)
+	{
+		DWORD count = sizeof(events) / sizeof(events[0]);
+		const HRESULT hr = m_pDevice->GetDeviceData(sizeof(DIDEVICEOBJECTDATA), events, &count, 0);
+		if (FAILED(hr) || count == 0)
+			break;
+	}
+}
 
 HRESULT CDInput8DeviceProxy::QueryInterface(REFIID riid,  LPVOID * ppvObj)
 {
@@ -113,6 +139,8 @@ HRESULT CDInput8DeviceProxy::Unacquire(VOID)
 
 HRESULT CDInput8DeviceProxy::GetDeviceState(DWORD a, LPVOID b)
 {
+	ResetIfRequested();
+
 	if (DINPUT_DEVICE_IS_MOUSE && CTargetManager::ShouldCaptureMouse())
 	{
 		HRESULT hRes;
@@ -136,6 +164,8 @@ HRESULT CDInput8DeviceProxy::GetDeviceState(DWORD a, LPVOID b)
 
 HRESULT CDInput8DeviceProxy::GetDeviceData(DWORD a, LPDIDEVICEOBJECTDATA b, LPDWORD c, DWORD d)
 {
+	ResetIfRequested();
+
 	const DWORD requestedItems = c ? *c : 0;
 	HRESULT hRes = m_pDevice->GetDeviceData(a, b, c, d);
 
@@ -197,7 +227,9 @@ HRESULT CDInput8DeviceProxy::GetDeviceData(DWORD a, LPDIDEVICEOBJECTDATA b, LPDW
 				*c = 0;
 				return hRes;
 			}
-			*c = WriteReleaseEvents(b, requestedItems, KeyboardReleaseOffsets, sizeof(KeyboardReleaseOffsets) / sizeof(KeyboardReleaseOffsets[0]), g_keyboardReleaseCursor);
+			DWORD offsets[32] = {};
+			const DWORD offsetCount = CTargetManager::GetKeyboardReleaseOffsets(offsets, sizeof(offsets) / sizeof(offsets[0]));
+			*c = WriteReleaseEvents(b, requestedItems, offsets, offsetCount, g_keyboardReleaseCursor);
 			return hRes;
 		}
 

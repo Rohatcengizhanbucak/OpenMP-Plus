@@ -6,6 +6,7 @@
 #include <SAMP+/client/COverlayRenderer.h>
 #include <SAMP+/client/CTargetManager.h>
 #include <SAMP+/client/Network.h>
+#include <SAMP+/client/Proxy/CDInput8DeviceProxy.h>
 #include <SAMP+/client/Proxy/CMessageProxy.h>
 
 #include <DirectX/dinput.h>
@@ -31,6 +32,8 @@ unsigned long CTargetManager::m_expiresAt = 0;
 unsigned long CTargetManager::m_lastContextTick = 0;
 unsigned long CTargetManager::m_mouseSuppressUntil = 0;
 unsigned long CTargetManager::m_keyboardReleaseUntil = 0;
+bool CTargetManager::m_keyboardReleaseActive = false;
+bool CTargetManager::m_keyboardReleaseOffsets[256] = {};
 std::string CTargetManager::m_title;
 std::vector<sTargetOption> CTargetManager::m_options;
 int CTargetManager::m_hoverIndex = -1;
@@ -45,9 +48,45 @@ namespace
 	const float RowHeight = 30.0f;
 	const float RowGap = 4.0f;
 	const unsigned long OpenContextGraceMs = 900;
-	const unsigned long KeyboardReleaseMs = 80;
 	const unsigned long PostMouseSuppressMs = 180;
 	const float VirtualMouseSensitivity = 1.0f;
+
+	struct sKeyboardReleaseKey
+	{
+		DWORD offset;
+		int virtualKey;
+	};
+
+	const sKeyboardReleaseKey KeyboardReleaseKeys[] =
+	{
+		{ DIK_D, 'D' },
+		{ DIK_A, 'A' },
+		{ DIK_W, 'W' },
+		{ DIK_S, 'S' },
+		{ DIK_RIGHT, VK_RIGHT },
+		{ DIK_LEFT, VK_LEFT },
+		{ DIK_UP, VK_UP },
+		{ DIK_DOWN, VK_DOWN },
+		{ DIK_NUMPAD6, VK_NUMPAD6 },
+		{ DIK_NUMPAD4, VK_NUMPAD4 },
+		{ DIK_NUMPAD8, VK_NUMPAD8 },
+		{ DIK_NUMPAD2, VK_NUMPAD2 },
+		{ DIK_LMENU, VK_LMENU },
+		{ DIK_RMENU, VK_RMENU },
+		{ DIK_LSHIFT, VK_LSHIFT },
+		{ DIK_RSHIFT, VK_RSHIFT },
+		{ DIK_LCONTROL, VK_LCONTROL },
+		{ DIK_RCONTROL, VK_RCONTROL },
+		{ DIK_SPACE, VK_SPACE },
+		{ DIK_RETURN, VK_RETURN },
+		{ DIK_LBRACKET, VK_OEM_4 },
+		{ DIK_RBRACKET, VK_OEM_6 }
+	};
+
+	bool IsPhysicalKeyDown(int virtualKey)
+	{
+		return (GetAsyncKeyState(virtualKey) & 0x8000) != 0;
+	}
 }
 
 void CTargetManager::HandleSetContext(RakNet::BitStream& bitStream)
@@ -116,6 +155,8 @@ void CTargetManager::ClearContext()
 
 void CTargetManager::Process()
 {
+	UpdateKeyboardReleaseLease();
+
 	const bool altDown = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
 	const bool escapeDown = (GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0;
 	const bool rightDown = (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
@@ -243,12 +284,20 @@ bool CTargetManager::ShouldCaptureMouse()
 
 bool CTargetManager::ShouldSuppressKeyboard()
 {
-	return IsKeyboardReleaseActive() && InputAllowed();
+	return HasKeyboardReleaseLease() && InputAllowed();
 }
 
 bool CTargetManager::ShouldNeutralizeKeyboard()
 {
-	return IsKeyboardReleaseActive() && InputAllowed();
+	return InputAllowed() && (m_menuOpen || HasKeyboardReleaseLease());
+}
+
+bool CTargetManager::ShouldBlockGameControls()
+{
+	if (!InputAllowed())
+		return false;
+
+	return m_menuOpen || HasKeyboardReleaseLease() || IsMouseSuppressed();
 }
 
 bool CTargetManager::ShouldConsumeDirectInputOffset(DWORD offset)
@@ -262,7 +311,7 @@ bool CTargetManager::ShouldConsumeDirectInputEvent(DWORD offset, DWORD data)
 		return false;
 
 	const bool keyDown = (data & 0x80) != 0;
-	if (IsKeyboardReleaseActive())
+	if (ShouldReleaseDirectInputOffset(offset))
 		return true;
 
 	if (HasActiveContext())
@@ -280,10 +329,22 @@ void CTargetManager::FilterKeyboardState(DWORD size, LPVOID state)
 		return;
 
 	BYTE* keys = static_cast<BYTE*>(state);
-	if (IsKeyboardReleaseActive())
+	UpdateKeyboardReleaseLease();
+
+	if (m_menuOpen)
 	{
-		memset(keys, 0, size);
+		memset(state, 0, size);
 		return;
+	}
+
+	if (m_keyboardReleaseActive)
+	{
+		for (unsigned int i = 0; i < sizeof(KeyboardReleaseKeys) / sizeof(KeyboardReleaseKeys[0]); ++i)
+		{
+			const DWORD offset = KeyboardReleaseKeys[i].offset;
+			if (offset < size && m_keyboardReleaseOffsets[offset])
+				keys[offset] = 0;
+		}
 	}
 
 	if (HasActiveContext())
@@ -322,6 +383,31 @@ void CTargetManager::FilterMouseState(DWORD size, LPVOID state)
 	}
 
 	memset(state, 0, size);
+}
+
+bool CTargetManager::ShouldReleaseDirectInputOffset(DWORD offset)
+{
+	UpdateKeyboardReleaseLease();
+	return offset < 256 && m_keyboardReleaseActive && m_keyboardReleaseOffsets[offset];
+}
+
+DWORD CTargetManager::GetKeyboardReleaseOffsets(DWORD* offsets, DWORD capacity)
+{
+	if (!offsets || !capacity)
+		return 0;
+
+	UpdateKeyboardReleaseLease();
+	if (!m_keyboardReleaseActive)
+		return 0;
+
+	DWORD count = 0;
+	for (unsigned int i = 0; i < sizeof(KeyboardReleaseKeys) / sizeof(KeyboardReleaseKeys[0]) && count < capacity; ++i)
+	{
+		const DWORD offset = KeyboardReleaseKeys[i].offset;
+		if (offset < 256 && m_keyboardReleaseOffsets[offset])
+			offsets[count++] = offset;
+	}
+	return count;
 }
 
 void CTargetManager::AddMouseDelta(LONG x, LONG y, LONG wheel)
@@ -467,14 +553,66 @@ void CTargetManager::SuppressMouseInput(unsigned long durationMs)
 	m_mouseSuppressUntil = now + durationMs;
 }
 
-bool CTargetManager::IsKeyboardReleaseActive()
+bool CTargetManager::HasKeyboardReleaseLease()
 {
-	const unsigned long now = GetTickCount();
-	if (m_keyboardReleaseUntil != 0 && static_cast<long>(now - m_keyboardReleaseUntil) < 0)
-		return true;
+	UpdateKeyboardReleaseLease();
+	return m_keyboardReleaseActive;
+}
 
+void CTargetManager::BeginKeyboardReleaseLease()
+{
+	ClearKeyboardReleaseLease();
+
+	for (unsigned int i = 0; i < sizeof(KeyboardReleaseKeys) / sizeof(KeyboardReleaseKeys[0]); ++i)
+	{
+		const sKeyboardReleaseKey& key = KeyboardReleaseKeys[i];
+		if (key.offset < 256 && IsPhysicalKeyDown(key.virtualKey))
+		{
+			m_keyboardReleaseOffsets[key.offset] = true;
+			m_keyboardReleaseActive = true;
+		}
+	}
+
+	if (m_keyboardReleaseActive)
+		m_keyboardReleaseUntil = 0;
+}
+
+void CTargetManager::UpdateKeyboardReleaseLease()
+{
+	if (!m_keyboardReleaseActive)
+		return;
+
+	bool anyActive = false;
+	for (unsigned int i = 0; i < sizeof(KeyboardReleaseKeys) / sizeof(KeyboardReleaseKeys[0]); ++i)
+	{
+		const sKeyboardReleaseKey& key = KeyboardReleaseKeys[i];
+		if (key.offset >= 256 || !m_keyboardReleaseOffsets[key.offset])
+			continue;
+
+		if (IsPhysicalKeyDown(key.virtualKey))
+		{
+			anyActive = true;
+			continue;
+		}
+
+		m_keyboardReleaseOffsets[key.offset] = false;
+	}
+
+	if (!anyActive)
+		ClearKeyboardReleaseLease();
+}
+
+void CTargetManager::ClearKeyboardReleaseLease()
+{
+	const bool hadActiveLease = m_keyboardReleaseActive;
 	m_keyboardReleaseUntil = 0;
-	return false;
+	m_keyboardReleaseActive = false;
+	memset(m_keyboardReleaseOffsets, 0, sizeof(m_keyboardReleaseOffsets));
+
+	if (hadActiveLease)
+	{
+		CDInput8DeviceProxy::RequestInputReset();
+	}
 }
 
 bool CTargetManager::ShouldDrawPrompt()
@@ -484,10 +622,10 @@ bool CTargetManager::ShouldDrawPrompt()
 
 void CTargetManager::OpenMenu()
 {
-	const unsigned long now = GetTickCount();
 	m_mouseSuppressUntil = 0;
-	m_keyboardReleaseUntil = now + KeyboardReleaseMs;
 	m_menuOpen = true;
+	BeginKeyboardReleaseLease();
+	CDInput8DeviceProxy::RequestInputReset();
 	m_hoverIndex = -1;
 	InitializeVirtualCursor();
 	if (!CGraphics::IsCursorEnabled())
@@ -504,16 +642,19 @@ void CTargetManager::CloseMenu(bool clearCursor)
 	if (m_menuOpen)
 		SendMode(false);
 
+	if (wasOpen)
+		BeginKeyboardReleaseLease();
+
 	m_menuOpen = false;
 	m_hoverIndex = -1;
 	m_lastLeftDown = false;
-	m_keyboardReleaseUntil = 0;
 	m_virtualCursorInitialized = false;
 	m_virtualWheel = 0;
 	memset(m_mouseButtons, 0, sizeof(m_mouseButtons));
 	if (wasOpen)
 	{
 		SuppressMouseInput(PostMouseSuppressMs);
+		CDInput8DeviceProxy::RequestInputReset();
 	}
 
 	if (clearCursor && m_cursorOwned)

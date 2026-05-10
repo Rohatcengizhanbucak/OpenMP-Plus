@@ -69,6 +69,7 @@ public:
 	static void ToggleUnderwaterEffect(bool toggle);
 	static void ToggleNightVision(bool toggle);
 	static void ToggleThermalVision(bool toggle);
+	static void ApplyTargetInputBlock();
 
 	static bool VehicleBlips;
 	static bool InPauseMenu;

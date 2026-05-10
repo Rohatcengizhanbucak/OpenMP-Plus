@@ -3,12 +3,163 @@
 #include <SAMP+/client/CHUD.h>
 #include <SAMP+/client/CGame.h>
 #include <SAMP+/client/CGraphics.h>
+#include <SAMP+/client/CKeyBinds.h>
 #include <SAMP+/client/CCmdlineParams.h>
 #include <SAMP+/client/Proxy/CJmpProxy.h>
 #include <SAMP+/client/Network.h>
 #include <SAMP+/client/CSystem.h>
 #include <SAMP+/client/CTargetManager.h>
 
+namespace
+{
+	const uintptr_t GtaPadBase = 0x00B73458;
+	const uintptr_t GtaOldKeyState = 0x00B72F20;
+	const uintptr_t GtaNewKeyState = 0x00B73190;
+	const uintptr_t GtaPCTempMouseState = 0x00B73404;
+	const uintptr_t GtaNewMouseState = 0x00B73418;
+	const uintptr_t GtaOldMouseState = 0x00B7342C;
+	const size_t GtaPadStride = 0x134;
+	const unsigned int GtaPadCount = 2;
+	const size_t CPadNewState = 0x00;
+	const size_t CPadOldState = 0x30;
+	const size_t CPadSteeringBuffer = 0x60;
+	const size_t CPadDrunkDrivingBufferUsed = 0x74;
+	const size_t CPadPCTempKeyState = 0x78;
+	const size_t CPadPCTempJoyState = 0xA8;
+	const size_t CPadPCTempMouseState = 0xD8;
+	const size_t CPadDisablePlayerControls = 0x10E;
+	const size_t ControllerStateSize = 0x30;
+	const size_t KeyboardStateSize = 0x270;
+	const size_t MouseStateSize = 0x14;
+	const unsigned short TargetControlDisableBit = 0x8000;
+	const unsigned long TargetInputReleaseMs = 180;
+
+	bool g_targetControlBitApplied[GtaPadCount] = {};
+	bool g_targetControlBitWasSet[GtaPadCount] = {};
+	unsigned long g_targetInputReleaseUntil = 0;
+	bool g_targetOfficialClearWasActive = false;
+
+	typedef void*(__cdecl* GetPad_t)(int);
+	typedef void(__thiscall* PadClear_t)(void*, bool, bool);
+	typedef void(__cdecl* ClearMouseHistory_t)();
+
+	GetPad_t GetPad = reinterpret_cast<GetPad_t>(0x53FB70);
+	PadClear_t PadClear = reinterpret_cast<PadClear_t>(0x541A70);
+	ClearMouseHistory_t ClearMouseHistory = reinterpret_cast<ClearMouseHistory_t>(0x541BD0);
+
+	bool CanAccess(void* address, size_t size)
+	{
+		if (!address || !size)
+			return false;
+
+		MEMORY_BASIC_INFORMATION mbi = {};
+		if (!VirtualQuery(address, &mbi, sizeof(mbi)))
+			return false;
+
+		if (mbi.State != MEM_COMMIT || (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD)))
+			return false;
+
+		const uintptr_t start = reinterpret_cast<uintptr_t>(address);
+		const uintptr_t end = start + size;
+		const uintptr_t regionEnd = reinterpret_cast<uintptr_t>(mbi.BaseAddress) + mbi.RegionSize;
+		return end <= regionEnd;
+	}
+
+	void ZeroPadRange(uintptr_t address, size_t size)
+	{
+		void* memory = reinterpret_cast<void*>(address);
+		if (!CanAccess(memory, size))
+			return;
+
+		__try
+		{
+			memset(memory, 0, size);
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER)
+		{
+		}
+	}
+
+	void ApplyPadControlBit(unsigned int padIndex, bool blocked)
+	{
+		if (padIndex >= GtaPadCount)
+			return;
+
+		unsigned short* disableControls = reinterpret_cast<unsigned short*>(GtaPadBase + (GtaPadStride * padIndex) + CPadDisablePlayerControls);
+		if (!CanAccess(disableControls, sizeof(*disableControls)))
+			return;
+
+		__try
+		{
+			if (blocked)
+			{
+				if (!g_targetControlBitApplied[padIndex])
+				{
+					g_targetControlBitWasSet[padIndex] = ((*disableControls & TargetControlDisableBit) != 0);
+					g_targetControlBitApplied[padIndex] = true;
+				}
+				*disableControls = static_cast<unsigned short>(*disableControls | TargetControlDisableBit);
+			}
+			else if (g_targetControlBitApplied[padIndex])
+			{
+				if (!g_targetControlBitWasSet[padIndex])
+					*disableControls = static_cast<unsigned short>(*disableControls & ~TargetControlDisableBit);
+				g_targetControlBitApplied[padIndex] = false;
+				g_targetControlBitWasSet[padIndex] = false;
+			}
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER)
+		{
+		}
+	}
+
+	void NeutralizePadInput(unsigned int padIndex)
+	{
+		const uintptr_t pad = GtaPadBase + (GtaPadStride * padIndex);
+		const size_t controllerStateOffsets[] =
+		{
+			CPadNewState,
+			CPadOldState,
+			CPadPCTempKeyState,
+			CPadPCTempJoyState,
+			CPadPCTempMouseState
+		};
+
+		for (unsigned int i = 0; i < sizeof(controllerStateOffsets) / sizeof(controllerStateOffsets[0]); ++i)
+			ZeroPadRange(pad + controllerStateOffsets[i], ControllerStateSize);
+
+		ZeroPadRange(pad + CPadSteeringBuffer, 10 * sizeof(short));
+		ZeroPadRange(pad + CPadDrunkDrivingBufferUsed, sizeof(int));
+	}
+
+	void NeutralizeGlobalInput()
+	{
+		ZeroPadRange(GtaOldKeyState, KeyboardStateSize);
+		ZeroPadRange(GtaNewKeyState, KeyboardStateSize);
+		ZeroPadRange(GtaPCTempMouseState, MouseStateSize);
+		ZeroPadRange(GtaNewMouseState, MouseStateSize);
+		ZeroPadRange(GtaOldMouseState, MouseStateSize);
+	}
+
+	void OfficialClearPadInput()
+	{
+		__try
+		{
+			for (unsigned int i = 0; i < GtaPadCount; ++i)
+			{
+				void* pad = GetPad(static_cast<int>(i));
+				if (pad)
+					PadClear(pad, true, true);
+				ApplyPadControlBit(i, false);
+			}
+
+			ClearMouseHistory();
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER)
+		{
+		}
+	}
+}
 
 bool CGame::m_bGameLoaded;
 bool CGame::InPauseMenu;
@@ -344,6 +495,29 @@ void CGame::ToggleNightVision(bool toggle)
 void CGame::ToggleThermalVision(bool toggle)
 {
 	CMem::PutSingle<BYTE>(0xC402B9, (BYTE) toggle);
+}
+
+void CGame::ApplyTargetInputBlock()
+{
+	const bool active = CTargetManager::ShouldBlockGameControls();
+
+	if (active)
+	{
+		OfficialClearPadInput();
+		g_targetOfficialClearWasActive = true;
+		return;
+	}
+
+	if (g_targetOfficialClearWasActive)
+	{
+		OfficialClearPadInput();
+		NeutralizeGlobalInput();
+		g_targetOfficialClearWasActive = false;
+		return;
+	}
+
+	for (unsigned int i = 0; i < GtaPadCount; ++i)
+		ApplyPadControlBit(i, false);
 }
 
 void CGame::OnEnterWater()
