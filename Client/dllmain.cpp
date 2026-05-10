@@ -75,7 +75,6 @@ static DWORD WINAPI BootstrapThread(LPVOID)
 #endif
 		Network::Process();
 		CKeyBinds::Process();
-		CTargetManager::Process();
 		Sleep(10);
 	}
 

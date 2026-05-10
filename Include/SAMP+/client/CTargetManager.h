@@ -43,6 +43,7 @@ public:
 	static void SetMouseButton(unsigned int button, bool down);
 
 private:
+	static void ClearContextUnlocked();
 	static bool HasValidContext();
 	static bool InputAllowed();
 	static bool IsMouseSuppressed();

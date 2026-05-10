@@ -152,16 +152,16 @@ namespace
 		style.ItemSpacing = ImVec2(7.0f, 6.0f);
 
 		ImVec4* colors = style.Colors;
-		colors[ImGuiCol_WindowBg] = ImVec4(0.04f, 0.07f, 0.08f, 0.90f);
-		colors[ImGuiCol_Border] = ImVec4(0.21f, 0.92f, 0.82f, 0.48f);
+		colors[ImGuiCol_WindowBg] = ImVec4(0.01f, 0.012f, 0.014f, 0.96f);
+		colors[ImGuiCol_Border] = ImVec4(0.92f, 0.94f, 0.92f, 0.42f);
 		colors[ImGuiCol_Text] = ImVec4(0.91f, 1.00f, 0.98f, 1.00f);
 		colors[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.58f, 0.58f, 1.00f);
-		colors[ImGuiCol_Button] = ImVec4(0.07f, 0.13f, 0.15f, 0.88f);
-		colors[ImGuiCol_ButtonHovered] = ImVec4(0.12f, 0.32f, 0.32f, 0.95f);
-		colors[ImGuiCol_ButtonActive] = ImVec4(0.16f, 0.52f, 0.48f, 1.00f);
-		colors[ImGuiCol_Header] = ImVec4(0.12f, 0.32f, 0.32f, 0.95f);
-		colors[ImGuiCol_HeaderHovered] = ImVec4(0.16f, 0.52f, 0.48f, 1.00f);
-		colors[ImGuiCol_HeaderActive] = ImVec4(0.20f, 0.68f, 0.61f, 1.00f);
+		colors[ImGuiCol_Button] = ImVec4(0.025f, 0.035f, 0.040f, 0.94f);
+		colors[ImGuiCol_ButtonHovered] = ImVec4(0.20f, 0.21f, 0.21f, 0.98f);
+		colors[ImGuiCol_ButtonActive] = ImVec4(0.30f, 0.31f, 0.31f, 1.00f);
+		colors[ImGuiCol_Header] = ImVec4(0.20f, 0.21f, 0.21f, 0.98f);
+		colors[ImGuiCol_HeaderHovered] = ImVec4(0.30f, 0.31f, 0.31f, 1.00f);
+		colors[ImGuiCol_HeaderActive] = ImVec4(0.42f, 0.43f, 0.43f, 1.00f);
 	}
 
 	static HRESULT WINAPI Hook_Reset(IDirect3DDevice9* device, D3DPRESENT_PARAMETERS* presentationParameters)
@@ -344,7 +344,8 @@ void COverlayRenderer::Render(IDirect3DDevice9* device)
 		ImGui_ImplWin32_NewFrame();
 		ImGui::NewFrame();
 
-		ImGui::GetIO().MouseDrawCursor = CTargetManager::IsMenuOpen();
+		CTargetManager::Process();
+		ImGui::GetIO().MouseDrawCursor = false;
 		CTargetManager::RenderImGui();
 
 		ImGui::Render();
@@ -378,6 +379,8 @@ bool COverlayRenderer::HandleWndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
 
 	switch (message)
 	{
+	case WM_SETCURSOR:
+		return false;
 	case WM_MOUSEMOVE:
 	case WM_LBUTTONDOWN:
 	case WM_LBUTTONUP:

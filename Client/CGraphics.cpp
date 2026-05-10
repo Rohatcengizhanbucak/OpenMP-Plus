@@ -1,4 +1,5 @@
 #include <SAMP+/client/CGraphics.h>
+#include <SAMP+/client/COverlayRenderer.h>
 #include <SAMP+/client/CTargetManager.h>
 #include <SAMP+/client/Network.h>
 
@@ -89,7 +90,7 @@ void CGraphics::PostDeviceReset()
 
 void CGraphics::PreEndScene()
 {
-	if (m_pDevice && Network::IsConnected())
+	if (m_pDevice && Network::IsConnected() && !COverlayRenderer::IsReady())
 		CTargetManager::Draw(m_pDevice);
 }
 

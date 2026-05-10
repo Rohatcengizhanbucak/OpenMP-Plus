@@ -32,12 +32,12 @@ namespace
 	const size_t KeyboardStateSize = 0x270;
 	const size_t MouseStateSize = 0x14;
 	const unsigned short TargetControlDisableBit = 0x8000;
-	const unsigned long TargetInputReleaseMs = 180;
+	const unsigned int TargetTransitionFlushFrames = 2;
 
 	bool g_targetControlBitApplied[GtaPadCount] = {};
 	bool g_targetControlBitWasSet[GtaPadCount] = {};
-	unsigned long g_targetInputReleaseUntil = 0;
-	bool g_targetOfficialClearWasActive = false;
+	bool g_targetInputBlockWasActive = false;
+	unsigned int g_targetTransitionFlushFrames = 0;
 
 	typedef void*(__cdecl* GetPad_t)(int);
 	typedef void(__thiscall* PadClear_t)(void*, bool, bool);
@@ -141,18 +141,31 @@ namespace
 		ZeroPadRange(GtaOldMouseState, MouseStateSize);
 	}
 
-	void OfficialClearPadInput()
+	void ClearPadOfficial(unsigned int padIndex)
+	{
+		__try
+		{
+			void* pad = GetPad(static_cast<int>(padIndex));
+			if (pad && CanAccess(pad, GtaPadStride))
+				PadClear(pad, true, true);
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER)
+		{
+		}
+	}
+
+	void ClearTargetInputFrame()
 	{
 		__try
 		{
 			for (unsigned int i = 0; i < GtaPadCount; ++i)
 			{
-				void* pad = GetPad(static_cast<int>(i));
-				if (pad)
-					PadClear(pad, true, true);
+				ClearPadOfficial(i);
+				NeutralizePadInput(i);
 				ApplyPadControlBit(i, false);
 			}
 
+			NeutralizeGlobalInput();
 			ClearMouseHistory();
 		}
 		__except (EXCEPTION_EXECUTE_HANDLER)
@@ -501,18 +514,22 @@ void CGame::ApplyTargetInputBlock()
 {
 	const bool active = CTargetManager::ShouldBlockGameControls();
 
+	if (active != g_targetInputBlockWasActive)
+	{
+		g_targetTransitionFlushFrames = TargetTransitionFlushFrames;
+		g_targetInputBlockWasActive = active;
+	}
+
 	if (active)
 	{
-		OfficialClearPadInput();
-		g_targetOfficialClearWasActive = true;
+		ClearTargetInputFrame();
 		return;
 	}
 
-	if (g_targetOfficialClearWasActive)
+	if (g_targetTransitionFlushFrames > 0)
 	{
-		OfficialClearPadInput();
-		NeutralizeGlobalInput();
-		g_targetOfficialClearWasActive = false;
+		ClearTargetInputFrame();
+		--g_targetTransitionFlushFrames;
 		return;
 	}
 

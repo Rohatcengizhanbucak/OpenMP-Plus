@@ -42,8 +42,45 @@ ID3DXFont* CTargetManager::m_font = NULL;
 
 namespace
 {
+	struct sTargetStateLock
+	{
+		CRITICAL_SECTION section;
+
+		sTargetStateLock()
+		{
+			InitializeCriticalSection(&section);
+		}
+
+		~sTargetStateLock()
+		{
+			DeleteCriticalSection(&section);
+		}
+	};
+
+	class cScopedTargetStateLock
+	{
+	public:
+		cScopedTargetStateLock()
+		{
+			EnterCriticalSection(&TargetLock().section);
+		}
+
+		~cScopedTargetStateLock()
+		{
+			LeaveCriticalSection(&TargetLock().section);
+		}
+
+	private:
+		static sTargetStateLock& TargetLock()
+		{
+			static sTargetStateLock lock;
+			return lock;
+		}
+	};
+
 	const unsigned char MaxTargetOptions = 8;
-	const float MenuWidth = 230.0f;
+	const float MenuWidth = 238.0f;
+	const float MenuOffsetX = 124.0f;
 	const float HeaderHeight = 30.0f;
 	const float RowHeight = 30.0f;
 	const float RowGap = 4.0f;
@@ -123,6 +160,8 @@ void CTargetManager::HandleSetContext(RakNet::BitStream& bitStream)
 		options.push_back(option);
 	}
 
+	cScopedTargetStateLock lock;
+
 	if (ttlMs == 0)
 		ttlMs = 500;
 	if (ttlMs > 5000)
@@ -137,10 +176,17 @@ void CTargetManager::HandleSetContext(RakNet::BitStream& bitStream)
 	m_lastContextTick = GetTickCount();
 
 	if (m_options.empty())
-		ClearContext();
+		ClearContextUnlocked();
 }
 
 void CTargetManager::ClearContext()
+{
+	cScopedTargetStateLock lock;
+
+	ClearContextUnlocked();
+}
+
+void CTargetManager::ClearContextUnlocked()
 {
 	m_hasContext = false;
 	m_targetId = 0;
@@ -155,6 +201,8 @@ void CTargetManager::ClearContext()
 
 void CTargetManager::Process()
 {
+	cScopedTargetStateLock lock;
+
 	UpdateKeyboardReleaseLease();
 
 	const bool altDown = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
@@ -164,7 +212,7 @@ void CTargetManager::Process()
 	if (!HasValidContext())
 	{
 		if (m_hasContext)
-			ClearContext();
+			ClearContextUnlocked();
 		else
 			CloseMenu(true);
 		m_lastAltDown = altDown;
@@ -225,6 +273,8 @@ void CTargetManager::Process()
 
 void CTargetManager::Draw(IDirect3DDevice9* device)
 {
+	cScopedTargetStateLock lock;
+
 	if (!device || !HasValidContext())
 		return;
 
@@ -259,6 +309,8 @@ void CTargetManager::OnResetDevice()
 
 void CTargetManager::CleanUp()
 {
+	cScopedTargetStateLock lock;
+
 	CloseMenu(true);
 	if (m_font)
 	{
@@ -269,31 +321,43 @@ void CTargetManager::CleanUp()
 
 bool CTargetManager::IsMenuOpen()
 {
+	cScopedTargetStateLock lock;
+
 	return m_menuOpen;
 }
 
 bool CTargetManager::HasActiveContext()
 {
+	cScopedTargetStateLock lock;
+
 	return m_hasContext && m_targetId != 0 && !m_options.empty() && static_cast<long>(GetTickCount() - m_expiresAt) < 0;
 }
 
 bool CTargetManager::ShouldCaptureMouse()
 {
+	cScopedTargetStateLock lock;
+
 	return (m_menuOpen || IsMouseSuppressed()) && InputAllowed();
 }
 
 bool CTargetManager::ShouldSuppressKeyboard()
 {
+	cScopedTargetStateLock lock;
+
 	return HasKeyboardReleaseLease() && InputAllowed();
 }
 
 bool CTargetManager::ShouldNeutralizeKeyboard()
 {
+	cScopedTargetStateLock lock;
+
 	return InputAllowed() && (m_menuOpen || HasKeyboardReleaseLease());
 }
 
 bool CTargetManager::ShouldBlockGameControls()
 {
+	cScopedTargetStateLock lock;
+
 	if (!InputAllowed())
 		return false;
 
@@ -302,19 +366,34 @@ bool CTargetManager::ShouldBlockGameControls()
 
 bool CTargetManager::ShouldConsumeDirectInputOffset(DWORD offset)
 {
-	return ShouldConsumeDirectInputEvent(offset, 0x80);
+	cScopedTargetStateLock lock;
+
+	if (!InputAllowed())
+		return false;
+
+	UpdateKeyboardReleaseLease();
+	if (offset < 256 && m_keyboardReleaseActive && m_keyboardReleaseOffsets[offset])
+		return true;
+
+	if (m_hasContext && m_targetId != 0 && !m_options.empty() && static_cast<long>(GetTickCount() - m_expiresAt) < 0)
+		return offset == DIK_LMENU || offset == DIK_RMENU;
+
+	return false;
 }
 
 bool CTargetManager::ShouldConsumeDirectInputEvent(DWORD offset, DWORD data)
 {
+	cScopedTargetStateLock lock;
+
 	if (!InputAllowed())
 		return false;
 
 	const bool keyDown = (data & 0x80) != 0;
-	if (ShouldReleaseDirectInputOffset(offset))
+	UpdateKeyboardReleaseLease();
+	if (offset < 256 && m_keyboardReleaseActive && m_keyboardReleaseOffsets[offset])
 		return true;
 
-	if (HasActiveContext())
+	if (m_hasContext && m_targetId != 0 && !m_options.empty() && static_cast<long>(GetTickCount() - m_expiresAt) < 0)
 		return keyDown && (offset == DIK_LMENU || offset == DIK_RMENU);
 
 	return false;
@@ -322,6 +401,8 @@ bool CTargetManager::ShouldConsumeDirectInputEvent(DWORD offset, DWORD data)
 
 void CTargetManager::FilterKeyboardState(DWORD size, LPVOID state)
 {
+	cScopedTargetStateLock lock;
+
 	if (!state || !size)
 		return;
 
@@ -358,6 +439,8 @@ void CTargetManager::FilterKeyboardState(DWORD size, LPVOID state)
 
 void CTargetManager::FilterMouseState(DWORD size, LPVOID state)
 {
+	cScopedTargetStateLock lock;
+
 	if (!state || !size)
 		return;
 
@@ -387,12 +470,16 @@ void CTargetManager::FilterMouseState(DWORD size, LPVOID state)
 
 bool CTargetManager::ShouldReleaseDirectInputOffset(DWORD offset)
 {
+	cScopedTargetStateLock lock;
+
 	UpdateKeyboardReleaseLease();
 	return offset < 256 && m_keyboardReleaseActive && m_keyboardReleaseOffsets[offset];
 }
 
 DWORD CTargetManager::GetKeyboardReleaseOffsets(DWORD* offsets, DWORD capacity)
 {
+	cScopedTargetStateLock lock;
+
 	if (!offsets || !capacity)
 		return 0;
 
@@ -412,6 +499,8 @@ DWORD CTargetManager::GetKeyboardReleaseOffsets(DWORD* offsets, DWORD capacity)
 
 void CTargetManager::AddMouseDelta(LONG x, LONG y, LONG wheel)
 {
+	cScopedTargetStateLock lock;
+
 	if (!m_menuOpen)
 		return;
 
@@ -425,6 +514,8 @@ void CTargetManager::AddMouseDelta(LONG x, LONG y, LONG wheel)
 
 void CTargetManager::SetMouseButton(unsigned int button, bool down)
 {
+	cScopedTargetStateLock lock;
+
 	if (button >= 5)
 		return;
 	if (!m_menuOpen)
@@ -435,6 +526,8 @@ void CTargetManager::SetMouseButton(unsigned int button, bool down)
 
 void CTargetManager::RenderImGui()
 {
+	cScopedTargetStateLock lock;
+
 	if (!HasValidContext() || !InputAllowed())
 		return;
 
@@ -443,31 +536,45 @@ void CTargetManager::RenderImGui()
 
 	const float cx = io.DisplaySize.x * 0.5f;
 	const float cy = io.DisplaySize.y * 0.5f;
-	const ImU32 teal = IM_COL32(54, 235, 210, 230);
-	const ImU32 tealSoft = IM_COL32(54, 235, 210, 90);
+	const ImU32 black = IM_COL32(5, 7, 8, 220);
+	const ImU32 blackSoft = IM_COL32(0, 0, 0, 128);
+	const ImU32 blackLine = IM_COL32(0, 0, 0, 230);
+	const ImU32 accent = IM_COL32(245, 248, 246, 235);
+	const ImU32 accentSoft = IM_COL32(245, 248, 246, 92);
+	const ImU32 textSoft = IM_COL32(232, 234, 232, 220);
 
 	ImDrawList* draw = ImGui::GetForegroundDrawList();
 	const bool drawPrompt = ShouldDrawPrompt();
 	if (drawPrompt)
 	{
-		draw->AddCircle(ImVec2(cx, cy), 13.0f, tealSoft, 32, 2.0f);
-		draw->AddCircleFilled(ImVec2(cx, cy), 4.0f, teal);
-		draw->AddLine(ImVec2(cx - 30.0f, cy), ImVec2(cx - 18.0f, cy), teal, 1.5f);
-		draw->AddLine(ImVec2(cx + 18.0f, cy), ImVec2(cx + 30.0f, cy), teal, 1.5f);
+		draw->AddCircleFilled(ImVec2(cx, cy), 19.0f, blackSoft, 40);
+		draw->AddCircle(ImVec2(cx, cy), 18.0f, blackLine, 40, 2.5f);
+		draw->AddCircle(ImVec2(cx, cy), 12.0f, accentSoft, 40, 1.5f);
+		draw->AddCircleFilled(ImVec2(cx, cy), 4.5f, accent, 32);
+		draw->AddLine(ImVec2(cx - 39.0f, cy), ImVec2(cx - 24.0f, cy), blackLine, 3.0f);
+		draw->AddLine(ImVec2(cx + 24.0f, cy), ImVec2(cx + 39.0f, cy), blackLine, 3.0f);
+		draw->AddLine(ImVec2(cx - 36.0f, cy), ImVec2(cx - 24.0f, cy), accentSoft, 1.4f);
+		draw->AddLine(ImVec2(cx + 24.0f, cy), ImVec2(cx + 36.0f, cy), accentSoft, 1.4f);
 	}
 
 	if (!m_menuOpen)
 	{
 		if (drawPrompt)
-			draw->AddText(ImVec2(cx + 22.0f, cy - 9.0f), teal, "ALT");
+		{
+			const ImVec2 keyMin(cx + 45.0f, cy - 11.0f);
+			const ImVec2 keyMax(cx + 81.0f, cy + 11.0f);
+			draw->AddRectFilled(keyMin, keyMax, black, 5.0f);
+			draw->AddRect(keyMin, keyMax, accentSoft, 5.0f);
+			draw->AddText(ImVec2(cx + 54.0f, cy - 8.0f), textSoft, "ALT");
+		}
 		return;
 	}
 
 	const float width = MenuWidth;
 	const float totalHeight = HeaderHeight + RowGap + (RowHeight + RowGap) * static_cast<float>(m_options.size()) + 10.0f;
-	ImGui::SetNextWindowPos(ImVec2(cx + 30.0f, cy - totalHeight * 0.5f), ImGuiCond_Always);
+	ImGui::SetNextWindowPos(ImVec2(cx + MenuOffsetX, cy - totalHeight * 0.5f), ImGuiCond_Always);
 	ImGui::SetNextWindowSize(ImVec2(width, totalHeight), ImGuiCond_Always);
-	ImGui::SetNextWindowBgAlpha(0.92f);
+	ImGui::SetNextWindowBgAlpha(0.96f);
 
 	ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar
 		| ImGuiWindowFlags_NoResize
@@ -478,10 +585,17 @@ void CTargetManager::RenderImGui()
 
 	unsigned int selectedOption = 0;
 
-	ImGui::Begin("##ompp_target_menu", NULL, flags);
+	ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.01f, 0.012f, 0.014f, 0.96f));
+	ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.92f, 0.94f, 0.92f, 0.42f));
+	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.025f, 0.035f, 0.040f, 0.94f));
+	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.20f, 0.21f, 0.21f, 0.98f));
+	ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.30f, 0.31f, 0.31f, 1.00f));
+	ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(0.92f, 0.94f, 0.92f, 0.24f));
 	ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.91f, 1.00f, 0.98f, 1.00f));
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 7.0f);
+	ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 5.0f);
+	ImGui::Begin("##ompp_target_menu", NULL, flags);
 	ImGui::TextUnformatted(m_title.empty() ? "Target" : m_title.c_str());
-	ImGui::PopStyleColor();
 	ImGui::Separator();
 
 	for (size_t i = 0; i < m_options.size(); ++i)
@@ -506,6 +620,8 @@ void CTargetManager::RenderImGui()
 	}
 
 	ImGui::End();
+	ImGui::PopStyleVar(2);
+	ImGui::PopStyleColor(7);
 
 	if (selectedOption != 0)
 		SendSelect(selectedOption);
@@ -627,11 +743,11 @@ void CTargetManager::OpenMenu()
 	BeginKeyboardReleaseLease();
 	CDInput8DeviceProxy::RequestInputReset();
 	m_hoverIndex = -1;
-	InitializeVirtualCursor();
-	if (!CGraphics::IsCursorEnabled())
+	m_virtualCursorInitialized = false;
+	m_cursorOwned = !CGraphics::IsCursorEnabled();
+	if (m_cursorOwned)
 	{
 		CGraphics::ToggleCursor(true);
-		m_cursorOwned = true;
 	}
 	SendMode(true);
 }
@@ -678,7 +794,7 @@ void CTargetManager::InitializeVirtualCursor()
 	const float cx = width * 0.5f;
 	const float cy = height * 0.5f;
 	const float totalHeight = HeaderHeight + RowGap + (RowHeight + RowGap) * static_cast<float>(m_options.size()) + 10.0f;
-	const float menuX = cx + 30.0f;
+	const float menuX = cx + MenuOffsetX;
 	const float menuY = cy - totalHeight * 0.5f;
 
 	m_virtualCursorX = menuX + MenuWidth * 0.5f;
@@ -688,10 +804,39 @@ void CTargetManager::InitializeVirtualCursor()
 
 void CTargetManager::ApplyImGuiInput()
 {
+	ImGuiIO& io = ImGui::GetIO();
+
+	if (m_menuOpen)
+	{
+		HWND hwnd = CMessageProxy::GetWindowHandle();
+		POINT cursor = {};
+		if (hwnd && GetCursorPos(&cursor))
+		{
+			ScreenToClient(hwnd, &cursor);
+			const float maxX = (std::max)(1.0f, io.DisplaySize.x - 1.0f);
+			const float maxY = (std::max)(1.0f, io.DisplaySize.y - 1.0f);
+			io.MousePos = ImVec2(
+				(std::max)(0.0f, (std::min)(static_cast<float>(cursor.x), maxX)),
+				(std::max)(0.0f, (std::min)(static_cast<float>(cursor.y), maxY)));
+		}
+
+		io.MouseDown[0] = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+		io.MouseDown[1] = (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
+		io.MouseDown[2] = (GetAsyncKeyState(VK_MBUTTON) & 0x8000) != 0;
+		for (int i = 3; i < 5; ++i)
+			io.MouseDown[i] = false;
+
+		if (m_virtualWheel != 0)
+		{
+			io.MouseWheel += static_cast<float>(m_virtualWheel) / 120.0f;
+			m_virtualWheel = 0;
+		}
+		return;
+	}
+
 	if (!m_virtualCursorInitialized)
 		InitializeVirtualCursor();
 
-	ImGuiIO& io = ImGui::GetIO();
 	const float maxX = (std::max)(1.0f, io.DisplaySize.x - 1.0f);
 	const float maxY = (std::max)(1.0f, io.DisplaySize.y - 1.0f);
 
@@ -730,7 +875,7 @@ void CTargetManager::SendSelect(unsigned int optionId)
 	bitStream.Write(optionId);
 	Network::SendRPC(eRPC::ON_TARGET_SELECT, &bitStream);
 	CloseMenu(true);
-	ClearContext();
+	ClearContextUnlocked();
 }
 
 void CTargetManager::UpdateHover()
@@ -743,7 +888,7 @@ void CTargetManager::UpdateHover()
 	CPoint2D& resolution = CGraphics::GetScreenResolution();
 	const float cx = static_cast<float>(resolution.X()) * 0.5f;
 	const float cy = static_cast<float>(resolution.Y()) * 0.5f;
-	const float x = cx + 28.0f;
+	const float x = cx + MenuOffsetX;
 	const float y = cy - (HeaderHeight + (RowHeight + RowGap) * static_cast<float>(m_options.size())) * 0.5f;
 
 	m_hoverIndex = -1;
@@ -839,26 +984,34 @@ void CTargetManager::DrawTextLine(const std::string& text, int x, int y, int w, 
 
 void CTargetManager::DrawEye(IDirect3DDevice9* device, float cx, float cy)
 {
-	const D3DCOLOR teal = D3DCOLOR_ARGB(230, 54, 235, 210);
-	const D3DCOLOR tealDim = D3DCOLOR_ARGB(80, 54, 235, 210);
+	const D3DCOLOR accent = D3DCOLOR_ARGB(235, 245, 248, 246);
+	const D3DCOLOR accentDim = D3DCOLOR_ARGB(92, 245, 248, 246);
+	const D3DCOLOR black = D3DCOLOR_ARGB(205, 5, 7, 8);
+	const D3DCOLOR blackLine = D3DCOLOR_ARGB(235, 0, 0, 0);
 
-	DrawFilledRect(device, cx - 5.0f, cy - 5.0f, 10.0f, 10.0f, teal);
-	DrawOutlineRect(device, cx - 16.0f, cy - 12.0f, 32.0f, 24.0f, tealDim);
-	DrawLine(device, cx - 28.0f, cy, cx - 18.0f, cy, teal);
-	DrawLine(device, cx + 18.0f, cy, cx + 28.0f, cy, teal);
-	DrawTextLine("ALT", static_cast<int>(cx + 20.0f), static_cast<int>(cy - 10.0f), 60, 20, teal);
+	DrawFilledRect(device, cx - 10.0f, cy - 10.0f, 20.0f, 20.0f, black);
+	DrawOutlineRect(device, cx - 16.0f, cy - 13.0f, 32.0f, 26.0f, blackLine);
+	DrawOutlineRect(device, cx - 12.0f, cy - 9.0f, 24.0f, 18.0f, accentDim);
+	DrawFilledRect(device, cx - 4.0f, cy - 4.0f, 8.0f, 8.0f, accent);
+	DrawLine(device, cx - 39.0f, cy, cx - 24.0f, cy, blackLine);
+	DrawLine(device, cx + 24.0f, cy, cx + 39.0f, cy, blackLine);
+	DrawLine(device, cx - 36.0f, cy, cx - 24.0f, cy, accentDim);
+	DrawLine(device, cx + 24.0f, cy, cx + 36.0f, cy, accentDim);
+	DrawFilledRect(device, cx + 45.0f, cy - 11.0f, 36.0f, 22.0f, black);
+	DrawOutlineRect(device, cx + 45.0f, cy - 11.0f, 36.0f, 22.0f, accentDim);
+	DrawTextLine("ALT", static_cast<int>(cx + 54.0f), static_cast<int>(cy - 10.0f), 30, 20, accent);
 }
 
 void CTargetManager::DrawMenu(IDirect3DDevice9* device, float cx, float cy)
 {
-	const float x = cx + 28.0f;
+	const float x = cx + MenuOffsetX;
 	const float totalHeight = HeaderHeight + RowGap + (RowHeight + RowGap) * static_cast<float>(m_options.size());
 	const float y = cy - totalHeight * 0.5f;
 
 	if (ShouldDrawPrompt())
 		DrawEye(device, cx, cy);
 	DrawFilledRect(device, x, y, MenuWidth, HeaderHeight, D3DCOLOR_ARGB(205, 20, 34, 38));
-	DrawOutlineRect(device, x, y, MenuWidth, HeaderHeight, D3DCOLOR_ARGB(220, 54, 235, 210));
+	DrawOutlineRect(device, x, y, MenuWidth, HeaderHeight, D3DCOLOR_ARGB(180, 235, 238, 235));
 	DrawTextLine(m_title.empty() ? "Target" : m_title, static_cast<int>(x + 10.0f), static_cast<int>(y), static_cast<int>(MenuWidth - 20.0f), static_cast<int>(HeaderHeight), D3DCOLOR_ARGB(255, 232, 255, 252));
 
 	for (size_t i = 0; i < m_options.size(); ++i)
@@ -866,8 +1019,8 @@ void CTargetManager::DrawMenu(IDirect3DDevice9* device, float cx, float cy)
 		const sTargetOption& option = m_options[i];
 		const float rowY = y + HeaderHeight + RowGap + static_cast<float>(i) * (RowHeight + RowGap);
 		const bool hovered = static_cast<int>(i) == m_hoverIndex;
-		const D3DCOLOR bg = hovered ? D3DCOLOR_ARGB(230, 31, 72, 72) : D3DCOLOR_ARGB(205, 17, 28, 32);
-		const D3DCOLOR border = hovered ? D3DCOLOR_ARGB(255, 54, 235, 210) : D3DCOLOR_ARGB(120, 54, 235, 210);
+		const D3DCOLOR bg = hovered ? D3DCOLOR_ARGB(230, 48, 50, 50) : D3DCOLOR_ARGB(205, 17, 20, 22);
+		const D3DCOLOR border = hovered ? D3DCOLOR_ARGB(230, 245, 248, 246) : D3DCOLOR_ARGB(105, 235, 238, 235);
 		const D3DCOLOR text = option.enabled ? D3DCOLOR_ARGB(255, 232, 255, 252) : D3DCOLOR_ARGB(150, 190, 202, 202);
 
 		DrawFilledRect(device, x, rowY, MenuWidth, RowHeight, bg);

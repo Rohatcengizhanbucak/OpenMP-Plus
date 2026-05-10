@@ -163,7 +163,6 @@ void CHooks::Apply()
 	ApplyDirect3D();
 	ApplyDirectInput();
 	ApplyPadUpdate();
-	ApplyPadControlGetters();
 	InstallJmp();
 	InstallPatches();
 }
@@ -172,7 +171,6 @@ void CHooks::ApplySafeInput()
 {
 	ApplyDirectInput();
 	ApplyPadUpdate();
-	ApplyPadControlGetters();
 }
 
 void CHooks::ApplySafeGraphics()
@@ -187,7 +185,6 @@ void CHooks::Remove()
 	RemoveDirect3D();
 	RemoveCursorPos();
 	RemovePadUpdate();
-	RemovePadControlGetters();
 	COverlayRenderer::Shutdown();
 }
 
