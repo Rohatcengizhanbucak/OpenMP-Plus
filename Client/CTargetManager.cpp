@@ -81,9 +81,9 @@ namespace
 
 	const unsigned char MaxTargetOptions = 8;
 	const float MenuWidth = 238.0f;
-	const float MenuOffsetX = 124.0f;
-	const float TargetOffsetX = 68.0f;
-	const float PromptLegendOffsetX = 64.0f;
+	const float MenuOffsetX = 58.0f;
+	const float TargetOffsetX = 87.0f;
+	const float PromptLegendOffsetX = 45.0f;
 	const float PromptTitleHeight = 24.0f;
 	const float PromptKeyWidth = 36.0f;
 	const float PromptKeyHeight = 22.0f;
