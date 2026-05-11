@@ -1,6 +1,7 @@
 #include <SAMP+/client/Client.h>
 #include <SAMP+/client/CGame.h>
 #include <SAMP+/client/CGraphics.h>
+#include <SAMP+/client/CBuildManager.h>
 #include <SAMP+/client/COverlayRenderer.h>
 #include <SAMP+/client/CTargetManager.h>
 #include <SAMP+/client/Proxy/CMessageProxy.h>
@@ -48,24 +49,31 @@ LRESULT CALLBACK CMessageProxy::Process(HWND wnd, UINT umsg, WPARAM wparam, LPAR
 	{
 	case WM_MOUSEMOVE:
 		CTargetManager::SetWindowMousePosition(GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam));
+		CBuildManager::SetWindowMousePosition(GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam));
 		break;
 	case WM_LBUTTONDOWN:
 		CTargetManager::SetMouseButton(0, true);
+		CBuildManager::SetMouseButton(0, true);
 		break;
 	case WM_LBUTTONUP:
 		CTargetManager::SetMouseButton(0, false);
+		CBuildManager::SetMouseButton(0, false);
 		break;
 	case WM_RBUTTONDOWN:
 		CTargetManager::SetMouseButton(1, true);
+		CBuildManager::SetMouseButton(1, true);
 		break;
 	case WM_RBUTTONUP:
 		CTargetManager::SetMouseButton(1, false);
+		CBuildManager::SetMouseButton(1, false);
 		break;
 	case WM_MBUTTONDOWN:
 		CTargetManager::SetMouseButton(2, true);
+		CBuildManager::SetMouseButton(2, true);
 		break;
 	case WM_MBUTTONUP:
 		CTargetManager::SetMouseButton(2, false);
+		CBuildManager::SetMouseButton(2, false);
 		break;
 	default:
 		break;
@@ -82,7 +90,7 @@ LRESULT CALLBACK CMessageProxy::Process(HWND wnd, UINT umsg, WPARAM wparam, LPAR
 		{
 			case WM_MOUSEMOVE:
 			{
-				if (CTargetManager::ShouldCaptureMouse())
+				if (CTargetManager::ShouldCaptureMouse() || CBuildManager::ShouldBlockCursorMove())
 					return 0;
 				break;
 			}
@@ -99,21 +107,21 @@ LRESULT CALLBACK CMessageProxy::Process(HWND wnd, UINT umsg, WPARAM wparam, LPAR
 	
 			case WM_LBUTTONDOWN:
 			{
-				if (CTargetManager::ShouldCaptureMouse())
+				if (CTargetManager::ShouldCaptureMouse() || CBuildManager::ShouldCaptureMouse())
 					return 0;
 				CGame::OnMouseClick(0, (UINT16)GET_X_LPARAM(lparam), (UINT16)GET_Y_LPARAM(lparam));
 				break;
 			}
 			case WM_RBUTTONDOWN:
 			{
-				if (CTargetManager::ShouldCaptureMouse())
+				if (CTargetManager::ShouldCaptureMouse() || CBuildManager::ShouldCaptureMouse())
 					return 0;
 				CGame::OnMouseClick(1, (UINT16) GET_X_LPARAM(lparam), (UINT16) GET_Y_LPARAM(lparam));
 				break;
 			}
 			case WM_MBUTTONDOWN:
 			{
-				if (CTargetManager::ShouldCaptureMouse())
+				if (CTargetManager::ShouldCaptureMouse() || CBuildManager::ShouldCaptureMouse())
 					return 0;
 				CGame::OnMouseClick(2, (UINT16) GET_X_LPARAM(lparam), (UINT16) GET_Y_LPARAM(lparam));
 				break;

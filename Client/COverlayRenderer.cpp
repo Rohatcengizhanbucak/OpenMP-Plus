@@ -2,6 +2,7 @@
 
 #include <SAMP+/client/CGraphics.h>
 #include <SAMP+/client/CLog.h>
+#include <SAMP+/client/CBuildManager.h>
 #include <SAMP+/client/CTargetManager.h>
 #include <SAMP+/client/Proxy/CMessageProxy.h>
 
@@ -350,8 +351,10 @@ void COverlayRenderer::Render(IDirect3DDevice9* device)
 		ImGui::NewFrame();
 
 		CTargetManager::Process();
+		CBuildManager::Process();
 		ImGui::GetIO().MouseDrawCursor = false;
 		CTargetManager::RenderImGui();
+		CBuildManager::RenderImGui();
 
 		ImGui::Render();
 		ImGui_ImplDX9_RenderDrawData(ImGui::GetDrawData());
@@ -387,6 +390,7 @@ bool COverlayRenderer::HandleWndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
 	case WM_SETCURSOR:
 		return false;
 	case WM_MOUSEMOVE:
+		return CTargetManager::ShouldCaptureMouse() || CBuildManager::ShouldBlockCursorMove();
 	case WM_LBUTTONDOWN:
 	case WM_LBUTTONUP:
 	case WM_RBUTTONDOWN:
@@ -394,13 +398,13 @@ bool COverlayRenderer::HandleWndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
 	case WM_MBUTTONDOWN:
 	case WM_MBUTTONUP:
 	case WM_MOUSEWHEEL:
-		return CTargetManager::ShouldCaptureMouse();
+		return CTargetManager::ShouldCaptureMouse() || CBuildManager::ShouldCaptureMouse();
 	case WM_KEYDOWN:
 	case WM_KEYUP:
 	case WM_SYSKEYDOWN:
 	case WM_SYSKEYUP:
 	case WM_CHAR:
-		return CTargetManager::ShouldSuppressKeyboard();
+		return CTargetManager::ShouldSuppressKeyboard() || CBuildManager::ShouldSuppressKeyboard();
 	default:
 		return false;
 	}

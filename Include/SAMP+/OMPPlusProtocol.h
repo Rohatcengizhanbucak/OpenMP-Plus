@@ -12,11 +12,12 @@ namespace OMPPlusProtocol
 	static const uint32_t CapabilityKeyCapture = 0x00000002;
 	static const uint32_t CapabilityTargetUI = 0x00000004;
 	static const uint32_t CapabilityTargetUIV2 = 0x00000008;
+	static const uint32_t CapabilityBuildUI = 0x00000010;
 	static const uint32_t DefaultCapabilities = CapabilityNativeTransport | CapabilityKeyCapture;
 	static const uint8_t ClientInfoVersion = 1;
 	static const uint16_t ClientVersionMajor = 0;
 	static const uint16_t ClientVersionMinor = 1;
-	static const uint16_t ClientVersionPatch = 17;
+	static const uint16_t ClientVersionPatch = 19;
 	static const uint8_t MaxClientHashLength = 64;
 	static const int MaxPayloadBytes = 4096;
 	static const int MaxMessagesPerSecond = 60;
@@ -30,8 +31,17 @@ namespace OMPPlusProtocol
 		FeatureEffects = 1 << 4,
 		FeatureUI = 1 << 5,
 		FeatureTarget = 1 << 6,
+		FeatureBuild = 1 << 7,
 
 		DefaultFeatures = FeatureHUD | FeatureKeybind | FeatureKeyCapture
+	};
+
+	enum BuildResult : uint8_t
+	{
+		BuildResultSuccess = 1,
+		BuildResultError = 2,
+		BuildResultPreviewValid = 3,
+		BuildResultPreviewInvalid = 4
 	};
 
 	enum TargetFlags : uint32_t
@@ -135,6 +145,16 @@ namespace OMPPlusProtocol
 		TARGET_SET_CONTEXT,
 		TARGET_CLEAR_CONTEXT,
 		ON_TARGET_SELECT,
-		ON_TARGET_MODE
+		ON_TARGET_MODE,
+
+		BUILD_OPEN,
+		BUILD_CLOSE,
+		BUILD_CLEAR_PARTS,
+		BUILD_ADD_PART,
+		BUILD_RESULT,
+		ON_BUILD_SELECT,
+		ON_BUILD_PLACE,
+		ON_BUILD_CANCEL,
+		ON_BUILD_PREVIEW
 	};
 }

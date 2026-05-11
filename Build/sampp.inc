@@ -91,11 +91,13 @@
 #define SAMPP_FEATURE_EFFECTS 16
 #define SAMPP_FEATURE_UI 32
 #define SAMPP_FEATURE_TARGET 64
+#define SAMPP_FEATURE_BUILD 128
 
 #define SAMPP_CAPABILITY_NATIVE_TRANSPORT 1
 #define SAMPP_CAPABILITY_KEY_CAPTURE 2
 #define SAMPP_CAPABILITY_TARGET_UI 4
 #define SAMPP_CAPABILITY_TARGET_UI_V2 8
+#define SAMPP_CAPABILITY_BUILD_UI 16
 
 #define SAMPP_CAPTURE_CONSUME_GAME_INPUT 1
 #define SAMPP_CAPTURE_BLOCK_SWITCH_WEAPON 2
@@ -136,6 +138,20 @@
 #define SAMPP_TARGET_ROW_DISABLED 5
 #define SAMPP_TARGET_ROW_TOGGLE 6
 #define SAMPP_TARGET_ROW_DANGER 7
+
+#define SAMPP_BUILD_RESULT_SUCCESS 1
+#define SAMPP_BUILD_RESULT_ERROR 2
+#define SAMPP_BUILD_RESULT_PREVIEW_VALID 3
+#define SAMPP_BUILD_RESULT_PREVIEW_INVALID 4
+
+#define SAMPP_BUILD_PART_FOUNDATION 1
+#define SAMPP_BUILD_PART_WALL 2
+#define SAMPP_BUILD_PART_DOORFRAME 3
+#define SAMPP_BUILD_PART_FLOOR 4
+#define SAMPP_BUILD_PART_ROOF 5
+#define SAMPP_BUILD_PART_STAIRS 6
+#define SAMPP_BUILD_PART_DOOR 7
+#define SAMPP_BUILD_ROTATION_STEP_DEGREES 90
 
 #define SAMPP_KEY_LBUTTON 0x01
 #define SAMPP_KEY_RBUTTON 0x02
@@ -278,6 +294,11 @@ native SAMPP_TargetAddOption(playerid, targetid, optionid, const label[], const 
 native SAMPP_TargetAddRow(playerid, targetid, optionid, row_type, const label[], const icon[] = "", bool:enabled = true);
 native SAMPP_TargetCommit(playerid, targetid);
 native SAMPP_TargetClear(playerid);
+native SAMPP_BuildOpen(playerid, sessionid, const title[], Float:max_distance = 8.0);
+native SAMPP_BuildClose(playerid);
+native SAMPP_BuildClearParts(playerid);
+native SAMPP_BuildAddPart(playerid, partid, modelid, const name[], const category[] = "", const cost[] = "");
+native SAMPP_BuildSendResult(playerid, result, const message[]);
 native SAMPP_ExecuteCallback(type, {Float,_}:...);
 
 stock bool:SAMPP_TargetAddAction(playerid, targetid, optionid, const label[], const icon[] = "")
@@ -376,6 +397,11 @@ stock bool:SAMPP_TargetHasUI(playerid)
 	return IsUsingSAMPP(playerid) && SAMPP_HasFeature(playerid, SAMPP_FEATURE_TARGET);
 }
 
+stock bool:SAMPP_BuildHasUI(playerid)
+{
+	return IsUsingSAMPP(playerid) && SAMPP_HasFeature(playerid, SAMPP_FEATURE_BUILD);
+}
+
 stock bool:SAMPP_TargetBeginNearPoint(playerid, targetid, Float:x, Float:y, Float:z, Float:radius, const title[], ttl_ms = 500, flags = 0)
 {
 	if (!SAMPP_TargetHasUI(playerid))
@@ -415,6 +441,14 @@ forward OnPlayerSAMPPTargetMode(playerid, targetid, bool:opened);
 forward OnPlayerSAMPPTargetSelect(playerid, targetid, optionid);
 forward OnPlayerOMPPlusTargetMode(playerid, targetid, bool:opened);
 forward OnPlayerOMPPlusTargetSelect(playerid, targetid, optionid);
+forward OnPlayerSAMPPBuildSelect(playerid, sessionid, partid);
+forward OnPlayerSAMPPBuildPlace(playerid, sessionid, partid, rotation_step, bool:flipped);
+forward OnPlayerSAMPPBuildCancel(playerid, sessionid);
+forward OnPlayerSAMPPBuildPreview(playerid, sessionid, partid, rotation_step, bool:flipped);
+forward OnPlayerOMPPlusBuildSelect(playerid, sessionid, partid);
+forward OnPlayerOMPPlusBuildPlace(playerid, sessionid, partid, rotation_step, bool:flipped);
+forward OnPlayerOMPPlusBuildCancel(playerid, sessionid);
+forward OnPlayerOMPPlusBuildPreview(playerid, sessionid, partid, rotation_step, bool:flipped);
 
 public OnPlayerConnect(playerid)
 {

@@ -62,6 +62,25 @@ struct OMPPlusTargetContext
 	std::vector<OMPPlusTargetOption> options;
 };
 
+struct OMPPlusBuildPart
+{
+	uint32_t partId = 0;
+	int32_t modelId = 0;
+	std::string name;
+	std::string category;
+	std::string cost;
+};
+
+struct OMPPlusBuildContext
+{
+	bool active = false;
+	uint32_t sessionId = 0;
+	float maxDistance = 8.0f;
+	std::string title;
+	std::vector<OMPPlusBuildPart> parts;
+	TimePoint lastPlaceAt = TimePoint::min();
+};
+
 class OMPPlusComponent final
 	: public IComponent
 	, public PlayerConnectEventHandler
@@ -108,6 +127,11 @@ public:
 	bool addTargetRow(int playerid, uint32_t targetid, uint32_t optionid, uint8_t rowType, const std::string& label, const std::string& icon, bool enabled);
 	bool commitTargetContext(int playerid, uint32_t targetid);
 	bool clearTargetContext(int playerid);
+	bool openBuild(int playerid, uint32_t sessionid, const std::string& title, float maxDistance);
+	bool closeBuild(int playerid);
+	bool clearBuildParts(int playerid);
+	bool addBuildPart(int playerid, uint32_t partid, int32_t modelid, const std::string& name, const std::string& category, const std::string& cost);
+	bool sendBuildResult(int playerid, uint8_t result, const std::string& message);
 
 	template <typename... Args>
 	cell callPublic(const char* name, DefaultReturnValue defaultReturn, Args&&... args)
@@ -132,6 +156,7 @@ private:
 	IPawnComponent* pawn_ = nullptr;
 	std::array<OMPPlusPlayerState, PLAYER_POOL_SIZE> states_;
 	std::array<OMPPlusTargetContext, PLAYER_POOL_SIZE> targetContexts_;
+	std::array<OMPPlusBuildContext, PLAYER_POOL_SIZE> buildContexts_;
 	std::vector<IPawnScript*> scripts_;
 
 	void resetPlayer(int playerid);
@@ -142,6 +167,10 @@ private:
 	bool handleClientRPC(IPlayer& player, NetworkBitStream& stream);
 	void processClientRPC(IPlayer& player, uint16_t rpc, NetworkBitStream& stream);
 	void processTargetSelect(IPlayer& player, NetworkBitStream& stream);
+	void processBuildSelect(IPlayer& player, NetworkBitStream& stream);
+	void processBuildPlace(IPlayer& player, NetworkBitStream& stream);
+	void processBuildCancel(IPlayer& player, NetworkBitStream& stream);
+	void processBuildPreview(IPlayer& player, NetworkBitStream& stream);
 	uint32_t deriveLegacyFeatures(uint32_t capabilities) const;
 	void sendHelloAck(IPlayer& player);
 	void sendError(IPlayer& player, uint16_t code);

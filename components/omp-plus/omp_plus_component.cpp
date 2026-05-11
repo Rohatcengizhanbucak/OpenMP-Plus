@@ -12,8 +12,17 @@ namespace
 	constexpr size_t MaxTargetLabelLength = 96;
 	constexpr size_t MaxTargetIconLength = 24;
 	constexpr size_t MaxTargetDescriptionLength = 128;
+	constexpr size_t MaxBuildParts = 32;
+	constexpr size_t MaxBuildTitleLength = 48;
+	constexpr size_t MaxBuildNameLength = 48;
+	constexpr size_t MaxBuildCategoryLength = 32;
+	constexpr size_t MaxBuildCostLength = 48;
+	constexpr size_t MaxBuildMessageLength = 96;
 	constexpr uint16_t DefaultTargetTtlMs = 500;
 	constexpr uint16_t MaxTargetTtlMs = 5000;
+	constexpr float DefaultBuildMaxDistance = 8.0f;
+	constexpr float MaxBuildMaxDistance = 30.0f;
+	constexpr int BuildPlaceCooldownMs = 250;
 
 	std::string BoundString(const std::string& value, size_t maxLength)
 	{
@@ -109,6 +118,8 @@ void OMPPlusComponent::reset()
 		state = OMPPlusPlayerState();
 	for (auto& context : targetContexts_)
 		context = OMPPlusTargetContext();
+	for (auto& context : buildContexts_)
+		context = OMPPlusBuildContext();
 }
 
 void OMPPlusComponent::onPlayerConnect(IPlayer& player)
@@ -431,12 +442,102 @@ bool OMPPlusComponent::clearTargetContext(int playerid)
 	return sendLegacyRPC(playerid, OMPPlusProtocol::TARGET_CLEAR_CONTEXT) != 0;
 }
 
+bool OMPPlusComponent::openBuild(int playerid, uint32_t sessionid, const std::string& title, float maxDistance)
+{
+	if (playerid < 0 || playerid >= PLAYER_POOL_SIZE || !isUsingOMPPlus(playerid) || sessionid == 0)
+		return false;
+
+	if (maxDistance <= 0.0f)
+		maxDistance = DefaultBuildMaxDistance;
+	maxDistance = std::min<float>(maxDistance, MaxBuildMaxDistance);
+
+	OMPPlusBuildContext& context = buildContexts_[playerid];
+	context.active = true;
+	context.sessionId = sessionid;
+	context.maxDistance = maxDistance;
+	context.title = BoundString(title, MaxBuildTitleLength);
+	context.lastPlaceAt = TimePoint::min();
+
+	NetworkBitStream stream;
+	stream.Write(context.sessionId);
+	stream.Write(context.maxDistance);
+	WriteBoundString(stream, context.title, MaxBuildTitleLength);
+	return sendLegacyRPC(playerid, OMPPlusProtocol::BUILD_OPEN, &stream);
+}
+
+bool OMPPlusComponent::closeBuild(int playerid)
+{
+	if (playerid < 0 || playerid >= PLAYER_POOL_SIZE)
+		return false;
+
+	buildContexts_[playerid] = OMPPlusBuildContext();
+	return sendLegacyRPC(playerid, OMPPlusProtocol::BUILD_CLOSE) != 0;
+}
+
+bool OMPPlusComponent::clearBuildParts(int playerid)
+{
+	if (playerid < 0 || playerid >= PLAYER_POOL_SIZE || !isUsingOMPPlus(playerid))
+		return false;
+
+	OMPPlusBuildContext& context = buildContexts_[playerid];
+	if (!context.active)
+		return false;
+
+	context.parts.clear();
+	return sendLegacyRPC(playerid, OMPPlusProtocol::BUILD_CLEAR_PARTS) != 0;
+}
+
+bool OMPPlusComponent::addBuildPart(int playerid, uint32_t partid, int32_t modelid, const std::string& name, const std::string& category, const std::string& cost)
+{
+	if (playerid < 0 || playerid >= PLAYER_POOL_SIZE || !isUsingOMPPlus(playerid) || partid == 0)
+		return false;
+
+	OMPPlusBuildContext& context = buildContexts_[playerid];
+	if (!context.active || context.parts.size() >= MaxBuildParts)
+		return false;
+
+	const auto duplicate = std::find_if(context.parts.begin(), context.parts.end(), [partid](const OMPPlusBuildPart& part)
+	{
+		return part.partId == partid;
+	});
+	if (duplicate != context.parts.end())
+		return false;
+
+	OMPPlusBuildPart part;
+	part.partId = partid;
+	part.modelId = modelid;
+	part.name = BoundString(name, MaxBuildNameLength);
+	part.category = BoundString(category, MaxBuildCategoryLength);
+	part.cost = BoundString(cost, MaxBuildCostLength);
+	context.parts.push_back(part);
+
+	NetworkBitStream stream;
+	stream.Write(part.partId);
+	stream.Write(part.modelId);
+	WriteBoundString(stream, part.name, MaxBuildNameLength);
+	WriteBoundString(stream, part.category, MaxBuildCategoryLength);
+	WriteBoundString(stream, part.cost, MaxBuildCostLength);
+	return sendLegacyRPC(playerid, OMPPlusProtocol::BUILD_ADD_PART, &stream);
+}
+
+bool OMPPlusComponent::sendBuildResult(int playerid, uint8_t result, const std::string& message)
+{
+	if (playerid < 0 || playerid >= PLAYER_POOL_SIZE || !isUsingOMPPlus(playerid))
+		return false;
+
+	NetworkBitStream stream;
+	stream.Write(result);
+	WriteBoundString(stream, message, MaxBuildMessageLength);
+	return sendLegacyRPC(playerid, OMPPlusProtocol::BUILD_RESULT, &stream);
+}
+
 void OMPPlusComponent::resetPlayer(int playerid)
 {
 	if (playerid >= 0 && playerid < PLAYER_POOL_SIZE)
 	{
 		states_[playerid] = OMPPlusPlayerState();
 		targetContexts_[playerid] = OMPPlusTargetContext();
+		buildContexts_[playerid] = OMPPlusBuildContext();
 	}
 }
 
@@ -599,6 +700,8 @@ uint32_t OMPPlusComponent::deriveLegacyFeatures(uint32_t capabilities) const
 		features |= OMPPlusProtocol::FeatureKeyCapture;
 	if (capabilities & (OMPPlusProtocol::CapabilityTargetUI | OMPPlusProtocol::CapabilityTargetUIV2))
 		features |= OMPPlusProtocol::FeatureTarget | OMPPlusProtocol::FeatureUI;
+	if (capabilities & OMPPlusProtocol::CapabilityBuildUI)
+		features |= OMPPlusProtocol::FeatureBuild | OMPPlusProtocol::FeatureUI;
 	return features;
 }
 
@@ -728,6 +831,18 @@ void OMPPlusComponent::processClientRPC(IPlayer& player, uint16_t rpc, NetworkBi
 		}
 		break;
 	}
+	case OMPPlusProtocol::ON_BUILD_SELECT:
+		processBuildSelect(player, stream);
+		break;
+	case OMPPlusProtocol::ON_BUILD_PLACE:
+		processBuildPlace(player, stream);
+		break;
+	case OMPPlusProtocol::ON_BUILD_CANCEL:
+		processBuildCancel(player, stream);
+		break;
+	case OMPPlusProtocol::ON_BUILD_PREVIEW:
+		processBuildPreview(player, stream);
+		break;
 	default:
 		break;
 	}
@@ -762,11 +877,117 @@ void OMPPlusComponent::processTargetSelect(IPlayer& player, NetworkBitStream& st
 	callPublic("OnPlayerOMPPlusTargetSelect", DefaultReturnValue_True, playerid, static_cast<int>(targetid), static_cast<int>(optionid));
 }
 
+void OMPPlusComponent::processBuildSelect(IPlayer& player, NetworkBitStream& stream)
+{
+	const int playerid = player.getID();
+	uint32_t sessionid = 0;
+	uint32_t partid = 0;
+	if (!stream.Read(sessionid) || !stream.Read(partid))
+		return;
+
+	if (playerid < 0 || playerid >= PLAYER_POOL_SIZE)
+		return;
+
+	OMPPlusBuildContext& context = buildContexts_[playerid];
+	if (!context.active || context.sessionId != sessionid)
+		return;
+
+	const auto partIt = std::find_if(context.parts.begin(), context.parts.end(), [partid](const OMPPlusBuildPart& part)
+	{
+		return part.partId == partid;
+	});
+	if (partIt == context.parts.end())
+		return;
+
+	callPublic("OnPlayerSAMPPBuildSelect", DefaultReturnValue_True, playerid, static_cast<int>(sessionid), static_cast<int>(partid));
+	callPublic("OnPlayerOMPPlusBuildSelect", DefaultReturnValue_True, playerid, static_cast<int>(sessionid), static_cast<int>(partid));
+}
+
+void OMPPlusComponent::processBuildPlace(IPlayer& player, NetworkBitStream& stream)
+{
+	const int playerid = player.getID();
+	uint32_t sessionid = 0;
+	uint32_t partid = 0;
+	int16_t rotationStep = 0;
+	bool flipped = false;
+	if (!stream.Read(sessionid) || !stream.Read(partid) || !stream.Read(rotationStep) || !stream.Read(flipped))
+		return;
+
+	if (playerid < 0 || playerid >= PLAYER_POOL_SIZE)
+		return;
+
+	OMPPlusBuildContext& context = buildContexts_[playerid];
+	if (!context.active || context.sessionId != sessionid)
+		return;
+
+	TimePoint now = Time::now();
+	if (context.lastPlaceAt != TimePoint::min() && now - context.lastPlaceAt < Milliseconds(BuildPlaceCooldownMs))
+		return;
+
+	const auto partIt = std::find_if(context.parts.begin(), context.parts.end(), [partid](const OMPPlusBuildPart& part)
+	{
+		return part.partId == partid;
+	});
+	if (partIt == context.parts.end())
+		return;
+
+	context.lastPlaceAt = now;
+	callPublic("OnPlayerSAMPPBuildPlace", DefaultReturnValue_True, playerid, static_cast<int>(sessionid), static_cast<int>(partid), static_cast<int>(rotationStep), flipped ? 1 : 0);
+	callPublic("OnPlayerOMPPlusBuildPlace", DefaultReturnValue_True, playerid, static_cast<int>(sessionid), static_cast<int>(partid), static_cast<int>(rotationStep), flipped ? 1 : 0);
+}
+
+void OMPPlusComponent::processBuildCancel(IPlayer& player, NetworkBitStream& stream)
+{
+	const int playerid = player.getID();
+	uint32_t sessionid = 0;
+	if (!stream.Read(sessionid))
+		return;
+
+	if (playerid < 0 || playerid >= PLAYER_POOL_SIZE)
+		return;
+
+	OMPPlusBuildContext& context = buildContexts_[playerid];
+	if (!context.active || context.sessionId != sessionid)
+		return;
+
+	callPublic("OnPlayerSAMPPBuildCancel", DefaultReturnValue_True, playerid, static_cast<int>(sessionid));
+	callPublic("OnPlayerOMPPlusBuildCancel", DefaultReturnValue_True, playerid, static_cast<int>(sessionid));
+	closeBuild(playerid);
+}
+
+void OMPPlusComponent::processBuildPreview(IPlayer& player, NetworkBitStream& stream)
+{
+	const int playerid = player.getID();
+	uint32_t sessionid = 0;
+	uint32_t partid = 0;
+	int16_t rotationStep = 0;
+	bool flipped = false;
+	if (!stream.Read(sessionid) || !stream.Read(partid) || !stream.Read(rotationStep) || !stream.Read(flipped))
+		return;
+
+	if (playerid < 0 || playerid >= PLAYER_POOL_SIZE)
+		return;
+
+	OMPPlusBuildContext& context = buildContexts_[playerid];
+	if (!context.active || context.sessionId != sessionid)
+		return;
+
+	const auto partIt = std::find_if(context.parts.begin(), context.parts.end(), [partid](const OMPPlusBuildPart& part)
+	{
+		return part.partId == partid;
+	});
+	if (partIt == context.parts.end())
+		return;
+
+	callPublic("OnPlayerSAMPPBuildPreview", DefaultReturnValue_True, playerid, static_cast<int>(sessionid), static_cast<int>(partid), static_cast<int>(rotationStep), flipped ? 1 : 0);
+	callPublic("OnPlayerOMPPlusBuildPreview", DefaultReturnValue_True, playerid, static_cast<int>(sessionid), static_cast<int>(partid), static_cast<int>(rotationStep), flipped ? 1 : 0);
+}
+
 void OMPPlusComponent::sendHelloAck(IPlayer& player)
 {
 	NetworkBitStream stream;
 	writeHeader(stream, OMPPlusProtocol::Message::HelloAck);
-	stream.Write(OMPPlusProtocol::DefaultCapabilities | OMPPlusProtocol::CapabilityTargetUI | OMPPlusProtocol::CapabilityTargetUIV2);
+	stream.Write(OMPPlusProtocol::DefaultCapabilities | OMPPlusProtocol::CapabilityTargetUI | OMPPlusProtocol::CapabilityTargetUIV2 | OMPPlusProtocol::CapabilityBuildUI);
 	player.sendRPC(OMPPlusProtocol::RpcID, Span<uint8_t>(stream.GetData(), stream.GetNumberOfBitsUsed()), OMPPlusProtocol::Channel);
 }
 

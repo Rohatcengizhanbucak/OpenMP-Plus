@@ -516,6 +516,44 @@ namespace
 	{
 		return Component()->clearTargetContext(static_cast<int>(params[1])) ? 1 : 0;
 	}
+
+	cell AMX_NATIVE_CALL BuildOpenProc(AMX* amx, cell* params)
+	{
+		const int playerid = static_cast<int>(params[1]);
+		const uint32_t sessionid = static_cast<uint32_t>(params[2]);
+		const std::string title = Component()->getPawnString(amx, params[3], 48);
+		const float maxDistance = ParamCount(params) >= 4 ? amx_ctof(params[4]) : 8.0f;
+		return Component()->openBuild(playerid, sessionid, title, maxDistance) ? 1 : 0;
+	}
+
+	cell AMX_NATIVE_CALL BuildCloseProc(AMX*, cell* params)
+	{
+		return Component()->closeBuild(static_cast<int>(params[1])) ? 1 : 0;
+	}
+
+	cell AMX_NATIVE_CALL BuildClearPartsProc(AMX*, cell* params)
+	{
+		return Component()->clearBuildParts(static_cast<int>(params[1])) ? 1 : 0;
+	}
+
+	cell AMX_NATIVE_CALL BuildAddPartProc(AMX* amx, cell* params)
+	{
+		const int playerid = static_cast<int>(params[1]);
+		const uint32_t partid = static_cast<uint32_t>(params[2]);
+		const int32_t modelid = static_cast<int32_t>(params[3]);
+		const std::string name = Component()->getPawnString(amx, params[4], 48);
+		const std::string category = ParamCount(params) >= 5 ? Component()->getPawnString(amx, params[5], 32) : std::string();
+		const std::string cost = ParamCount(params) >= 6 ? Component()->getPawnString(amx, params[6], 48) : std::string();
+		return Component()->addBuildPart(playerid, partid, modelid, name, category, cost) ? 1 : 0;
+	}
+
+	cell AMX_NATIVE_CALL BuildSendResultProc(AMX* amx, cell* params)
+	{
+		const int playerid = static_cast<int>(params[1]);
+		const uint8_t result = static_cast<uint8_t>(std::max<cell>(0, std::min<cell>(255, params[2])));
+		const std::string message = Component()->getPawnString(amx, params[3], 96);
+		return Component()->sendBuildResult(playerid, result, message) ? 1 : 0;
+	}
 }
 
 AMX_NATIVE_INFO OMPPlusNatives[] =
@@ -577,5 +615,10 @@ AMX_NATIVE_INFO OMPPlusNatives[] =
 	{ "SAMPP_TargetAddRow", TargetAddRowProc },
 	{ "SAMPP_TargetCommit", TargetCommitProc },
 	{ "SAMPP_TargetClear", TargetClearProc },
+	{ "SAMPP_BuildOpen", BuildOpenProc },
+	{ "SAMPP_BuildClose", BuildCloseProc },
+	{ "SAMPP_BuildClearParts", BuildClearPartsProc },
+	{ "SAMPP_BuildAddPart", BuildAddPartProc },
+	{ "SAMPP_BuildSendResult", BuildSendResultProc },
 	{ nullptr, nullptr }
 };

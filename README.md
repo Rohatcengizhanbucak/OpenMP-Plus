@@ -27,6 +27,8 @@ Prebuilt Windows binaries may need to be rebuilt from this source tree before th
 - HUD component toggle RPCs
 - Safe keybind callbacks using WinAPI keyboard polling
 - Keybind callbacks are suppressed while SA-MP chat input is active.
+- Server-driven target UI and experimental build UI demos through the native
+  RPC bridge.
 - `OnPlayerSAMPPKey(playerid, keyid, keystate, action[])`
 
 Previous smoke tests confirmed the safe feature subset:
@@ -52,6 +54,7 @@ git submodule update --init --recursive
 ```
 
 Detailed setup notes are also available in [docs/INSTALL.md](docs/INSTALL.md).
+The experimental build UI demo is documented in [docs/BUILD_DEMO.md](docs/BUILD_DEMO.md).
 
 ### Server
 
@@ -70,6 +73,7 @@ Optional smoke-test files:
 <openmp-server>\filterscripts\sampp_menudemo.amx
 <openmp-server>\filterscripts\sampp_capabilitydemo.amx
 <openmp-server>\filterscripts\sampp_targetdemo.amx
+<openmp-server>\filterscripts\sampp_builddemo.amx
 ```
 
 Do not add a top-level `components` list containing only `omp-plus`. On some
@@ -162,6 +166,8 @@ examples/filterscripts/sampp_capabilitydemo.pwn
 examples/filterscripts/sampp_capabilitydemo.amx
 examples/filterscripts/sampp_targetdemo.pwn
 examples/filterscripts/sampp_targetdemo.amx
+examples/filterscripts/sampp_builddemo.pwn
+examples/filterscripts/sampp_builddemo.amx
 ```
 
 Copy the `.amx` files you want to test to your open.mp server `filterscripts` directory, then add them to your open.mp config:
@@ -173,7 +179,8 @@ Copy the `.amx` files you want to test to your open.mp server `filterscripts` di
         "filterscripts/sampp_itemdemo",
         "filterscripts/sampp_menudemo",
         "filterscripts/sampp_capabilitydemo",
-        "filterscripts/sampp_targetdemo"
+        "filterscripts/sampp_targetdemo",
+        "filterscripts/sampp_builddemo"
     ]
 }
 ```

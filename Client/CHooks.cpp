@@ -1,6 +1,7 @@
 #include <SAMP+/client/Client.h>
 #include <SAMP+/client/CHooks.h>
 #include <SAMP+/client/CGame.h>
+#include <SAMP+/client/CBuildManager.h>
 #include <SAMP+/client/CLog.h>
 #include <SAMP+/client/COverlayRenderer.h>
 #include <SAMP+/client/CTargetManager.h>
@@ -41,7 +42,7 @@ namespace
 
 	bool ShouldNeutralizePadControls()
 	{
-		return CTargetManager::ShouldBlockGameControls();
+		return CTargetManager::ShouldBlockGameControls() || CBuildManager::ShouldBlockGameControls();
 	}
 
 	short __fastcall HOOK_GetSteeringLeftRight(void* pad, void*) { return ShouldNeutralizePadControls() ? 0 : g_pfnGetSteeringLeftRight(pad); }

@@ -1,5 +1,6 @@
 #include <SAMP+/CRPC.h>
 #include <SAMP+/client/Client.h>
+#include <SAMP+/client/CBuildManager.h>
 #include <SAMP+/client/CKeyBinds.h>
 #include <SAMP+/client/CGameRakClient.h>
 #include <SAMP+/client/CTargetManager.h>
@@ -147,6 +148,31 @@ namespace Network
 			case eRPC::TARGET_CLEAR_CONTEXT:
 			{
 				CTargetManager::ClearContext();
+				break;
+			}
+			case eRPC::BUILD_OPEN:
+			{
+				CBuildManager::HandleOpen(bitStream);
+				break;
+			}
+			case eRPC::BUILD_CLOSE:
+			{
+				CBuildManager::HandleClose();
+				break;
+			}
+			case eRPC::BUILD_CLEAR_PARTS:
+			{
+				CBuildManager::HandleClearParts();
+				break;
+			}
+			case eRPC::BUILD_ADD_PART:
+			{
+				CBuildManager::HandleAddPart(bitStream);
+				break;
+			}
+			case eRPC::BUILD_RESULT:
+			{
+				CBuildManager::HandleResult(bitStream);
 				break;
 			}
 			default:
@@ -301,6 +327,7 @@ namespace Network
 					bServerHasPlugin = false;
 					CKeyBinds::Clear();
 					CTargetManager::ClearContext();
+					CBuildManager::Clear();
 
 					break;
 				}
@@ -310,6 +337,7 @@ namespace Network
 					bConnected = false;
 					CKeyBinds::Clear();
 					CTargetManager::ClearContext();
+					CBuildManager::Clear();
 
 					if (ServerHasPlugin())
 						Connect();
@@ -454,6 +482,7 @@ namespace Network
 	{
 		CKeyBinds::Clear();
 		CTargetManager::ClearContext();
+		CBuildManager::Clear();
 
 		if (transportMode == TRANSPORT_NATIVE_RAKCLIENT)
 			CGameRakClient::Shutdown();

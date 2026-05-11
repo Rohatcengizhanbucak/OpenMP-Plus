@@ -151,8 +151,8 @@ bool CGameRakClient::SendHello()
 	uint32_t features = OMPPlusProtocol::DefaultFeatures;
 	if (COverlayRenderer::IsEnabled())
 	{
-		capabilities |= OMPPlusProtocol::CapabilityTargetUI | OMPPlusProtocol::CapabilityTargetUIV2;
-		features |= OMPPlusProtocol::FeatureTarget | OMPPlusProtocol::FeatureUI;
+		capabilities |= OMPPlusProtocol::CapabilityTargetUI | OMPPlusProtocol::CapabilityTargetUIV2 | OMPPlusProtocol::CapabilityBuildUI;
+		features |= OMPPlusProtocol::FeatureTarget | OMPPlusProtocol::FeatureUI | OMPPlusProtocol::FeatureBuild;
 	}
 
 	RakNet::BitStream stream;

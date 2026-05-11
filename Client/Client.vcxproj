@@ -218,6 +218,7 @@
     <ClCompile Include="CRakClient.cpp" />
     <ClCompile Include="CRPCCallback.cpp" />
     <ClCompile Include="CSystem.cpp" />
+    <ClCompile Include="CBuildManager.cpp" />
     <ClCompile Include="CTargetManager.cpp" />
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="Network.cpp" />
@@ -241,6 +242,7 @@
     <ClInclude Include="..\Include\SAMP+\client\CGameRakClient.h" />
     <ClInclude Include="..\Include\SAMP+\client\COverlayRenderer.h" />
     <ClInclude Include="..\Include\SAMP+\client\CSampClient.h" />
+    <ClInclude Include="..\Include\SAMP+\client\CBuildManager.h" />
     <ClInclude Include="..\Include\SAMP+\client\CTargetManager.h" />
     <ClInclude Include="resource.h" />
   </ItemGroup>

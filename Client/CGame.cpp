@@ -8,6 +8,7 @@
 #include <SAMP+/client/Proxy/CJmpProxy.h>
 #include <SAMP+/client/Network.h>
 #include <SAMP+/client/CSystem.h>
+#include <SAMP+/client/CBuildManager.h>
 #include <SAMP+/client/CTargetManager.h>
 
 namespace
@@ -233,7 +234,7 @@ void CGame::OnUnload()
 
 int CGame::OnCursorMove(int iX, int iY)
 {
-	return !CTargetManager::IsMenuOpen();
+	return !CTargetManager::IsMenuOpen() && !CBuildManager::ShouldBlockCursorMove();
 }
 
 void CGame::PreDeviceReset()
@@ -512,7 +513,7 @@ void CGame::ToggleThermalVision(bool toggle)
 
 void CGame::ApplyTargetInputBlock()
 {
-	const bool active = CTargetManager::ShouldBlockGameControls();
+	const bool active = CTargetManager::ShouldBlockGameControls() || CBuildManager::ShouldBlockGameControls();
 
 	if (active != g_targetInputBlockWasActive)
 	{

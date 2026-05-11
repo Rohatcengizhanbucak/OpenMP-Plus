@@ -52,6 +52,7 @@ Recommended native component layout:
     sampp_itemdemo.amx
     sampp_capabilitydemo.amx
     sampp_targetdemo.amx
+    sampp_builddemo.amx
 ```
 
 Do not add this as the only top-level component list:
@@ -77,7 +78,8 @@ To load the smoke-test and capability demo filterscripts, add them under
     "side_scripts": [
         "filterscripts/sampp_smoketest",
         "filterscripts/sampp_capabilitydemo",
-        "filterscripts/sampp_targetdemo"
+        "filterscripts/sampp_targetdemo",
+        "filterscripts/sampp_builddemo"
     ]
 }
 ```
@@ -95,6 +97,10 @@ Useful in-game checks:
 - `/targetveh`: server-driven target UI demo. Stand near the spawned vehicle,
   press `ALT` once to open the mouse menu, and select an option. The server
   validates the selected `targetid` and `optionid` before Pawn callbacks run.
+- `/builddemo`: experimental server-authoritative build UI demo. The client
+  renders the build menu and sends select/place/cancel requests; Pawn creates
+  the real objects only after validating the request. `Q/E` rotates, middle
+  mouse flips, left mouse places, and right mouse or `ESC` closes.
 
 Expected server log line:
 
