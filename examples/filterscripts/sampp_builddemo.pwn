@@ -863,7 +863,7 @@ stock OpenBuildDemo(playerid)
 	SAMPP_BuildAddPart(playerid, SAMPP_BUILD_PART_DOOR, BUILD_MODEL_DOOR, "Door", "Access", "50 wood");
 
 	SendClientMessage(playerid, BUILD_DEMO_OK_COLOUR, "[BuildDemo] Build UI opened. Select a part to show a live preview.");
-	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] LMB confirms. MMB switches side for walls/doors. RMB/ESC closes.");
+	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] LMB confirms. MMB switches side for walls/doors. RMB returns to menu; RMB again or ESC closes.");
 	return 1;
 }
 
@@ -1039,7 +1039,7 @@ stock SendBuildDemoHelp(playerid)
 {
 	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] /builddemo opens a server-authoritative build menu.");
 	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] Select a part first; a temporary player-object preview follows your camera aim.");
-	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] LMB confirms the preview, RMB/ESC closes, MMB switches side for walls and doors.");
+	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] LMB confirms the preview. RMB returns to the menu; RMB again or ESC closes. MMB switches side.");
 	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] Foundations snap to neighbours; walls/door frames snap to edge surfaces automatically.");
 	return 1;
 }

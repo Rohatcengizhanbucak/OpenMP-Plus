@@ -248,16 +248,18 @@ namespace
 		case BuildPartWall:
 		case BuildPartDoorFrame:
 			return flipped
-				? "Outer side  |  MMB switch side  |  LMB place  RMB close"
-				: "Inner side  |  MMB switch side  |  LMB place  RMB close";
+				? "Outer side  |  MMB switch side  |  LMB place  RMB menu"
+				: "Inner side  |  MMB switch side  |  LMB place  RMB menu";
 		case BuildPartDoor:
 			return flipped
-				? "Opens outward  |  MMB switch side  |  LMB place  RMB close"
-				: "Opens inward  |  MMB switch side  |  LMB place  RMB close";
+				? "Opens outward  |  MMB switch side  |  LMB place  RMB menu"
+				: "Opens inward  |  MMB switch side  |  LMB place  RMB menu";
 		case BuildPartStairs:
-			return "Aim edge to choose direction  |  LMB place  RMB close";
+			return "Aim edge to choose direction  |  LMB place  RMB menu";
+		case 0:
+			return "Select a part  |  RMB close";
 		default:
-			return "LMB place  |  RMB close";
+			return "LMB place  |  RMB menu";
 		}
 	}
 }
@@ -402,9 +404,18 @@ void CBuildManager::Process()
 	const bool eDown = IsPhysicalKeyDown('E');
 	const bool inputGuardActive = static_cast<long>(GetTickCount() - m_inputGuardUntil) < 0;
 
-	if (!inputGuardActive && ((escapeDown && !m_lastEscapeDown) || (rightDown && !m_lastRightDown)))
+	if (!inputGuardActive && escapeDown && !m_lastEscapeDown)
 	{
 		SendCancel();
+		return;
+	}
+
+	if (!inputGuardActive && rightDown && !m_lastRightDown)
+	{
+		if (m_menuOpen)
+			SendCancel();
+		else
+			ReturnToMenu();
 		return;
 	}
 
@@ -766,6 +777,42 @@ bool CBuildManager::IsMouseOverMenu()
 		&& m_virtualCursorY >= m_menuY && m_virtualCursorY <= m_menuY + m_menuH;
 }
 
+void CBuildManager::ReturnToMenu()
+{
+	if (!m_active)
+		return;
+
+	SendClearPreview();
+
+	m_menuOpen = true;
+	m_selectedPartId = 0;
+	m_rotationStep = 0;
+	m_flipped = false;
+	m_status.clear();
+	m_statusUntil = 0;
+	m_inputGuardUntil = GetTickCount() + 350;
+	m_lastLeftDown = m_mouseButtons[0] || IsPhysicalKeyDown(VK_LBUTTON);
+	m_lastRightDown = m_mouseButtons[1] || IsPhysicalKeyDown(VK_RBUTTON);
+	m_lastMiddleDown = m_mouseButtons[2] || IsPhysicalKeyDown(VK_MBUTTON);
+	m_lastEscapeDown = IsPhysicalKeyDown(VK_ESCAPE);
+	m_lastQDown = IsPhysicalKeyDown('Q');
+	m_lastEDown = IsPhysicalKeyDown('E');
+	memset(m_mouseButtons, 0, sizeof(m_mouseButtons));
+	m_virtualCursorInitialized = false;
+
+	if (!CGraphics::IsCursorEnabled())
+	{
+		m_cursorOwned = true;
+		CGraphics::ToggleCursor(true);
+	}
+	else
+	{
+		m_cursorOwned = false;
+	}
+
+	CDInput8DeviceProxy::RequestInputReset();
+}
+
 void CBuildManager::SendSelect(unsigned int partId)
 {
 	if (!Network::IsConnected() || !m_active || m_sessionId == 0 || partId == 0)
@@ -775,6 +822,19 @@ void CBuildManager::SendSelect(unsigned int partId)
 	bitStream.Write(m_sessionId);
 	bitStream.Write(partId);
 	Network::SendRPC(eRPC::ON_BUILD_SELECT, &bitStream);
+}
+
+void CBuildManager::SendClearPreview()
+{
+	if (!Network::IsConnected() || !m_active || m_sessionId == 0)
+		return;
+
+	RakNet::BitStream bitStream;
+	bitStream.Write(m_sessionId);
+	bitStream.Write(0u);
+	bitStream.Write(static_cast<short>(0));
+	bitStream.Write(false);
+	Network::SendRPC(eRPC::ON_BUILD_PREVIEW, &bitStream);
 }
 
 void CBuildManager::SendPreviewState()

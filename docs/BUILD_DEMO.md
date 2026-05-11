@@ -7,7 +7,7 @@ It is intentionally server-authoritative:
 Client ASI
 - renders the ImGui build menu
 - captures mouse/keyboard while the menu is open
-- sends selected part, side variant, and place/cancel events
+- sends selected part, side variant, preview, place, and cancel events
 
 Pawn / open.mp
 - decides whether the player can build
@@ -78,7 +78,7 @@ files to the server `models` folder and keep
 
 ```text
 Left mouse      Place selected part.
-Right mouse     Close build UI.
+Right mouse     In placement mode, return to the part menu. In the menu, close build UI.
 ESC             Close build UI.
 Middle mouse    Switch side for Wall, Door Frame, and Door.
 ```

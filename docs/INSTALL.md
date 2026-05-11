@@ -101,7 +101,8 @@ Useful in-game checks:
   renders the build menu and sends select/place/cancel requests; Pawn creates
   the real objects only after validating the request. Wall, Door Frame, Floor,
   Roof, and Door snap to validated foundation slots; middle mouse switches side
-  for walls/doors, left mouse places, and right mouse or `ESC` closes.
+  for walls/doors, left mouse places, right mouse returns from placement to the
+  menu, and right mouse in the menu or `ESC` closes.
 
 Expected server log line:
 

@@ -50,7 +50,9 @@ private:
 	static void InitializeVirtualCursor();
 	static void ApplyImGuiInput();
 	static bool IsMouseOverMenu();
+	static void ReturnToMenu();
 	static void SendSelect(unsigned int partId);
+	static void SendClearPreview();
 	static void SendPreviewState();
 	static void SendPlace();
 	static void SendCancel();
