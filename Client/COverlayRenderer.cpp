@@ -27,6 +27,7 @@ namespace
 	static bool g_hooksInstalled = false;
 	static bool g_initialized = false;
 	static bool g_failed = false;
+	static bool g_rendering = false;
 	static IDirect3DDevice9* g_device = NULL;
 	static HWND g_window = NULL;
 	static Reset_t g_originalReset = NULL;
@@ -338,11 +339,17 @@ void COverlayRenderer::Render(IDirect3DDevice9* device)
 {
 	if (!IsEnabled())
 		return;
+	if (g_rendering)
+		return;
 
+	g_rendering = true;
 	__try
 	{
 		if (!EnsureInitialized(device))
+		{
+			g_rendering = false;
 			return;
+		}
 
 		CGraphics::AttachDevice(device);
 
@@ -364,6 +371,7 @@ void COverlayRenderer::Render(IDirect3DDevice9* device)
 		g_failed = true;
 		CLog::Write("ImGui target overlay crashed internally; target UI disabled safely");
 	}
+	g_rendering = false;
 }
 
 void COverlayRenderer::InvalidateDeviceObjects()

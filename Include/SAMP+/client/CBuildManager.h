@@ -74,6 +74,7 @@ private:
 	static float m_maxDistance;
 	static int m_rotationStep;
 	static bool m_flipped;
+	static unsigned long m_inputGuardUntil;
 	static unsigned long m_statusUntil;
 	static bool m_statusSuccess;
 	static std::string m_title;

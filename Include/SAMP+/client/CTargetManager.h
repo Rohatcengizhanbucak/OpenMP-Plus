@@ -98,6 +98,7 @@ private:
 	static unsigned long m_expiresAt;
 	static unsigned long m_lastContextTick;
 	static unsigned long m_mouseSuppressUntil;
+	static unsigned long m_inputGuardUntil;
 	static unsigned long m_keyboardReleaseUntil;
 	static bool m_keyboardReleaseActive;
 	static bool m_keyboardReleaseOffsets[256];

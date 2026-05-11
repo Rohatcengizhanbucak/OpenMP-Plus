@@ -35,6 +35,7 @@ int CBuildManager::m_rotationStep = 0;
 bool CBuildManager::m_flipped = false;
 unsigned long CBuildManager::m_statusUntil = 0;
 bool CBuildManager::m_statusSuccess = true;
+unsigned long CBuildManager::m_inputGuardUntil = 0;
 std::string CBuildManager::m_title;
 std::string CBuildManager::m_status;
 std::vector<sBuildPart> CBuildManager::m_parts;
@@ -125,6 +126,27 @@ namespace
 		return (std::max)(minValue, (std::min)(value, maxValue));
 	}
 
+	ImVec2 GetOverlayDisplaySize()
+	{
+		ImGuiIO& io = ImGui::GetIO();
+		float width = io.DisplaySize.x;
+		float height = io.DisplaySize.y;
+
+		if (width <= 1.0f || height <= 1.0f)
+		{
+			CPoint2D& resolution = CGraphics::GetScreenResolution();
+			width = static_cast<float>(resolution.X());
+			height = static_cast<float>(resolution.Y());
+		}
+
+		if (width <= 1.0f)
+			width = 1280.0f;
+		if (height <= 1.0f)
+			height = 720.0f;
+
+		return ImVec2(width, height);
+	}
+
 	ImVec2 ScaleClientPointToDisplay(HWND window, const POINT& point)
 	{
 		ImVec2 scaled(static_cast<float>(point.x), static_cast<float>(point.y));
@@ -140,11 +162,9 @@ namespace
 		if (clientWidth <= 1.0f || clientHeight <= 1.0f)
 			return scaled;
 
-		CPoint2D& resolution = CGraphics::GetScreenResolution();
-		const float displayWidth = static_cast<float>(resolution.X());
-		const float displayHeight = static_cast<float>(resolution.Y());
-		if (displayWidth <= 1.0f || displayHeight <= 1.0f)
-			return scaled;
+		const ImVec2 displaySize = GetOverlayDisplaySize();
+		const float displayWidth = displaySize.x;
+		const float displayHeight = displaySize.y;
 
 		scaled.x *= displayWidth / clientWidth;
 		scaled.y *= displayHeight / clientHeight;
@@ -177,9 +197,9 @@ namespace
 
 		const float clientWidth = static_cast<float>(client.right - client.left);
 		const float clientHeight = static_cast<float>(client.bottom - client.top);
-		CPoint2D& resolution = CGraphics::GetScreenResolution();
-		const float displayWidth = static_cast<float>(resolution.X());
-		const float displayHeight = static_cast<float>(resolution.Y());
+		const ImVec2 displaySize = GetOverlayDisplaySize();
+		const float displayWidth = displaySize.x;
+		const float displayHeight = displaySize.y;
 		if (clientWidth <= 1.0f || clientHeight <= 1.0f || displayWidth <= 1.0f || displayHeight <= 1.0f)
 			return;
 
@@ -228,8 +248,13 @@ void CBuildManager::HandleOpen(RakNet::BitStream& bitStream)
 	m_flipped = false;
 	m_status.clear();
 	m_statusUntil = 0;
-	m_lastLeftDown = m_lastRightDown = m_lastMiddleDown = false;
-	m_lastEscapeDown = m_lastQDown = m_lastEDown = false;
+	m_inputGuardUntil = GetTickCount() + 450;
+	m_lastLeftDown = m_mouseButtons[0] || IsPhysicalKeyDown(VK_LBUTTON);
+	m_lastRightDown = m_mouseButtons[1] || IsPhysicalKeyDown(VK_RBUTTON);
+	m_lastMiddleDown = m_mouseButtons[2] || IsPhysicalKeyDown(VK_MBUTTON);
+	m_lastEscapeDown = IsPhysicalKeyDown(VK_ESCAPE);
+	m_lastQDown = IsPhysicalKeyDown('Q');
+	m_lastEDown = IsPhysicalKeyDown('E');
 	memset(m_mouseButtons, 0, sizeof(m_mouseButtons));
 	m_virtualCursorInitialized = false;
 	m_cursorOwned = !CGraphics::IsCursorEnabled();
@@ -305,6 +330,7 @@ void CBuildManager::ClearUnlocked(bool restoreCursor)
 	m_maxDistance = 8.0f;
 	m_rotationStep = 0;
 	m_flipped = false;
+	m_inputGuardUntil = 0;
 	m_status.clear();
 	m_statusUntil = 0;
 	m_title.clear();
@@ -338,8 +364,9 @@ void CBuildManager::Process()
 	const bool middleDown = m_mouseButtons[2] || IsPhysicalKeyDown(VK_MBUTTON);
 	const bool qDown = IsPhysicalKeyDown('Q');
 	const bool eDown = IsPhysicalKeyDown('E');
+	const bool inputGuardActive = static_cast<long>(GetTickCount() - m_inputGuardUntil) < 0;
 
-	if ((escapeDown && !m_lastEscapeDown) || (rightDown && !m_lastRightDown))
+	if (!inputGuardActive && ((escapeDown && !m_lastEscapeDown) || (rightDown && !m_lastRightDown)))
 	{
 		SendCancel();
 		return;
@@ -394,9 +421,9 @@ void CBuildManager::RenderImGui()
 
 	ApplyImGuiInput();
 
-	CPoint2D& resolution = CGraphics::GetScreenResolution();
-	const float width = (std::max)(280.0f, (std::min)(340.0f, static_cast<float>(resolution.X()) * 0.26f));
-	const float x = static_cast<float>(resolution.X()) - width - 42.0f;
+	const ImVec2 displaySize = GetOverlayDisplaySize();
+	const float width = (std::max)(280.0f, (std::min)(340.0f, displaySize.x * 0.26f));
+	const float x = displaySize.x - width - 42.0f;
 	const float y = 118.0f;
 
 	ImGui::SetNextWindowPos(ImVec2(x, y), ImGuiCond_Always);
@@ -666,13 +693,8 @@ bool CBuildManager::ReadBoundString(RakNet::BitStream& bitStream, std::string& v
 
 void CBuildManager::InitializeVirtualCursor()
 {
-	CPoint2D& resolution = CGraphics::GetScreenResolution();
-	float width = static_cast<float>(resolution.X());
-	float height = static_cast<float>(resolution.Y());
-	if (width <= 0.0f)
-		width = 1280.0f;
-	if (height <= 0.0f)
-		height = 720.0f;
+	const ImVec2 displaySize = GetOverlayDisplaySize();
+	const float width = displaySize.x;
 
 	const float menuWidth = (std::max)(280.0f, (std::min)(340.0f, width * 0.26f));
 	m_virtualCursorX = width - menuWidth * 0.5f - 42.0f;

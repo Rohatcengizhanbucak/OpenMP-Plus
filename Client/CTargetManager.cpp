@@ -35,6 +35,7 @@ unsigned char CTargetManager::m_layout = OMPPlusProtocol::TargetLayoutAuto;
 unsigned long CTargetManager::m_expiresAt = 0;
 unsigned long CTargetManager::m_lastContextTick = 0;
 unsigned long CTargetManager::m_mouseSuppressUntil = 0;
+unsigned long CTargetManager::m_inputGuardUntil = 0;
 unsigned long CTargetManager::m_keyboardReleaseUntil = 0;
 bool CTargetManager::m_keyboardReleaseActive = false;
 bool CTargetManager::m_keyboardReleaseOffsets[256] = {};
@@ -364,6 +365,7 @@ void CTargetManager::Process()
 	const bool altDown = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
 	const bool escapeDown = (GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0;
 	const bool rightDown = (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
+	const bool inputGuardActive = static_cast<long>(GetTickCount() - m_inputGuardUntil) < 0;
 
 	if (!HasValidContext())
 	{
@@ -391,13 +393,16 @@ void CTargetManager::Process()
 	{
 		if (m_menuOpen)
 		{
-			CloseMenu(true);
-			m_expiresAt = 0;
+			if (!inputGuardActive)
+			{
+				CloseMenu(true);
+				m_expiresAt = 0;
+			}
 		}
 		else
 			OpenMenu();
 	}
-	else if (m_menuOpen && ((escapeDown && !m_lastEscapeDown) || (rightDown && !m_lastRightDown)))
+	else if (m_menuOpen && !inputGuardActive && ((escapeDown && !m_lastEscapeDown) || (rightDown && !m_lastRightDown)))
 	{
 		CloseMenu(true);
 		m_expiresAt = 0;
@@ -1171,9 +1176,14 @@ void CTargetManager::OpenMenu()
 {
 	m_mouseSuppressUntil = 0;
 	m_menuOpen = true;
+	m_inputGuardUntil = GetTickCount() + 450;
 	BeginKeyboardReleaseLease();
 	CDInput8DeviceProxy::RequestInputReset();
 	m_hoverIndex = -1;
+	m_lastAltDown = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+	m_lastEscapeDown = (GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0;
+	m_lastRightDown = (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
+	m_lastLeftDown = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
 	m_virtualCursorInitialized = false;
 	m_cursorOwned = !CGraphics::IsCursorEnabled();
 	CGraphics::ToggleCursor(true);
@@ -1190,6 +1200,7 @@ void CTargetManager::CloseMenu(bool clearCursor)
 		BeginKeyboardReleaseLease();
 
 	m_menuOpen = false;
+	m_inputGuardUntil = 0;
 	m_hoverIndex = -1;
 	m_lastLeftDown = false;
 	m_virtualCursorInitialized = false;

@@ -10,10 +10,30 @@
 #include <SAMP+/client/Network.h>
 
 static HANDLE g_hBootstrapThread = NULL;
+static HANDLE g_hInstanceMutex = NULL;
 static DWORD g_dwBootstrapThreadId = 0;
 static volatile bool g_bRunning = false;
 static bool g_bHooksApplied = false;
 static bool g_bInputHooksApplied = false;
+
+static bool AcquireInstanceGuard()
+{
+	char mutexName[96] = {};
+	wsprintfA(mutexName, "Local\\OpenMPPlusClient_%lu", GetCurrentProcessId());
+
+	g_hInstanceMutex = CreateMutexA(NULL, FALSE, mutexName);
+	if (!g_hInstanceMutex)
+		return true;
+
+	if (GetLastError() == ERROR_ALREADY_EXISTS)
+	{
+		CloseHandle(g_hInstanceMutex);
+		g_hInstanceMutex = NULL;
+		return false;
+	}
+
+	return true;
+}
 
 static bool IsFullHookMode()
 {
@@ -86,6 +106,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved)
 	switch (dwReason)
 	{
 	case DLL_PROCESS_ATTACH:
+		if (!AcquireInstanceGuard())
+			return FALSE;
 		DisableThreadLibraryCalls(hModule);
 		CGameRakClient::SetModuleHandle(hModule);
 		CLog::Initialize();
@@ -117,6 +139,11 @@ case DLL_PROCESS_DETACH:
 		Network::Shutdown();
 
 		CLog::Finalize();
+		if (g_hInstanceMutex)
+		{
+			CloseHandle(g_hInstanceMutex);
+			g_hInstanceMutex = NULL;
+		}
 		break;
 
 	}

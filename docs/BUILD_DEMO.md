@@ -22,10 +22,11 @@ one. The demo preview is also server-owned: Pawn uses a per-player temporary
 object so the visible preview and final object are driven by the same validation
 path.
 
-Preview objects are intentionally rendered as translucent ghost pieces by
-overriding their player-object material slots. Confirmed placements use normal
+Preview objects use separate open.mp custom model ids and separate green/red
+TXD files. Green means the current snap slot can be placed; red means the
+server already knows the slot is invalid. Confirmed placements use normal
 server objects, so the final structure keeps the original custom model and
-texture instead of the ghost material.
+texture instead of the preview material.
 
 ## Files
 
@@ -43,7 +44,8 @@ examples/models/door-frame.dff
 examples/models/door-frame.txd
 examples/models/floor.dff
 examples/models/floor.txd
-examples/models/build-preview.txd
+examples/models/build-preview-green.txd
+examples/models/build-preview-red.txd
 ```
 
 Install the component, ASI, and include from the same build. Then copy
@@ -57,10 +59,9 @@ The wall is registered with
 The door frame and floor are registered with
 `AddSimpleModel(-1, 19381, -2002, "door-frame.dff", "door-frame.txd")`
 and `AddSimpleModel(-1, 19378, -2003, "floor.dff", "floor.txd")`.
-The live placement preview uses separate model ids `-2100..-2103` with the
-same DFF geometry and `build-preview.txd`, so preview pieces are visibly
-different from confirmed build pieces. Copy these DFF/TXD files to the server
-`models` folder and keep
+The live placement preview uses separate model ids `-2100..-2106` for valid
+green previews and `-2200..-2206` for invalid red previews. Copy these DFF/TXD
+files to the server `models` folder and keep
 `artwork.enable` set to `true` in `config.json`.
 
 ## Commands
@@ -92,16 +93,18 @@ empty neighbour slots at exact 3.0m offsets. This value comes from the demo
 `foundation.dff` bounding box, which is 3.0m wide/deep. If the player's aim is close to
 one of those slots, the preview locks to the slot center and inherits the
 parent foundation rotation, so adjacent foundations line up exactly like
-puzzle pieces. Occupied slots are skipped.
+puzzle pieces. Occupied slots render red and cannot be confirmed.
 
 Wall and Door Frame use all placed foundations as possible parents. Pawn finds
 the nearest foundation edge to the player's aim and snaps the part to that edge.
+Each edge has one structural slot: a Wall and Door Frame cannot occupy the same
+edge.
 
-Floor/Ceiling and Roof use the nearest foundation top snap.
+Floor/Ceiling and Roof use the nearest foundation top snap. They share one top
+slot in this demo, so one cannot be stacked on the other.
 
-Stairs and Door are simple front-of-player demo placements. They are included
-to show how Pawn developers can add extra part types without changing the
-client UI.
+Stairs use a separate per-foundation stairs slot. Door placement requires an
+existing Door Frame edge and is rejected if that frame already has a door.
 
 ## Pawn API Surface
 
