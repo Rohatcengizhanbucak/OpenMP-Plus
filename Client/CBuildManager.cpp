@@ -111,9 +111,18 @@ namespace
 		{ DIK_SPACE, VK_SPACE },
 		{ DIK_RETURN, VK_RETURN },
 		{ DIK_LBRACKET, VK_OEM_4 },
-		{ DIK_RBRACKET, VK_OEM_6 },
-		{ DIK_Q, 'Q' },
-		{ DIK_E, 'E' }
+		{ DIK_RBRACKET, VK_OEM_6 }
+	};
+
+	enum eBuildPartId
+	{
+		BuildPartFoundation = 1,
+		BuildPartWall = 2,
+		BuildPartDoorFrame = 3,
+		BuildPartFloor = 4,
+		BuildPartRoof = 5,
+		BuildPartStairs = 6,
+		BuildPartDoor = 7
 	};
 
 	bool IsPhysicalKeyDown(int virtualKey)
@@ -222,6 +231,33 @@ namespace
 			return "INVALID";
 		default:
 			return "ERROR";
+		}
+	}
+
+	bool SupportsBuildVariant(unsigned int partId)
+	{
+		return partId == BuildPartWall
+			|| partId == BuildPartDoorFrame
+			|| partId == BuildPartDoor;
+	}
+
+	const char* BuildControlHint(unsigned int partId, bool flipped)
+	{
+		switch (partId)
+		{
+		case BuildPartWall:
+		case BuildPartDoorFrame:
+			return flipped
+				? "Outer side  |  MMB switch side  |  LMB place  RMB close"
+				: "Inner side  |  MMB switch side  |  LMB place  RMB close";
+		case BuildPartDoor:
+			return flipped
+				? "Opens outward  |  MMB switch side  |  LMB place  RMB close"
+				: "Opens inward  |  MMB switch side  |  LMB place  RMB close";
+		case BuildPartStairs:
+			return "Aim edge to choose direction  |  LMB place  RMB close";
+		default:
+			return "LMB place  |  RMB close";
 		}
 	}
 }
@@ -383,17 +419,7 @@ void CBuildManager::Process()
 		return;
 	}
 
-	if (qDown && !m_lastQDown)
-	{
-		m_rotationStep = (m_rotationStep + 3) % 4;
-		SendPreviewState();
-	}
-	if (eDown && !m_lastEDown)
-	{
-		m_rotationStep = (m_rotationStep + 1) % 4;
-		SendPreviewState();
-	}
-	if (middleDown && !m_lastMiddleDown)
+	if (middleDown && !m_lastMiddleDown && SupportsBuildVariant(m_selectedPartId))
 	{
 		m_flipped = !m_flipped;
 		SendPreviewState();
@@ -501,9 +527,7 @@ void CBuildManager::RenderImGui()
 
 		ImGui::Spacing();
 		ImGui::Separator();
-		char footer[96] = {};
-		std::snprintf(footer, sizeof(footer), "Rot %d deg%s  |  LMB place  RMB close", (m_rotationStep % 4) * 90, m_flipped ? " flipped" : "");
-		ImGui::TextWrapped("%s", footer);
+		ImGui::TextWrapped("%s", BuildControlHint(m_selectedPartId, m_flipped));
 
 		if (!m_status.empty() && GetTickCount() <= m_statusUntil)
 		{
@@ -571,7 +595,7 @@ bool CBuildManager::ShouldConsumeDirectInputEvent(DWORD offset, DWORD)
 		return false;
 	if (m_menuOpen)
 		return true;
-	return offset == DIK_Q || offset == DIK_E || offset == DIK_ESCAPE;
+	return offset == DIK_ESCAPE;
 }
 
 void CBuildManager::FilterKeyboardState(DWORD size, LPVOID state)
@@ -588,8 +612,6 @@ void CBuildManager::FilterKeyboardState(DWORD size, LPVOID state)
 	if (size >= 256)
 	{
 		BYTE* keyboard = reinterpret_cast<BYTE*>(state);
-		keyboard[DIK_Q] = 0;
-		keyboard[DIK_E] = 0;
 		keyboard[DIK_ESCAPE] = 0;
 	}
 }
@@ -637,7 +659,7 @@ DWORD CBuildManager::GetKeyboardReleaseOffsets(DWORD* offsets, DWORD capacity)
 		return count;
 	}
 
-	const DWORD placementOffsets[] = { DIK_Q, DIK_E, DIK_ESCAPE };
+	const DWORD placementOffsets[] = { DIK_ESCAPE };
 	const DWORD available = static_cast<DWORD>(sizeof(placementOffsets) / sizeof(placementOffsets[0]));
 	const DWORD count = capacity < available ? capacity : available;
 	for (DWORD i = 0; i < count; ++i)

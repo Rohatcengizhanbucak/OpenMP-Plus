@@ -7,7 +7,7 @@ It is intentionally server-authoritative:
 Client ASI
 - renders the ImGui build menu
 - captures mouse/keyboard while the menu is open
-- sends selected part, rotation step, flip state, and place/cancel events
+- sends selected part, side variant, and place/cancel events
 
 Pawn / open.mp
 - decides whether the player can build
@@ -80,8 +80,7 @@ files to the server `models` folder and keep
 Left mouse      Place selected part.
 Right mouse     Close build UI.
 ESC             Close build UI.
-Q / E           Rotate in 90 degree steps.
-Middle mouse    Flip the selected piece.
+Middle mouse    Switch side for Wall, Door Frame, and Door.
 ```
 
 ## Demo Snap Rules
@@ -98,13 +97,17 @@ puzzle pieces. Occupied slots render red and cannot be confirmed.
 Wall and Door Frame use all placed foundations as possible parents. Pawn finds
 the nearest foundation edge to the player's aim and snaps the part to that edge.
 Each edge has one structural slot: a Wall and Door Frame cannot occupy the same
-edge.
+edge. Their rotation is derived from the edge plus a calibrated model offset, so
+players do not manually rotate them. Middle mouse only switches the inner/outer
+surface variant.
 
 Floor/Ceiling and Roof use the nearest foundation top snap. They share one top
 slot in this demo, so one cannot be stacked on the other.
 
-Stairs use a separate per-foundation stairs slot. Door placement requires an
-existing Door Frame edge and is rejected if that frame already has a door.
+Stairs use a separate per-foundation stairs slot and face the foundation edge
+nearest to the player's aim. Door placement requires an existing Door Frame edge
+and is rejected if that frame already has a door. Middle mouse changes the door
+opening side.
 
 ## Pawn API Surface
 

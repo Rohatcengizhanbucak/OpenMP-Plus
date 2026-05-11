@@ -99,8 +99,9 @@ Useful in-game checks:
   validates the selected `targetid` and `optionid` before Pawn callbacks run.
 - `/builddemo`: experimental server-authoritative build UI demo. The client
   renders the build menu and sends select/place/cancel requests; Pawn creates
-  the real objects only after validating the request. `Q/E` rotates, middle
-  mouse flips, left mouse places, and right mouse or `ESC` closes.
+  the real objects only after validating the request. Wall, Door Frame, Floor,
+  Roof, and Door snap to validated foundation slots; middle mouse switches side
+  for walls/doors, left mouse places, and right mouse or `ESC` closes.
 
 Expected server log line:
 

@@ -18,6 +18,10 @@
 #define BUILD_DEMO_EDGE_SNAP_RADIUS 2.25
 #define BUILD_DEMO_CENTER_SNAP_RADIUS 2.35
 #define BUILD_DEMO_REJECT_REASON_SIZE 96
+#define BUILD_DEMO_WALL_YAW_OFFSET 90.0
+#define BUILD_DEMO_DOORFRAME_YAW_OFFSET 90.0
+#define BUILD_DEMO_DOOR_YAW_OFFSET 90.0
+#define BUILD_DEMO_STAIRS_YAW_OFFSET 0.0
 
 #define BUILD_DEMO_SLOT_NONE 0
 #define BUILD_DEMO_SLOT_EDGE 1
@@ -127,6 +131,44 @@ stock Float:NormalizeBuildAngle(Float:a)
 stock Float:GetRotationFromStep(rotationStep)
 {
 	return NormalizeBuildAngle(float(rotationStep % 4) * float(SAMPP_BUILD_ROTATION_STEP_DEGREES));
+}
+
+stock Float:GetBuildGridAngle(Float:a)
+{
+	return NormalizeBuildAngle(float(floatround(a / 90.0, floatround_round)) * 90.0);
+}
+
+stock bool:BuildDemoPartSupportsVariant(partid)
+{
+	switch (partid)
+	{
+		case SAMPP_BUILD_PART_WALL, SAMPP_BUILD_PART_DOORFRAME, SAMPP_BUILD_PART_DOOR:
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+stock Float:GetBuildEdgePieceYaw(partid, Float:edgeA, bool:flipped)
+{
+	new Float:offset = 0.0;
+	switch (partid)
+	{
+		case SAMPP_BUILD_PART_WALL:
+		{
+			offset = BUILD_DEMO_WALL_YAW_OFFSET;
+		}
+		case SAMPP_BUILD_PART_DOORFRAME:
+		{
+			offset = BUILD_DEMO_DOORFRAME_YAW_OFFSET;
+		}
+		case SAMPP_BUILD_PART_DOOR:
+		{
+			offset = BUILD_DEMO_DOOR_YAW_OFFSET;
+		}
+	}
+	return NormalizeBuildAngle(edgeA + offset + (flipped ? 180.0 : 0.0));
 }
 
 stock GetForwardPoint(Float:x, Float:y, Float:a, Float:distance, &Float:outX, &Float:outY)
@@ -501,8 +543,42 @@ stock bool:GetNearestFoundationEdgeToPoint(playerid, Float:aimX, Float:aimY, &fo
 	return true;
 }
 
+stock bool:GetNearestFoundationEdgeOnFoundationToPoint(playerid, foundationIndex, Float:aimX, Float:aimY, &edgeIndex, &Float:edgeX, &Float:edgeY, &Float:edgeZ, &Float:edgeA, &Float:edgeDistance)
+{
+	if (foundationIndex < 0 || foundationIndex >= gBuildFoundationCount[playerid])
+	{
+		return false;
+	}
+
+	new bestEdge = 0;
+	new Float:bestDistance = 999999.0;
+	for (new i = 0; i < 4; i++)
+	{
+		new Float:testA = NormalizeBuildAngle(gBuildFoundationGridA[playerid][foundationIndex] + float(i * 90));
+		new Float:testX, Float:testY;
+		GetForwardPoint(gBuildFoundationGridX[playerid][foundationIndex], gBuildFoundationGridY[playerid][foundationIndex], testA, BUILD_DEMO_FOUNDATION_HALF, testX, testY);
+
+		new Float:distance = GetBuildDistance2D(aimX, aimY, testX, testY);
+		if (distance < bestDistance)
+		{
+			bestDistance = distance;
+			bestEdge = i;
+			edgeX = testX;
+			edgeY = testY;
+			edgeZ = gBuildFoundationGridZ[playerid][foundationIndex];
+			edgeA = testA;
+		}
+	}
+
+	edgeIndex = bestEdge;
+	edgeDistance = bestDistance;
+	return true;
+}
+
 stock bool:ComputeBuildPreview(playerid, partid, rotationStep, bool:flipped, &modelid, &Float:x, &Float:y, &Float:z, &Float:rx, &Float:ry, &Float:rz)
 {
+	#pragma unused rotationStep
+
 	modelid = GetBuildPartModel(partid);
 	if (modelid == 0)
 	{
@@ -535,7 +611,7 @@ stock bool:ComputeBuildPreview(playerid, partid, rotationStep, bool:flipped, &mo
 				new Float:snapDistance;
 				if (GetNearestFoundationSnapToPoint(playerid, aimX, aimY, parentIndex, slotIndex, occupied, x, y, z, snapA, snapDistance))
 				{
-					rz = NormalizeBuildAngle(snapA + (flipped ? 180.0 : 0.0));
+					rz = NormalizeBuildAngle(snapA);
 					if (occupied)
 					{
 						SetBuildPreviewCandidate(playerid, false, parentIndex, slotIndex, BUILD_DEMO_SLOT_NONE, "That foundation neighbour slot is already occupied.");
@@ -550,7 +626,7 @@ stock bool:ComputeBuildPreview(playerid, partid, rotationStep, bool:flipped, &mo
 				x = aimX;
 				y = aimY;
 				z = aimZ;
-				rz = NormalizeBuildAngle(playerAngle + GetRotationFromStep(rotationStep) + (flipped ? 180.0 : 0.0));
+				rz = GetBuildGridAngle(playerAngle);
 				SetBuildPreviewCandidate(playerid, false, -1, -1, BUILD_DEMO_SLOT_NONE, "Aim near an empty foundation neighbour slot.");
 				return true;
 			}
@@ -558,7 +634,7 @@ stock bool:ComputeBuildPreview(playerid, partid, rotationStep, bool:flipped, &mo
 			x = aimX;
 			y = aimY;
 			z = aimZ;
-			rz = NormalizeBuildAngle(playerAngle + GetRotationFromStep(rotationStep) + (flipped ? 180.0 : 0.0));
+			rz = GetBuildGridAngle(playerAngle);
 			SetBuildPreviewCandidate(playerid, true, -1, -1, BUILD_DEMO_SLOT_NONE, "");
 			return true;
 		}
@@ -573,13 +649,13 @@ stock bool:ComputeBuildPreview(playerid, partid, rotationStep, bool:flipped, &mo
 				x = aimX;
 				y = aimY;
 				z = aimZ + BUILD_DEMO_WALL_HEIGHT;
-				rz = NormalizeBuildAngle(playerAngle + GetRotationFromStep(rotationStep) + (flipped ? 180.0 : 0.0));
+				rz = GetBuildEdgePieceYaw(partid, GetBuildGridAngle(playerAngle), flipped);
 				SetBuildPreviewCandidate(playerid, false, -1, -1, BUILD_DEMO_SLOT_EDGE, "Wall pieces require a foundation edge.");
 				return true;
 			}
 
 			z += BUILD_DEMO_WALL_HEIGHT;
-			rz = NormalizeBuildAngle(edgeA + GetRotationFromStep(rotationStep) + (flipped ? 180.0 : 0.0));
+			rz = GetBuildEdgePieceYaw(partid, edgeA, flipped);
 			if (edgeDistance > BUILD_DEMO_EDGE_SNAP_RADIUS)
 			{
 				SetBuildPreviewCandidate(playerid, false, foundationIndex, edgeIndex, BUILD_DEMO_SLOT_EDGE, "Aim closer to a foundation edge.");
@@ -603,13 +679,13 @@ stock bool:ComputeBuildPreview(playerid, partid, rotationStep, bool:flipped, &mo
 				x = aimX;
 				y = aimY;
 				z = aimZ + BUILD_DEMO_ROOF_HEIGHT;
-				rz = NormalizeBuildAngle(playerAngle + GetRotationFromStep(rotationStep) + (flipped ? 180.0 : 0.0));
+				rz = GetBuildGridAngle(playerAngle);
 				SetBuildPreviewCandidate(playerid, false, -1, -1, BUILD_DEMO_SLOT_TOP, "Floors and roofs require a foundation.");
 				return true;
 			}
 
 			z += BUILD_DEMO_ROOF_HEIGHT;
-			rz = NormalizeBuildAngle(centerA + GetRotationFromStep(rotationStep) + (flipped ? 180.0 : 0.0));
+			rz = NormalizeBuildAngle(centerA);
 			if (centerDistance > BUILD_DEMO_CENTER_SNAP_RADIUS)
 			{
 				SetBuildPreviewCandidate(playerid, false, foundationIndex, 0, BUILD_DEMO_SLOT_TOP, "Aim closer to the foundation center.");
@@ -633,13 +709,24 @@ stock bool:ComputeBuildPreview(playerid, partid, rotationStep, bool:flipped, &mo
 				x = aimX;
 				y = aimY;
 				z = aimZ - BUILD_DEMO_FOUNDATION_Z_OFFSET;
-				rz = NormalizeBuildAngle(playerAngle + GetRotationFromStep(rotationStep) + (flipped ? 180.0 : 0.0));
+				rz = GetBuildGridAngle(playerAngle);
 				SetBuildPreviewCandidate(playerid, false, -1, -1, BUILD_DEMO_SLOT_STAIRS, "Stairs require a foundation.");
 				return true;
 			}
 
+			new stairEdgeIndex;
+			new Float:stairEdgeX;
+			new Float:stairEdgeY;
+			new Float:stairEdgeZ;
+			new Float:stairEdgeA;
+			new Float:stairEdgeDistance;
+			if (!GetNearestFoundationEdgeOnFoundationToPoint(playerid, foundationIndex, aimX, aimY, stairEdgeIndex, stairEdgeX, stairEdgeY, stairEdgeZ, stairEdgeA, stairEdgeDistance))
+			{
+				stairEdgeA = centerA;
+			}
+
 			z += 0.1;
-			rz = NormalizeBuildAngle(centerA + GetRotationFromStep(rotationStep) + (flipped ? 180.0 : 0.0));
+			rz = NormalizeBuildAngle(stairEdgeA + BUILD_DEMO_STAIRS_YAW_OFFSET);
 			if (centerDistance > BUILD_DEMO_CENTER_SNAP_RADIUS)
 			{
 				SetBuildPreviewCandidate(playerid, false, foundationIndex, 0, BUILD_DEMO_SLOT_STAIRS, "Aim closer to the foundation center.");
@@ -664,13 +751,13 @@ stock bool:ComputeBuildPreview(playerid, partid, rotationStep, bool:flipped, &mo
 				x = aimX;
 				y = aimY;
 				z = aimZ - BUILD_DEMO_FOUNDATION_Z_OFFSET;
-				rz = NormalizeBuildAngle(playerAngle + GetRotationFromStep(rotationStep) + (flipped ? 180.0 : 0.0));
+				rz = GetBuildEdgePieceYaw(SAMPP_BUILD_PART_DOOR, GetBuildGridAngle(playerAngle), flipped);
 				SetBuildPreviewCandidate(playerid, false, -1, -1, BUILD_DEMO_SLOT_DOOR, "Doors require a placed door frame.");
 				return true;
 			}
 
 			z += 0.05;
-			rz = NormalizeBuildAngle(edgeA + GetRotationFromStep(rotationStep) + (flipped ? 180.0 : 0.0));
+			rz = GetBuildEdgePieceYaw(SAMPP_BUILD_PART_DOOR, edgeA, flipped);
 			if (edgeDistance > BUILD_DEMO_EDGE_SNAP_RADIUS)
 			{
 				SetBuildPreviewCandidate(playerid, false, foundationIndex, edgeIndex, BUILD_DEMO_SLOT_DOOR, "Aim closer to a door frame.");
@@ -774,7 +861,7 @@ stock OpenBuildDemo(playerid)
 	SAMPP_BuildAddPart(playerid, SAMPP_BUILD_PART_DOOR, BUILD_MODEL_DOOR, "Door", "Access", "50 wood");
 
 	SendClientMessage(playerid, BUILD_DEMO_OK_COLOUR, "[BuildDemo] Build UI opened. Select a part to show a live preview.");
-	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] LMB confirms the preview. Q/E rotates, middle mouse flips, RMB/ESC closes.");
+	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] LMB confirms. MMB switches side for walls/doors. RMB/ESC closes.");
 	return 1;
 }
 
@@ -883,6 +970,8 @@ stock bool:CommitBuildDemoSlot(playerid, partid)
 
 stock PlaceBuildDemoPart(playerid, partid, rotationStep, bool:flipped)
 {
+	#pragma unused rotationStep
+
 	if (!gBuildActive[playerid])
 	{
 		return SAMPP_BuildSendResult(playerid, SAMPP_BUILD_RESULT_ERROR, "Build session is not active.");
@@ -894,8 +983,8 @@ stock PlaceBuildDemoPart(playerid, partid, rotationStep, bool:flipped)
 	}
 
 	gBuildSelectedPart[playerid] = partid;
-	gBuildRotationStep[playerid] = rotationStep;
-	gBuildFlipped[playerid] = flipped;
+	gBuildRotationStep[playerid] = 0;
+	gBuildFlipped[playerid] = BuildDemoPartSupportsVariant(partid) ? flipped : false;
 
 	if (!RefreshBuildPreview(playerid, true))
 	{
@@ -948,8 +1037,8 @@ stock SendBuildDemoHelp(playerid)
 {
 	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] /builddemo opens a server-authoritative build menu.");
 	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] Select a part first; a temporary player-object preview follows your camera aim.");
-	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] LMB confirms the preview, RMB/ESC closes, Q/E rotates 90 degrees, MMB flips.");
-	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] Foundations snap to empty neighbour slots; walls snap to the nearest foundation edge.");
+	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] LMB confirms the preview, RMB/ESC closes, MMB switches side for walls and doors.");
+	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] Foundations snap to neighbours; walls/door frames snap to edge surfaces automatically.");
 	return 1;
 }
 
@@ -1044,9 +1133,11 @@ stock GetBuildDemoSession(playerid)
 
 stock SetBuildDemoSelection(playerid, partid, rotationStep, bool:flipped, bool:forceRefresh = true)
 {
+	#pragma unused rotationStep
+
 	gBuildSelectedPart[playerid] = partid;
-	gBuildRotationStep[playerid] = rotationStep;
-	gBuildFlipped[playerid] = flipped;
+	gBuildRotationStep[playerid] = 0;
+	gBuildFlipped[playerid] = BuildDemoPartSupportsVariant(partid) ? flipped : false;
 	return RefreshBuildPreview(playerid, forceRefresh);
 }
 
