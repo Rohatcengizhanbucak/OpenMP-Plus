@@ -18,15 +18,20 @@
 
 #define BUILD_BASE_MODEL_FOUNDATION 19379
 #define BUILD_MODEL_FOUNDATION -2000
+#define BUILD_MODEL_FOUNDATION_PREVIEW -2100
 #define BUILD_BASE_MODEL_WALL 19380
 #define BUILD_MODEL_WALL -2001
+#define BUILD_MODEL_WALL_PREVIEW -2101
 #define BUILD_BASE_MODEL_DOORFRAME 19381
 #define BUILD_MODEL_DOORFRAME -2002
+#define BUILD_MODEL_DOORFRAME_PREVIEW -2102
 #define BUILD_BASE_MODEL_FLOOR 19378
 #define BUILD_MODEL_FLOOR -2003
+#define BUILD_MODEL_FLOOR_PREVIEW -2103
 #define BUILD_MODEL_ROOF 19377
 #define BUILD_MODEL_STAIRS 19387
 #define BUILD_MODEL_DOOR 1491
+#define BUILD_MODEL_PREVIEW_TXD "build-preview.txd"
 #define BUILD_MODEL_FOUNDATION_DFF "foundation.dff"
 #define BUILD_MODEL_FOUNDATION_TXD "foundation.txd"
 #define BUILD_MODEL_WALL_DFF "wall.dff"
@@ -114,6 +119,18 @@ stock GetBuildPartModel(partid)
 		case SAMPP_BUILD_PART_DOOR: return BUILD_MODEL_DOOR;
 	}
 	return 0;
+}
+
+stock GetBuildPreviewPartModel(partid)
+{
+	switch (partid)
+	{
+		case SAMPP_BUILD_PART_FOUNDATION: return BUILD_MODEL_FOUNDATION_PREVIEW;
+		case SAMPP_BUILD_PART_WALL: return BUILD_MODEL_WALL_PREVIEW;
+		case SAMPP_BUILD_PART_DOORFRAME: return BUILD_MODEL_DOORFRAME_PREVIEW;
+		case SAMPP_BUILD_PART_FLOOR: return BUILD_MODEL_FLOOR_PREVIEW;
+	}
+	return GetBuildPartModel(partid);
 }
 
 stock ResetBuildPreviewState(playerid)
@@ -501,11 +518,12 @@ stock RefreshBuildPreview(playerid, bool:force = false)
 		return 0;
 	}
 
-	if (gBuildPreviewObject[playerid] == INVALID_OBJECT_ID || gBuildPreviewModel[playerid] != modelid)
+	new previewModelId = GetBuildPreviewPartModel(gBuildSelectedPart[playerid]);
+	if (gBuildPreviewObject[playerid] == INVALID_OBJECT_ID || gBuildPreviewModel[playerid] != previewModelId)
 	{
 		DestroyBuildPreview(playerid);
-		gBuildPreviewObject[playerid] = CreatePlayerObject(playerid, modelid, x, y, z, rx, ry, rz, 80.0);
-		gBuildPreviewModel[playerid] = modelid;
+		gBuildPreviewObject[playerid] = CreatePlayerObject(playerid, previewModelId, x, y, z, rx, ry, rz, 80.0);
+		gBuildPreviewModel[playerid] = previewModelId;
 	}
 	else
 	{
@@ -529,6 +547,11 @@ stock OpenBuildDemo(playerid)
 	{
 		SendClientMessage(playerid, BUILD_DEMO_WARN_COLOUR, "[BuildDemo] OpenMP-Plus build UI is not available on this client.");
 		return 1;
+	}
+
+	if (gBuildActive[playerid])
+	{
+		CloseBuildDemo(playerid);
 	}
 
 	gBuildSession[playerid] = BuildDemoSession(playerid);
@@ -632,6 +655,10 @@ stock RegisterBuildDemoModels()
 	new bool:wallRegistered = AddSimpleModel(-1, BUILD_BASE_MODEL_WALL, BUILD_MODEL_WALL, BUILD_MODEL_WALL_DFF, BUILD_MODEL_WALL_TXD);
 	new bool:doorFrameRegistered = AddSimpleModel(-1, BUILD_BASE_MODEL_DOORFRAME, BUILD_MODEL_DOORFRAME, BUILD_MODEL_DOORFRAME_DFF, BUILD_MODEL_DOORFRAME_TXD);
 	new bool:floorRegistered = AddSimpleModel(-1, BUILD_BASE_MODEL_FLOOR, BUILD_MODEL_FLOOR, BUILD_MODEL_FLOOR_DFF, BUILD_MODEL_FLOOR_TXD);
+	new bool:foundationPreviewRegistered = AddSimpleModel(-1, BUILD_BASE_MODEL_FOUNDATION, BUILD_MODEL_FOUNDATION_PREVIEW, BUILD_MODEL_FOUNDATION_DFF, BUILD_MODEL_PREVIEW_TXD);
+	new bool:wallPreviewRegistered = AddSimpleModel(-1, BUILD_BASE_MODEL_WALL, BUILD_MODEL_WALL_PREVIEW, BUILD_MODEL_WALL_DFF, BUILD_MODEL_PREVIEW_TXD);
+	new bool:doorFramePreviewRegistered = AddSimpleModel(-1, BUILD_BASE_MODEL_DOORFRAME, BUILD_MODEL_DOORFRAME_PREVIEW, BUILD_MODEL_DOORFRAME_DFF, BUILD_MODEL_PREVIEW_TXD);
+	new bool:floorPreviewRegistered = AddSimpleModel(-1, BUILD_BASE_MODEL_FLOOR, BUILD_MODEL_FLOOR_PREVIEW, BUILD_MODEL_FLOOR_DFF, BUILD_MODEL_PREVIEW_TXD);
 
 	if (foundationRegistered)
 	{
@@ -669,7 +696,17 @@ stock RegisterBuildDemoModels()
 		print("[BuildDemo] Could not register custom floor model -2003. Check artwork config and model files.");
 	}
 
-	registered = foundationRegistered && wallRegistered && doorFrameRegistered && floorRegistered;
+	if (foundationPreviewRegistered && wallPreviewRegistered && doorFramePreviewRegistered && floorPreviewRegistered)
+	{
+		print("[BuildDemo] Registered preview build models -2100..-2103 from models/build-preview.txd.");
+	}
+	else
+	{
+		print("[BuildDemo] Could not register one or more preview models -2100..-2103. Check models/build-preview.txd.");
+	}
+
+	registered = foundationRegistered && wallRegistered && doorFrameRegistered && floorRegistered
+		&& foundationPreviewRegistered && wallPreviewRegistered && doorFramePreviewRegistered && floorPreviewRegistered;
 	return registered ? 1 : 0;
 }
 

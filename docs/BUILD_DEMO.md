@@ -22,6 +22,11 @@ one. The demo preview is also server-owned: Pawn uses a per-player temporary
 object so the visible preview and final object are driven by the same validation
 path.
 
+Preview objects are intentionally rendered as translucent ghost pieces by
+overriding their player-object material slots. Confirmed placements use normal
+server objects, so the final structure keeps the original custom model and
+texture instead of the ghost material.
+
 ## Files
 
 ```text
@@ -38,6 +43,7 @@ examples/models/door-frame.dff
 examples/models/door-frame.txd
 examples/models/floor.dff
 examples/models/floor.txd
+examples/models/build-preview.txd
 ```
 
 Install the component, ASI, and include from the same build. Then copy
@@ -51,7 +57,10 @@ The wall is registered with
 The door frame and floor are registered with
 `AddSimpleModel(-1, 19381, -2002, "door-frame.dff", "door-frame.txd")`
 and `AddSimpleModel(-1, 19378, -2003, "floor.dff", "floor.txd")`.
-Copy these DFF/TXD files to the server `models` folder and keep
+The live placement preview uses separate model ids `-2100..-2103` with the
+same DFF geometry and `build-preview.txd`, so preview pieces are visibly
+different from confirmed build pieces. Copy these DFF/TXD files to the server
+`models` folder and keep
 `artwork.enable` set to `true` in `config.json`.
 
 ## Commands

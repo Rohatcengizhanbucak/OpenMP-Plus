@@ -386,7 +386,10 @@ void CBuildManager::Process()
 void CBuildManager::RenderImGui()
 {
 	cScopedBuildStateLock lock;
-	if (!m_active || !m_menuOpen)
+	if (!m_active)
+		return;
+
+	if (!m_menuOpen)
 		return;
 
 	ApplyImGuiInput();
