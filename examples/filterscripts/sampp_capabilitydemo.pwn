@@ -1,6 +1,5 @@
 #include <open.mp>
 #include <sampp>
-#include <sampp_builddemo_core>
 
 #define CAP_DEMO_MODEL_WATER_BOTTLE 19570
 #define CAP_DEMO_MODEL_VEHICLE 411
@@ -655,16 +654,12 @@ stock CapSendHelp(playerid)
 
 public OnFilterScriptInit()
 {
-	RegisterBuildDemoModels();
-
 	for (new playerid = 0; playerid < MAX_PLAYERS; playerid++)
 	{
 		CapResetPlayerState(playerid);
-		ResetBuildDemoPlayer(playerid);
 	}
 
 	print("[sampp_capabilitydemo] loaded. Use /caphelp and /capspawn in-game.");
-	print("[sampp_capabilitydemo] build demo bridge loaded. Use /builddemo in-game.");
 	return 1;
 }
 
@@ -675,7 +670,6 @@ public OnFilterScriptExit()
 		CapClearCaptures(playerid);
 		CapDestroyItem(playerid);
 		CapDestroyVehicle(playerid);
-		DestroyBuildDemoObjects(playerid);
 	}
 
 	print("[sampp_capabilitydemo] unloaded.");
@@ -685,7 +679,6 @@ public OnFilterScriptExit()
 public OnPlayerConnect(playerid)
 {
 	CapResetPlayerState(playerid);
-	ResetBuildDemoPlayer(playerid);
 	SendClientMessage(playerid, CAP_DEMO_COLOUR, "[CapDemo] Use /capinfo and /capspawn to test capabilities and contextual E capture.");
 	return 1;
 }
@@ -695,9 +688,6 @@ public OnPlayerDisconnect(playerid, reason)
 	CapClearCaptures(playerid);
 	CapDestroyItem(playerid);
 	CapDestroyVehicle(playerid);
-	CloseBuildDemo(playerid);
-	DestroyBuildDemoObjects(playerid);
-	ResetBuildDemoPlayer(playerid);
 	CapResetPlayerState(playerid);
 	return 1;
 }
@@ -705,10 +695,6 @@ public OnPlayerDisconnect(playerid, reason)
 public OnPlayerUpdate(playerid)
 {
 	CapRefreshContext(playerid);
-	if (IsBuildDemoActive(playerid))
-	{
-		RefreshBuildPreview(playerid);
-	}
 	return 1;
 }
 
@@ -718,38 +704,12 @@ public OnPlayerSAMPPJoin(playerid, bool:has_plugin)
 	{
 		SendClientMessage(playerid, CAP_DEMO_OK_COLOUR, "[CapDemo] OMP+ client ready. /capinfo shows negotiated features.");
 		CapSendInfo(playerid);
-		SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] Build UI bridge is loaded through CapDemo. Use /builddemo.");
 	}
 	return 1;
 }
 
 public OnPlayerCommandText(playerid, cmdtext[])
 {
-	if (!strcmp(cmdtext, "/buildhelp", true))
-	{
-		return SendBuildDemoHelp(playerid);
-	}
-
-	if (!strcmp(cmdtext, "/builddemo", true) || !strcmp(cmdtext, "/build", true))
-	{
-		return OpenBuildDemo(playerid);
-	}
-
-	if (!strcmp(cmdtext, "/buildclose", true))
-	{
-		CloseBuildDemo(playerid);
-		SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] Build UI closed.");
-		return 1;
-	}
-
-	if (!strcmp(cmdtext, "/buildclear", true))
-	{
-		CloseBuildDemo(playerid);
-		DestroyBuildDemoObjects(playerid);
-		SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] Demo build objects cleared.");
-		return 1;
-	}
-
 	if (!strcmp(cmdtext, "/caphelp", true))
 	{
 		return CapSendHelp(playerid);
@@ -820,51 +780,6 @@ public OnPlayerCommandText(playerid, cmdtext[])
 	}
 
 	return 0;
-}
-
-public OnPlayerOMPPlusBuildSelect(playerid, sessionid, partid)
-{
-	if (sessionid != GetBuildDemoSession(playerid))
-	{
-		return 1;
-	}
-
-	SetBuildDemoSelection(playerid, partid, 0, false, true);
-
-	new message[104];
-	format(message, sizeof message, "[BuildDemo] Selected part id %d. Move your aim, then LMB confirms the preview.", partid);
-	SendClientMessage(playerid, BUILD_DEMO_COLOUR, message);
-	return 1;
-}
-
-public OnPlayerOMPPlusBuildPreview(playerid, sessionid, partid, rotation_step, bool:flipped)
-{
-	if (sessionid != GetBuildDemoSession(playerid))
-	{
-		return 1;
-	}
-
-	SetBuildDemoSelection(playerid, partid, rotation_step, flipped, true);
-	return 1;
-}
-
-public OnPlayerOMPPlusBuildPlace(playerid, sessionid, partid, rotation_step, bool:flipped)
-{
-	if (sessionid != GetBuildDemoSession(playerid))
-	{
-		return 1;
-	}
-
-	return PlaceBuildDemoPart(playerid, partid, rotation_step, flipped);
-}
-
-public OnPlayerOMPPlusBuildCancel(playerid, sessionid)
-{
-	if (sessionid == GetBuildDemoSession(playerid))
-	{
-		CancelBuildDemoSession(playerid, true);
-	}
-	return 1;
 }
 
 public OnPlayerSAMPPKey(playerid, keyid, keystate, action[])

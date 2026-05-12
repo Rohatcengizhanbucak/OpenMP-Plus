@@ -84,6 +84,10 @@ To load the smoke-test and capability demo filterscripts, add them under
 }
 ```
 
+Keep `sampp_builddemo` as its own side script. Do not also load another
+filterscript that embeds `sampp_builddemo_core`, because only one Pawn script
+should own `/builddemo` and the build callbacks for a player session.
+
 Useful in-game checks:
 
 - `/sampp`: basic native transport and client-info smoke test.

@@ -892,6 +892,13 @@ void OMPPlusComponent::processBuildSelect(IPlayer& player, NetworkBitStream& str
 	if (!context.active || context.sessionId != sessionid)
 		return;
 
+	if (partid == 0)
+	{
+		callPublic("OnPlayerSAMPPBuildPreview", DefaultReturnValue_True, playerid, static_cast<int>(sessionid), 0, 0, 0);
+		callPublic("OnPlayerOMPPlusBuildPreview", DefaultReturnValue_True, playerid, static_cast<int>(sessionid), 0, 0, 0);
+		return;
+	}
+
 	const auto partIt = std::find_if(context.parts.begin(), context.parts.end(), [partid](const OMPPlusBuildPart& part)
 	{
 		return part.partId == partid;
@@ -971,6 +978,13 @@ void OMPPlusComponent::processBuildPreview(IPlayer& player, NetworkBitStream& st
 	OMPPlusBuildContext& context = buildContexts_[playerid];
 	if (!context.active || context.sessionId != sessionid)
 		return;
+
+	if (partid == 0)
+	{
+		callPublic("OnPlayerSAMPPBuildPreview", DefaultReturnValue_True, playerid, static_cast<int>(sessionid), 0, 0, 0);
+		callPublic("OnPlayerOMPPlusBuildPreview", DefaultReturnValue_True, playerid, static_cast<int>(sessionid), 0, 0, 0);
+		return;
+	}
 
 	const auto partIt = std::find_if(context.parts.begin(), context.parts.end(), [partid](const OMPPlusBuildPart& part)
 	{

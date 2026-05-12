@@ -52,6 +52,10 @@ Install the component, ASI, and include from the same build. Then copy
 `sampp_builddemo.amx` to the server `filterscripts` folder and add it to
 `pawn.side_scripts`.
 
+Load the build demo from one script owner only. The capability demo is kept
+separate from the build demo so `/builddemo` and the build callbacks are not
+handled twice.
+
 The demo foundation and wall use custom open.mp models registered with
 `AddSimpleModel(-1, 19379, -2000, "foundation.dff", "foundation.txd")`.
 The wall is registered with
@@ -82,6 +86,11 @@ Right mouse     In placement mode, return to the part menu. In the menu, close b
 ESC             Close build UI.
 Middle mouse    Switch side for Wall, Door Frame, and Door.
 ```
+
+When right mouse returns from placement to the menu, the client sends a clear
+preview event with `partid = SAMPP_BUILD_PART_NONE`. The component forwards
+that event to Pawn so the temporary preview object can be destroyed without
+closing the build session.
 
 ## Demo Snap Rules
 
