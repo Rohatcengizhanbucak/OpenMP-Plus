@@ -17,6 +17,7 @@
 #define BUILD_DEMO_WALL_HEIGHT 1.55
 #define BUILD_DEMO_ROOF_HEIGHT 3.05
 #define BUILD_DEMO_PREVIEW_MS 75
+#define BUILD_DEMO_REMOVE_TARGET_MS 90
 #define BUILD_DEMO_REMOVE_MAX_RAY_DISTANCE 28.0
 #define BUILD_DEMO_REMOVE_MAX_PLAYER_DISTANCE 16.0
 #define BUILD_DEMO_EDGE_SNAP_RADIUS 2.25
@@ -45,29 +46,37 @@
 #define BUILD_MODEL_FOUNDATION -2000
 #define BUILD_MODEL_FOUNDATION_PREVIEW_OK -2100
 #define BUILD_MODEL_FOUNDATION_PREVIEW_BAD -2200
+#define BUILD_MODEL_FOUNDATION_HIGHLIGHT -2300
 #define BUILD_BASE_MODEL_WALL 19380
 #define BUILD_MODEL_WALL -2001
 #define BUILD_MODEL_WALL_PREVIEW_OK -2101
 #define BUILD_MODEL_WALL_PREVIEW_BAD -2201
+#define BUILD_MODEL_WALL_HIGHLIGHT -2301
 #define BUILD_BASE_MODEL_DOORFRAME 19381
 #define BUILD_MODEL_DOORFRAME -2002
 #define BUILD_MODEL_DOORFRAME_PREVIEW_OK -2102
 #define BUILD_MODEL_DOORFRAME_PREVIEW_BAD -2202
+#define BUILD_MODEL_DOORFRAME_HIGHLIGHT -2302
 #define BUILD_BASE_MODEL_FLOOR 19378
 #define BUILD_MODEL_FLOOR -2003
 #define BUILD_MODEL_FLOOR_PREVIEW_OK -2103
 #define BUILD_MODEL_FLOOR_PREVIEW_BAD -2203
+#define BUILD_MODEL_FLOOR_HIGHLIGHT -2303
 #define BUILD_MODEL_ROOF 19377
 #define BUILD_MODEL_ROOF_PREVIEW_OK -2104
 #define BUILD_MODEL_ROOF_PREVIEW_BAD -2204
+#define BUILD_MODEL_ROOF_HIGHLIGHT -2304
 #define BUILD_MODEL_STAIRS 19387
 #define BUILD_MODEL_STAIRS_PREVIEW_OK -2105
 #define BUILD_MODEL_STAIRS_PREVIEW_BAD -2205
+#define BUILD_MODEL_STAIRS_HIGHLIGHT -2305
 #define BUILD_MODEL_DOOR 1491
 #define BUILD_MODEL_DOOR_PREVIEW_OK -2106
 #define BUILD_MODEL_DOOR_PREVIEW_BAD -2206
+#define BUILD_MODEL_DOOR_HIGHLIGHT -2306
 #define BUILD_MODEL_PREVIEW_OK_TXD "build-preview-green.txd"
 #define BUILD_MODEL_PREVIEW_BAD_TXD "build-preview-red.txd"
+#define BUILD_MODEL_REMOVE_HIGHLIGHT_TXD "build-preview-orange.txd"
 #define BUILD_MODEL_FOUNDATION_DFF "foundation.dff"
 #define BUILD_MODEL_FOUNDATION_TXD "foundation.txd"
 #define BUILD_MODEL_WALL_DFF "wall.dff"
@@ -90,6 +99,9 @@ static gBuildObjectSlotIndex[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
 static Float:gBuildObjectX[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
 static Float:gBuildObjectY[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
 static Float:gBuildObjectZ[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
+static Float:gBuildObjectRX[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
+static Float:gBuildObjectRY[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
+static Float:gBuildObjectRZ[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
 static gBuildObjectCount[MAX_PLAYERS];
 static gBuildPreviewObject[MAX_PLAYERS];
 static gBuildPreviewModel[MAX_PLAYERS];
@@ -106,6 +118,10 @@ static gBuildPreviewParentFoundation[MAX_PLAYERS];
 static gBuildPreviewSlotIndex[MAX_PLAYERS];
 static gBuildPreviewSlotKind[MAX_PLAYERS];
 static gBuildPreviewRejectReason[MAX_PLAYERS][BUILD_DEMO_REJECT_REASON_SIZE];
+static gBuildRemoveTargetNextUpdate[MAX_PLAYERS];
+static gBuildRemoveFocusedObject[MAX_PLAYERS];
+static gBuildRemoveHighlightObject[MAX_PLAYERS][2];
+static gBuildRemoveHighlightModel[MAX_PLAYERS][2];
 static bool:gBuildHasFoundation[MAX_PLAYERS];
 static Float:gBuildFoundationX[MAX_PLAYERS];
 static Float:gBuildFoundationY[MAX_PLAYERS];
@@ -227,6 +243,66 @@ stock GetBuildPreviewPartModel(partid, bool:placeable)
 	return GetBuildPartModel(partid);
 }
 
+stock GetBuildRemoveHighlightPartModel(partid)
+{
+	switch (partid)
+	{
+		case SAMPP_BUILD_PART_FOUNDATION: return BUILD_MODEL_FOUNDATION_HIGHLIGHT;
+		case SAMPP_BUILD_PART_WALL: return BUILD_MODEL_WALL_HIGHLIGHT;
+		case SAMPP_BUILD_PART_DOORFRAME: return BUILD_MODEL_DOORFRAME_HIGHLIGHT;
+		case SAMPP_BUILD_PART_FLOOR: return BUILD_MODEL_FLOOR_HIGHLIGHT;
+		case SAMPP_BUILD_PART_ROOF: return BUILD_MODEL_ROOF_HIGHLIGHT;
+		case SAMPP_BUILD_PART_STAIRS: return BUILD_MODEL_STAIRS_HIGHLIGHT;
+		case SAMPP_BUILD_PART_DOOR: return BUILD_MODEL_DOOR_HIGHLIGHT;
+	}
+	return 0;
+}
+
+stock GetBuildRemoveHighlightLayerCount(partid)
+{
+	switch (partid)
+	{
+		case SAMPP_BUILD_PART_WALL, SAMPP_BUILD_PART_DOORFRAME, SAMPP_BUILD_PART_DOOR:
+		{
+			return 2;
+		}
+		case SAMPP_BUILD_PART_FLOOR, SAMPP_BUILD_PART_ROOF:
+		{
+			return 2;
+		}
+	}
+	return 1;
+}
+
+stock OffsetBuildRemoveHighlight(partid, layer, Float:rz, &Float:x, &Float:y, &Float:z)
+{
+	switch (partid)
+	{
+		case SAMPP_BUILD_PART_FOUNDATION:
+		{
+			z += 0.035;
+		}
+		case SAMPP_BUILD_PART_FLOOR, SAMPP_BUILD_PART_ROOF:
+		{
+			z += layer == 0 ? 0.035 : -0.035;
+		}
+		case SAMPP_BUILD_PART_WALL, SAMPP_BUILD_PART_DOORFRAME, SAMPP_BUILD_PART_DOOR:
+		{
+			new Float:outX;
+			new Float:outY;
+			new Float:offset = layer == 0 ? 0.035 : -0.035;
+			GetForwardPoint(x, y, NormalizeBuildAngle(rz - 90.0), offset, outX, outY);
+			x = outX;
+			y = outY;
+		}
+		case SAMPP_BUILD_PART_STAIRS:
+		{
+			z += 0.045;
+		}
+	}
+	return 1;
+}
+
 stock Float:GetBuildRemoveAimRadius(partid)
 {
 	switch (partid)
@@ -292,7 +368,23 @@ stock ResetBuildPreviewState(playerid)
 	gBuildPreviewRX[playerid] = 0.0;
 	gBuildPreviewRY[playerid] = 0.0;
 	gBuildPreviewRZ[playerid] = 0.0;
+	gBuildRemoveTargetNextUpdate[playerid] = 0;
+	gBuildRemoveFocusedObject[playerid] = -1;
 	SetBuildPreviewCandidate(playerid, false, -1, -1, BUILD_DEMO_SLOT_NONE, "");
+	return 1;
+}
+
+stock DestroyBuildRemoveHighlight(playerid)
+{
+	for (new layer = 0; layer < 2; layer++)
+	{
+		if (gBuildRemoveHighlightObject[playerid][layer] != INVALID_OBJECT_ID)
+		{
+			DestroyPlayerObject(playerid, gBuildRemoveHighlightObject[playerid][layer]);
+		}
+		gBuildRemoveHighlightObject[playerid][layer] = INVALID_OBJECT_ID;
+		gBuildRemoveHighlightModel[playerid][layer] = 0;
+	}
 	return 1;
 }
 
@@ -319,6 +411,9 @@ stock ResetBuildObjectSlot(playerid, index)
 	gBuildObjectX[playerid][index] = 0.0;
 	gBuildObjectY[playerid][index] = 0.0;
 	gBuildObjectZ[playerid][index] = 0.0;
+	gBuildObjectRX[playerid][index] = 0.0;
+	gBuildObjectRY[playerid][index] = 0.0;
+	gBuildObjectRZ[playerid][index] = 0.0;
 	return 1;
 }
 
@@ -328,6 +423,11 @@ stock ResetBuildDemoPlayer(playerid)
 	gBuildActive[playerid] = false;
 	gBuildObjectCount[playerid] = 0;
 	gBuildPreviewObject[playerid] = INVALID_OBJECT_ID;
+	for (new layer = 0; layer < 2; layer++)
+	{
+		gBuildRemoveHighlightObject[playerid][layer] = INVALID_OBJECT_ID;
+		gBuildRemoveHighlightModel[playerid][layer] = 0;
+	}
 	gBuildHasFoundation[playerid] = false;
 	gBuildFoundationX[playerid] = 0.0;
 	gBuildFoundationY[playerid] = 0.0;
@@ -358,6 +458,7 @@ stock ResetBuildDemoPlayer(playerid)
 stock DestroyBuildDemoObjects(playerid)
 {
 	DestroyBuildPreview(playerid);
+	DestroyBuildRemoveHighlight(playerid);
 
 	for (new i = 0; i < BUILD_DEMO_MAX_OBJECTS; i++)
 	{
@@ -389,7 +490,7 @@ stock DestroyBuildDemoObjects(playerid)
 	return 1;
 }
 
-stock bool:AddBuildDemoObject(playerid, objectid, partid, foundationIndex, slotKind, slotIndex, Float:x, Float:y, Float:z)
+stock bool:AddBuildDemoObject(playerid, objectid, partid, foundationIndex, slotKind, slotIndex, Float:x, Float:y, Float:z, Float:rx, Float:ry, Float:rz)
 {
 	if (objectid == INVALID_OBJECT_ID)
 	{
@@ -416,6 +517,9 @@ stock bool:AddBuildDemoObject(playerid, objectid, partid, foundationIndex, slotK
 			gBuildObjectX[playerid][i] = x;
 			gBuildObjectY[playerid][i] = y;
 			gBuildObjectZ[playerid][i] = z;
+			gBuildObjectRX[playerid][i] = rx;
+			gBuildObjectRY[playerid][i] = ry;
+			gBuildObjectRZ[playerid][i] = rz;
 			gBuildObjectCount[playerid]++;
 			return true;
 		}
@@ -992,6 +1096,7 @@ stock OpenBuildDemo(playerid)
 stock CloseBuildDemo(playerid)
 {
 	gBuildActive[playerid] = false;
+	SendBuildRemoveFocus(playerid, false);
 	DestroyBuildPreview(playerid);
 	ResetBuildPreviewState(playerid);
 	SAMPP_BuildClose(playerid);
@@ -1192,6 +1297,124 @@ stock bool:FindBuildObjectFromAim(playerid, &objectIndex)
 	return true;
 }
 
+stock Float:GetBuildObjectDistanceToPlayer(playerid, objectIndex)
+{
+	new Float:px, Float:py, Float:pz;
+	if (!GetPlayerPos(playerid, px, py, pz))
+	{
+		return 0.0;
+	}
+
+	new Float:dx = px - gBuildObjectX[playerid][objectIndex];
+	new Float:dy = py - gBuildObjectY[playerid][objectIndex];
+	new Float:dz = pz - gBuildObjectZ[playerid][objectIndex];
+	return floatsqroot((dx * dx) + (dy * dy) + (dz * dz));
+}
+
+stock SyncBuildRemoveHighlight(playerid, objectIndex)
+{
+	if (objectIndex < 0 || objectIndex >= BUILD_DEMO_MAX_OBJECTS || gBuildObjects[playerid][objectIndex] == INVALID_OBJECT_ID)
+	{
+		return DestroyBuildRemoveHighlight(playerid);
+	}
+
+	new partid = gBuildObjectPart[playerid][objectIndex];
+	new modelid = GetBuildRemoveHighlightPartModel(partid);
+	if (modelid == 0)
+	{
+		return DestroyBuildRemoveHighlight(playerid);
+	}
+
+	new Float:x = gBuildObjectX[playerid][objectIndex];
+	new Float:y = gBuildObjectY[playerid][objectIndex];
+	new Float:z = gBuildObjectZ[playerid][objectIndex];
+	new Float:rx = gBuildObjectRX[playerid][objectIndex];
+	new Float:ry = gBuildObjectRY[playerid][objectIndex];
+	new Float:rz = gBuildObjectRZ[playerid][objectIndex];
+
+	new layerCount = GetBuildRemoveHighlightLayerCount(partid);
+	for (new layer = 0; layer < 2; layer++)
+	{
+		if (layer >= layerCount)
+		{
+			if (gBuildRemoveHighlightObject[playerid][layer] != INVALID_OBJECT_ID)
+			{
+				DestroyPlayerObject(playerid, gBuildRemoveHighlightObject[playerid][layer]);
+			}
+			gBuildRemoveHighlightObject[playerid][layer] = INVALID_OBJECT_ID;
+			gBuildRemoveHighlightModel[playerid][layer] = 0;
+			continue;
+		}
+
+		new Float:layerX = x;
+		new Float:layerY = y;
+		new Float:layerZ = z;
+		OffsetBuildRemoveHighlight(partid, layer, rz, layerX, layerY, layerZ);
+
+		if (gBuildRemoveHighlightObject[playerid][layer] == INVALID_OBJECT_ID || gBuildRemoveHighlightModel[playerid][layer] != modelid)
+		{
+			if (gBuildRemoveHighlightObject[playerid][layer] != INVALID_OBJECT_ID)
+			{
+				DestroyPlayerObject(playerid, gBuildRemoveHighlightObject[playerid][layer]);
+			}
+			gBuildRemoveHighlightObject[playerid][layer] = CreatePlayerObject(playerid, modelid, layerX, layerY, layerZ, rx, ry, rz, 80.0);
+			gBuildRemoveHighlightModel[playerid][layer] = modelid;
+		}
+		else
+		{
+			SetPlayerObjectPos(playerid, gBuildRemoveHighlightObject[playerid][layer], layerX, layerY, layerZ);
+			SetPlayerObjectRot(playerid, gBuildRemoveHighlightObject[playerid][layer], rx, ry, rz);
+		}
+	}
+
+	return gBuildRemoveHighlightObject[playerid][0] != INVALID_OBJECT_ID;
+}
+
+stock SendBuildRemoveFocus(playerid, bool:active, objectIndex = -1)
+{
+	if (!active || objectIndex < 0 || objectIndex >= BUILD_DEMO_MAX_OBJECTS || gBuildObjects[playerid][objectIndex] == INVALID_OBJECT_ID)
+	{
+		gBuildRemoveFocusedObject[playerid] = -1;
+		DestroyBuildRemoveHighlight(playerid);
+		return SAMPP_BuildSetRemoveTarget(playerid, false);
+	}
+
+	SyncBuildRemoveHighlight(playerid, objectIndex);
+	new partName[32];
+	GetBuildPartDisplayName(gBuildObjectPart[playerid][objectIndex], partName, sizeof partName);
+	gBuildRemoveFocusedObject[playerid] = objectIndex;
+	return SAMPP_BuildSetRemoveTarget(playerid, true, gBuildObjectPart[playerid][objectIndex], partName, GetBuildObjectDistanceToPlayer(playerid, objectIndex));
+}
+
+stock RefreshBuildRemoveFocus(playerid, bool:force = false)
+{
+	if (!gBuildActive[playerid] || gBuildSelectedPart[playerid] != SAMPP_BUILD_PART_REMOVE)
+	{
+		if (gBuildRemoveFocusedObject[playerid] != -1)
+		{
+			SendBuildRemoveFocus(playerid, false);
+		}
+		return 0;
+	}
+
+	new now = GetTickCount();
+	if (!force && now < gBuildRemoveTargetNextUpdate[playerid])
+	{
+		return 1;
+	}
+	gBuildRemoveTargetNextUpdate[playerid] = now + BUILD_DEMO_REMOVE_TARGET_MS;
+
+	new objectIndex;
+	if (!FindBuildObjectFromAim(playerid, objectIndex))
+	{
+		SendBuildRemoveFocus(playerid, false);
+		return 0;
+	}
+
+	SendBuildRemoveFocus(playerid, true, objectIndex);
+	return 1;
+}
+
 stock bool:BuildFoundationHasChildren(playerid, foundationIndex)
 {
 	if (foundationIndex < 0 || foundationIndex >= BUILD_DEMO_MAX_OBJECTS || !gBuildFoundationActive[playerid][foundationIndex])
@@ -1365,6 +1588,8 @@ stock RemoveBuildDemoTargetPart(playerid)
 	}
 
 	DestroyBuildPreview(playerid);
+	SendBuildRemoveFocus(playerid, false);
+	gBuildRemoveTargetNextUpdate[playerid] = 0;
 	new message[96];
 	format(message, sizeof message, "%s removed.", partName);
 	return SAMPP_BuildSendResult(playerid, SAMPP_BUILD_RESULT_SUCCESS, message);
@@ -1434,7 +1659,7 @@ stock PlaceBuildDemoPart(playerid, partid, rotationStep, bool:flipped)
 		DestroyObject(objectid);
 		return SAMPP_BuildSendResult(playerid, SAMPP_BUILD_RESULT_ERROR, "Build slot changed before placement. Try again.");
 	}
-	if (!AddBuildDemoObject(playerid, objectid, partid, foundationIndex, slotKind, slotIndex, gBuildPreviewX[playerid], gBuildPreviewY[playerid], gBuildPreviewZ[playerid]))
+	if (!AddBuildDemoObject(playerid, objectid, partid, foundationIndex, slotKind, slotIndex, gBuildPreviewX[playerid], gBuildPreviewY[playerid], gBuildPreviewZ[playerid], gBuildPreviewRX[playerid], gBuildPreviewRY[playerid], gBuildPreviewRZ[playerid]))
 	{
 		return 1;
 	}
@@ -1480,6 +1705,13 @@ stock RegisterBuildDemoModels()
 	new bool:roofPreviewBad = AddSimpleModel(-1, BUILD_BASE_MODEL_FLOOR, BUILD_MODEL_ROOF_PREVIEW_BAD, BUILD_MODEL_FLOOR_DFF, BUILD_MODEL_PREVIEW_BAD_TXD);
 	new bool:stairsPreviewBad = AddSimpleModel(-1, BUILD_BASE_MODEL_WALL, BUILD_MODEL_STAIRS_PREVIEW_BAD, BUILD_MODEL_WALL_DFF, BUILD_MODEL_PREVIEW_BAD_TXD);
 	new bool:doorPreviewBad = AddSimpleModel(-1, BUILD_BASE_MODEL_DOORFRAME, BUILD_MODEL_DOOR_PREVIEW_BAD, BUILD_MODEL_DOORFRAME_DFF, BUILD_MODEL_PREVIEW_BAD_TXD);
+	new bool:foundationHighlight = AddSimpleModel(-1, BUILD_BASE_MODEL_FOUNDATION, BUILD_MODEL_FOUNDATION_HIGHLIGHT, BUILD_MODEL_FOUNDATION_DFF, BUILD_MODEL_REMOVE_HIGHLIGHT_TXD);
+	new bool:wallHighlight = AddSimpleModel(-1, BUILD_BASE_MODEL_WALL, BUILD_MODEL_WALL_HIGHLIGHT, BUILD_MODEL_WALL_DFF, BUILD_MODEL_REMOVE_HIGHLIGHT_TXD);
+	new bool:doorFrameHighlight = AddSimpleModel(-1, BUILD_BASE_MODEL_DOORFRAME, BUILD_MODEL_DOORFRAME_HIGHLIGHT, BUILD_MODEL_DOORFRAME_DFF, BUILD_MODEL_REMOVE_HIGHLIGHT_TXD);
+	new bool:floorHighlight = AddSimpleModel(-1, BUILD_BASE_MODEL_FLOOR, BUILD_MODEL_FLOOR_HIGHLIGHT, BUILD_MODEL_FLOOR_DFF, BUILD_MODEL_REMOVE_HIGHLIGHT_TXD);
+	new bool:roofHighlight = AddSimpleModel(-1, BUILD_BASE_MODEL_FLOOR, BUILD_MODEL_ROOF_HIGHLIGHT, BUILD_MODEL_FLOOR_DFF, BUILD_MODEL_REMOVE_HIGHLIGHT_TXD);
+	new bool:stairsHighlight = AddSimpleModel(-1, BUILD_BASE_MODEL_WALL, BUILD_MODEL_STAIRS_HIGHLIGHT, BUILD_MODEL_WALL_DFF, BUILD_MODEL_REMOVE_HIGHLIGHT_TXD);
+	new bool:doorHighlight = AddSimpleModel(-1, BUILD_BASE_MODEL_DOORFRAME, BUILD_MODEL_DOOR_HIGHLIGHT, BUILD_MODEL_DOORFRAME_DFF, BUILD_MODEL_REMOVE_HIGHLIGHT_TXD);
 
 	if (foundationRegistered)
 	{
@@ -1518,18 +1750,20 @@ stock RegisterBuildDemoModels()
 	}
 
 	if (foundationPreviewOK && wallPreviewOK && doorFramePreviewOK && floorPreviewOK && roofPreviewOK && stairsPreviewOK && doorPreviewOK
-		&& foundationPreviewBad && wallPreviewBad && doorFramePreviewBad && floorPreviewBad && roofPreviewBad && stairsPreviewBad && doorPreviewBad)
+		&& foundationPreviewBad && wallPreviewBad && doorFramePreviewBad && floorPreviewBad && roofPreviewBad && stairsPreviewBad && doorPreviewBad
+		&& foundationHighlight && wallHighlight && doorFrameHighlight && floorHighlight && roofHighlight && stairsHighlight && doorHighlight)
 	{
-		print("[BuildDemo] Registered green/red preview build models -2100..-2106 and -2200..-2206.");
+		print("[BuildDemo] Registered green/red preview build models and orange remove highlight models.");
 	}
 	else
 	{
-		print("[BuildDemo] Could not register one or more preview models. Check models/build-preview-green.txd and models/build-preview-red.txd.");
+		print("[BuildDemo] Could not register one or more preview/highlight models. Check green/red/orange preview TXDs.");
 	}
 
 	registered = foundationRegistered && wallRegistered && doorFrameRegistered && floorRegistered
 		&& foundationPreviewOK && wallPreviewOK && doorFramePreviewOK && floorPreviewOK && roofPreviewOK && stairsPreviewOK && doorPreviewOK
-		&& foundationPreviewBad && wallPreviewBad && doorFramePreviewBad && floorPreviewBad && roofPreviewBad && stairsPreviewBad && doorPreviewBad;
+		&& foundationPreviewBad && wallPreviewBad && doorFramePreviewBad && floorPreviewBad && roofPreviewBad && stairsPreviewBad && doorPreviewBad
+		&& foundationHighlight && wallHighlight && doorFrameHighlight && floorHighlight && roofHighlight && stairsHighlight && doorHighlight;
 	return registered ? 1 : 0;
 }
 
@@ -1553,14 +1787,17 @@ stock SetBuildDemoSelection(playerid, partid, rotationStep, bool:flipped, bool:f
 	if (partid == SAMPP_BUILD_PART_REMOVE)
 	{
 		DestroyBuildPreview(playerid);
+		RefreshBuildRemoveFocus(playerid, true);
 		return 1;
 	}
+	SendBuildRemoveFocus(playerid, false);
 	return RefreshBuildPreview(playerid, forceRefresh);
 }
 
 stock CancelBuildDemoSession(playerid, bool:sendMessage = false)
 {
 	gBuildActive[playerid] = false;
+	SendBuildRemoveFocus(playerid, false);
 	DestroyBuildPreview(playerid);
 	ResetBuildPreviewState(playerid);
 
@@ -1611,7 +1848,14 @@ public OnPlayerUpdate(playerid)
 {
 	if (gBuildActive[playerid])
 	{
-		RefreshBuildPreview(playerid);
+		if (gBuildSelectedPart[playerid] == SAMPP_BUILD_PART_REMOVE)
+		{
+			RefreshBuildRemoveFocus(playerid);
+		}
+		else
+		{
+			RefreshBuildPreview(playerid);
+		}
 	}
 	return 1;
 }

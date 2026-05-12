@@ -150,7 +150,8 @@ namespace OMPPlusProtocol
 	X(ON_BUILD_SELECT) \
 	X(ON_BUILD_PLACE) \
 	X(ON_BUILD_CANCEL) \
-	X(ON_BUILD_PREVIEW)
+	X(ON_BUILD_PREVIEW) \
+	X(BUILD_REMOVE_TARGET)
 
 	enum LegacyRPC : uint16_t
 	{

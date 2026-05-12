@@ -301,6 +301,7 @@ native SAMPP_BuildClose(playerid);
 native SAMPP_BuildClearParts(playerid);
 native SAMPP_BuildAddPart(playerid, partid, modelid, const name[], const category[] = "", const cost[] = "");
 native SAMPP_BuildSendResult(playerid, result, const message[]);
+native SAMPP_BuildSetRemoveTarget(playerid, bool:active, partid = SAMPP_BUILD_PART_NONE, const label[] = "", Float:distance = 0.0);
 native SAMPP_ExecuteCallback(type, {Float,_}:...);
 
 stock bool:SAMPP_TargetAddAction(playerid, targetid, optionid, const label[], const icon[] = "")

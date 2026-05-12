@@ -554,6 +554,16 @@ namespace
 		const std::string message = Component()->getPawnString(amx, params[3], 96);
 		return Component()->sendBuildResult(playerid, result, message) ? 1 : 0;
 	}
+
+	cell AMX_NATIVE_CALL BuildSetRemoveTargetProc(AMX* amx, cell* params)
+	{
+		const int playerid = static_cast<int>(params[1]);
+		const bool active = params[2] != 0;
+		const uint32_t partid = ParamCount(params) >= 3 ? static_cast<uint32_t>(std::max<cell>(0, params[3])) : 0;
+		const std::string label = ParamCount(params) >= 4 ? Component()->getPawnString(amx, params[4], 48) : std::string();
+		const float distance = ParamCount(params) >= 5 ? amx_ctof(params[5]) : 0.0f;
+		return Component()->sendBuildRemoveTarget(playerid, active, partid, label, distance) ? 1 : 0;
+	}
 }
 
 AMX_NATIVE_INFO OMPPlusNatives[] =
@@ -620,5 +630,6 @@ AMX_NATIVE_INFO OMPPlusNatives[] =
 	{ "SAMPP_BuildClearParts", BuildClearPartsProc },
 	{ "SAMPP_BuildAddPart", BuildAddPartProc },
 	{ "SAMPP_BuildSendResult", BuildSendResultProc },
+	{ "SAMPP_BuildSetRemoveTarget", BuildSetRemoveTargetProc },
 	{ nullptr, nullptr }
 };

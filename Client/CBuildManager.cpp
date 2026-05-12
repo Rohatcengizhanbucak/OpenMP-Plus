@@ -11,6 +11,7 @@
 #include <imgui.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <cstdio>
 
@@ -36,6 +37,7 @@ bool CBuildManager::m_flipped = false;
 unsigned long CBuildManager::m_statusUntil = 0;
 bool CBuildManager::m_statusSuccess = true;
 unsigned long CBuildManager::m_inputGuardUntil = 0;
+sBuildRemoveTarget CBuildManager::m_removeTarget = {};
 std::string CBuildManager::m_title;
 std::string CBuildManager::m_status;
 std::vector<sBuildPart> CBuildManager::m_parts;
@@ -247,6 +249,31 @@ namespace
 		return partId == BuildPartRemove;
 	}
 
+	const char* BuildPartDisplayName(unsigned int partId)
+	{
+		switch (partId)
+		{
+		case BuildPartFoundation:
+			return "Foundation";
+		case BuildPartWall:
+			return "Wall";
+		case BuildPartDoorFrame:
+			return "Door Frame";
+		case BuildPartFloor:
+			return "Floor/Ceiling";
+		case BuildPartRoof:
+			return "Roof";
+		case BuildPartStairs:
+			return "Stairs";
+		case BuildPartDoor:
+			return "Door";
+		case BuildPartRemove:
+			return "Remove";
+		default:
+			return "Build Part";
+		}
+	}
+
 	const char* BuildControlHint(unsigned int partId, bool flipped)
 	{
 		switch (partId)
@@ -292,6 +319,7 @@ void CBuildManager::HandleOpen(RakNet::BitStream& bitStream)
 	m_selectedPartId = 0;
 	m_rotationStep = 0;
 	m_flipped = false;
+	m_removeTarget = sBuildRemoveTarget();
 	m_status.clear();
 	m_statusUntil = 0;
 	m_inputGuardUntil = GetTickCount() + 450;
@@ -360,6 +388,23 @@ void CBuildManager::HandleResult(RakNet::BitStream& bitStream)
 	m_statusUntil = GetTickCount() + 2200;
 }
 
+void CBuildManager::HandleRemoveTarget(RakNet::BitStream& bitStream)
+{
+	bool active = false;
+	unsigned int partId = 0;
+	float distance = 0.0f;
+	std::string label;
+	if (!bitStream.Read(active) || !bitStream.Read(partId) || !bitStream.Read(distance) || !ReadBoundString(bitStream, label, 48))
+		return;
+
+	cScopedBuildStateLock lock;
+	m_removeTarget.active = active;
+	m_removeTarget.partId = active ? partId : 0;
+	m_removeTarget.distance = active ? (std::max)(0.0f, distance) : 0.0f;
+	m_removeTarget.label = active ? label : std::string();
+	m_removeTarget.receivedAt = GetTickCount();
+}
+
 void CBuildManager::Clear()
 {
 	cScopedBuildStateLock lock;
@@ -379,6 +424,7 @@ void CBuildManager::ClearUnlocked(bool restoreCursor)
 	m_inputGuardUntil = 0;
 	m_status.clear();
 	m_statusUntil = 0;
+	m_removeTarget = sBuildRemoveTarget();
 	m_title.clear();
 	m_parts.clear();
 	m_virtualCursorInitialized = false;
@@ -462,7 +508,11 @@ void CBuildManager::RenderImGui()
 		return;
 
 	if (!m_menuOpen)
+	{
+		if (IsRemoveTool(m_selectedPartId))
+			RenderRemoveOverlay();
 		return;
+	}
 
 	ApplyImGuiInput();
 
@@ -530,6 +580,7 @@ void CBuildManager::RenderImGui()
 					m_selectedPartId = part.partId;
 					m_rotationStep = 0;
 					m_flipped = false;
+					m_removeTarget = sBuildRemoveTarget();
 					m_menuOpen = false;
 					if (m_cursorOwned)
 					{
@@ -783,6 +834,63 @@ void CBuildManager::ApplyImGuiInput()
 		io.MouseWheel += static_cast<float>(m_virtualWheel) / 120.0f;
 		m_virtualWheel = 0;
 	}
+}
+
+void CBuildManager::RenderRemoveOverlay()
+{
+	const ImVec2 displaySize = GetOverlayDisplaySize();
+	const float cx = displaySize.x * 0.5f;
+	const float cy = displaySize.y * 0.52f;
+	const unsigned long now = GetTickCount();
+	const bool targetFresh = m_removeTarget.active && now - m_removeTarget.receivedAt <= 650;
+	const float pulse = 0.5f + 0.5f * std::sin(static_cast<float>(now) * 0.0105f);
+
+	ImDrawList* draw = ImGui::GetForegroundDrawList();
+	const ImU32 blackStrong = IM_COL32(0, 0, 0, 210);
+	const ImU32 blackSoft = IM_COL32(0, 0, 0, 130);
+	const ImU32 orange = targetFresh ? IM_COL32(255, 126, 28, 245) : IM_COL32(150, 92, 54, 135);
+	const ImU32 orangeSoft = targetFresh ? IM_COL32(255, 126, 28, 70 + static_cast<int>(pulse * 55.0f)) : IM_COL32(120, 80, 52, 42);
+	const ImU32 white = IM_COL32(246, 241, 232, targetFresh ? 245 : 155);
+
+	const float outer = targetFresh ? 24.0f + pulse * 2.5f : 19.5f;
+	draw->AddCircleFilled(ImVec2(cx, cy), outer + 4.0f, blackSoft, 48);
+	draw->AddCircleFilled(ImVec2(cx, cy), outer, orangeSoft, 48);
+	draw->AddCircle(ImVec2(cx, cy), outer, blackStrong, 48, 3.2f);
+	draw->AddCircle(ImVec2(cx, cy), outer - 3.0f, orange, 48, 2.1f);
+	draw->AddCircleFilled(ImVec2(cx, cy), targetFresh ? 5.5f : 3.8f, targetFresh ? orange : white, 32);
+
+	draw->AddLine(ImVec2(cx - 50.0f, cy), ImVec2(cx - outer - 8.0f, cy), blackStrong, 3.0f);
+	draw->AddLine(ImVec2(cx + outer + 8.0f, cy), ImVec2(cx + 50.0f, cy), blackStrong, 3.0f);
+	draw->AddLine(ImVec2(cx - 46.0f, cy), ImVec2(cx - outer - 10.0f, cy), orange, 1.5f);
+	draw->AddLine(ImVec2(cx + outer + 10.0f, cy), ImVec2(cx + 46.0f, cy), orange, 1.5f);
+
+	const char* fallbackName = BuildPartDisplayName(m_removeTarget.partId);
+	std::string targetLabel = targetFresh && !m_removeTarget.label.empty() ? m_removeTarget.label : fallbackName;
+	if (!targetFresh)
+		targetLabel = "No build target";
+
+	char line1[96] = {};
+	if (targetFresh)
+		std::snprintf(line1, sizeof(line1), "REMOVE %s", targetLabel.c_str());
+	else
+		std::snprintf(line1, sizeof(line1), "%s", targetLabel.c_str());
+
+	char line2[96] = {};
+	if (targetFresh && m_removeTarget.distance > 0.01f)
+		std::snprintf(line2, sizeof(line2), "LMB remove  |  %.1fm", m_removeTarget.distance);
+	else
+		std::snprintf(line2, sizeof(line2), "Aim a placed part  |  RMB menu");
+
+	const ImVec2 text1 = ImGui::CalcTextSize(line1);
+	const ImVec2 text2 = ImGui::CalcTextSize(line2);
+	const float panelW = (std::max)(text1.x, text2.x) + 28.0f;
+	const float panelH = 42.0f;
+	const ImVec2 panelMin(cx - panelW * 0.5f, cy + 35.0f);
+	const ImVec2 panelMax(panelMin.x + panelW, panelMin.y + panelH);
+	draw->AddRectFilled(panelMin, panelMax, IM_COL32(5, 5, 5, targetFresh ? 202 : 150), 6.0f);
+	draw->AddRect(panelMin, panelMax, targetFresh ? orange : IM_COL32(165, 150, 135, 125), 6.0f, 0, 1.2f);
+	draw->AddText(ImVec2(panelMin.x + 14.0f, panelMin.y + 7.0f), targetFresh ? orange : white, line1);
+	draw->AddText(ImVec2(panelMin.x + 14.0f, panelMin.y + 23.0f), white, line2);
 }
 
 bool CBuildManager::IsMouseOverMenu()

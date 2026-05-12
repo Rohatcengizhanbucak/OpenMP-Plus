@@ -175,6 +175,11 @@ namespace Network
 				CBuildManager::HandleResult(bitStream);
 				break;
 			}
+			case eRPC::BUILD_REMOVE_TARGET:
+			{
+				CBuildManager::HandleRemoveTarget(bitStream);
+				break;
+			}
 			default:
 				CLog::Write("Safe RPC ignored: %u", usRpcId);
 				break;

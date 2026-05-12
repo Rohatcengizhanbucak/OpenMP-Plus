@@ -132,6 +132,7 @@ public:
 	bool clearBuildParts(int playerid);
 	bool addBuildPart(int playerid, uint32_t partid, int32_t modelid, const std::string& name, const std::string& category, const std::string& cost);
 	bool sendBuildResult(int playerid, uint8_t result, const std::string& message);
+	bool sendBuildRemoveTarget(int playerid, bool active, uint32_t partid, const std::string& label, float distance);
 
 	template <typename... Args>
 	cell callPublic(const char* name, DefaultReturnValue defaultReturn, Args&&... args)

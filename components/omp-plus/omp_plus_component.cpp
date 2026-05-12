@@ -18,6 +18,7 @@ namespace
 	constexpr size_t MaxBuildCategoryLength = 32;
 	constexpr size_t MaxBuildCostLength = 48;
 	constexpr size_t MaxBuildMessageLength = 96;
+	constexpr size_t MaxBuildRemoveLabelLength = 48;
 	constexpr uint16_t DefaultTargetTtlMs = 500;
 	constexpr uint16_t MaxTargetTtlMs = 5000;
 	constexpr float DefaultBuildMaxDistance = 8.0f;
@@ -529,6 +530,30 @@ bool OMPPlusComponent::sendBuildResult(int playerid, uint8_t result, const std::
 	stream.Write(result);
 	WriteBoundString(stream, message, MaxBuildMessageLength);
 	return sendLegacyRPC(playerid, OMPPlusProtocol::BUILD_RESULT, &stream);
+}
+
+bool OMPPlusComponent::sendBuildRemoveTarget(int playerid, bool active, uint32_t partid, const std::string& label, float distance)
+{
+	if (playerid < 0 || playerid >= PLAYER_POOL_SIZE || !isUsingOMPPlus(playerid))
+		return false;
+
+	OMPPlusBuildContext& context = buildContexts_[playerid];
+	if (!context.active)
+		return false;
+
+	if (!active)
+	{
+		partid = 0;
+		distance = 0.0f;
+	}
+	distance = std::max<float>(0.0f, std::min<float>(distance, MaxBuildMaxDistance));
+
+	NetworkBitStream stream;
+	stream.Write(active);
+	stream.Write(partid);
+	stream.Write(distance);
+	WriteBoundString(stream, active ? label : std::string(), MaxBuildRemoveLabelLength);
+	return sendLegacyRPC(playerid, OMPPlusProtocol::BUILD_REMOVE_TARGET, &stream);
 }
 
 void OMPPlusComponent::resetPlayer(int playerid)

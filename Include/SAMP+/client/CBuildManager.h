@@ -16,6 +16,15 @@ struct sBuildPart
 	std::string cost;
 };
 
+struct sBuildRemoveTarget
+{
+	bool active;
+	unsigned int partId;
+	float distance;
+	std::string label;
+	unsigned long receivedAt;
+};
+
 class CBuildManager
 {
 public:
@@ -24,6 +33,7 @@ public:
 	static void HandleClearParts();
 	static void HandleAddPart(RakNet::BitStream& bitStream);
 	static void HandleResult(RakNet::BitStream& bitStream);
+	static void HandleRemoveTarget(RakNet::BitStream& bitStream);
 	static void Clear();
 	static void Process();
 	static void RenderImGui();
@@ -49,6 +59,7 @@ private:
 	static bool ReadBoundString(RakNet::BitStream& bitStream, std::string& value, unsigned char maxLength);
 	static void InitializeVirtualCursor();
 	static void ApplyImGuiInput();
+	static void RenderRemoveOverlay();
 	static bool IsMouseOverMenu();
 	static void ReturnToMenu();
 	static void SendSelect(unsigned int partId);
@@ -79,6 +90,7 @@ private:
 	static unsigned long m_inputGuardUntil;
 	static unsigned long m_statusUntil;
 	static bool m_statusSuccess;
+	static sBuildRemoveTarget m_removeTarget;
 	static std::string m_title;
 	static std::string m_status;
 	static std::vector<sBuildPart> m_parts;

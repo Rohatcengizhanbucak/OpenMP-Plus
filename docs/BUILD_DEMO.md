@@ -28,7 +28,9 @@ Preview objects use separate open.mp custom model ids and separate green/red
 TXD files. Green means the current snap slot can be placed; red means the
 server already knows the slot is invalid. Confirmed placements use normal
 server objects, so the final structure keeps the original custom model and
-texture instead of the preview material.
+texture instead of the preview material. Remove mode uses the same idea with
+player-only orange highlight objects: the aimed part gets a temporary orange
+overlay, while the real placed object remains unchanged.
 
 ## Files
 
@@ -48,6 +50,7 @@ examples/models/floor.dff
 examples/models/floor.txd
 examples/models/build-preview-green.txd
 examples/models/build-preview-red.txd
+examples/models/build-preview-orange.txd
 ```
 
 Install the component, ASI, and include from the same build. Then copy
@@ -66,8 +69,9 @@ The door frame and floor are registered with
 `AddSimpleModel(-1, 19381, -2002, "door-frame.dff", "door-frame.txd")`
 and `AddSimpleModel(-1, 19378, -2003, "floor.dff", "floor.txd")`.
 The live placement preview uses separate model ids `-2100..-2106` for valid
-green previews and `-2200..-2206` for invalid red previews. Copy these DFF/TXD
-files to the server `models` folder and keep
+green previews and `-2200..-2206` for invalid red previews. Remove highlight
+uses `-2300..-2306` with `build-preview-orange.txd`. Copy these DFF/TXD files
+to the server `models` folder and keep
 `artwork.enable` set to `true` in `config.json`.
 
 ## Commands
@@ -125,9 +129,13 @@ opening side.
 
 The menu includes `Tools > Remove`. This is a special build part
 (`SAMPP_BUILD_PART_REMOVE`) rather than a real model. Selecting it enters an
-orange remove mode with no placement preview. Left mouse sends a normal
-`OnPlayerOMPPlusBuildPlace` event with the remove part id; Pawn then ray-checks
-the player's camera aim against the server-owned build object metadata.
+orange remove mode with no placement preview. While remove mode is active, Pawn
+periodically sends the currently aimed build part to the ASI with
+`SAMPP_BuildSetRemoveTarget`. The client renders a premium orange remove
+indicator, the part name, and the distance near the aim point. This highlight is
+only a visual guide; left mouse still sends a normal `OnPlayerOMPPlusBuildPlace`
+event with the remove part id, and Pawn ray-checks the camera aim again against
+server-owned build object metadata before deleting anything.
 
 The demo removes only validated placed parts. Door Frames with installed Doors
 must have the Door removed first. Foundations can be removed only when their
