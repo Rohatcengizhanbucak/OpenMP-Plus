@@ -17,6 +17,8 @@
 #define BUILD_DEMO_WALL_HEIGHT 1.55
 #define BUILD_DEMO_ROOF_HEIGHT 3.05
 #define BUILD_DEMO_PREVIEW_MS 75
+#define BUILD_DEMO_REMOVE_MAX_RAY_DISTANCE 28.0
+#define BUILD_DEMO_REMOVE_MAX_PLAYER_DISTANCE 16.0
 #define BUILD_DEMO_EDGE_SNAP_RADIUS 2.25
 #define BUILD_DEMO_CENTER_SNAP_RADIUS 2.35
 #define BUILD_DEMO_REJECT_REASON_SIZE 96
@@ -81,6 +83,13 @@ static gBuildSelectedPart[MAX_PLAYERS];
 static gBuildRotationStep[MAX_PLAYERS];
 static bool:gBuildFlipped[MAX_PLAYERS];
 static gBuildObjects[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
+static gBuildObjectPart[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
+static gBuildObjectFoundation[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
+static gBuildObjectSlotKind[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
+static gBuildObjectSlotIndex[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
+static Float:gBuildObjectX[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
+static Float:gBuildObjectY[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
+static Float:gBuildObjectZ[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
 static gBuildObjectCount[MAX_PLAYERS];
 static gBuildPreviewObject[MAX_PLAYERS];
 static gBuildPreviewModel[MAX_PLAYERS];
@@ -103,6 +112,7 @@ static Float:gBuildFoundationY[MAX_PLAYERS];
 static Float:gBuildFoundationZ[MAX_PLAYERS];
 static Float:gBuildFoundationA[MAX_PLAYERS];
 static gBuildFoundationCount[MAX_PLAYERS];
+static bool:gBuildFoundationActive[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
 static Float:gBuildFoundationGridX[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
 static Float:gBuildFoundationGridY[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
 static Float:gBuildFoundationGridZ[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
@@ -217,6 +227,47 @@ stock GetBuildPreviewPartModel(partid, bool:placeable)
 	return GetBuildPartModel(partid);
 }
 
+stock Float:GetBuildRemoveAimRadius(partid)
+{
+	switch (partid)
+	{
+		case SAMPP_BUILD_PART_FOUNDATION, SAMPP_BUILD_PART_FLOOR, SAMPP_BUILD_PART_ROOF:
+		{
+			return 2.25;
+		}
+		case SAMPP_BUILD_PART_WALL, SAMPP_BUILD_PART_DOORFRAME:
+		{
+			return 1.45;
+		}
+		case SAMPP_BUILD_PART_STAIRS:
+		{
+			return 1.60;
+		}
+		case SAMPP_BUILD_PART_DOOR:
+		{
+			return 1.20;
+		}
+	}
+	return 1.20;
+}
+
+stock GetBuildPartDisplayName(partid, name[], size)
+{
+	switch (partid)
+	{
+		case SAMPP_BUILD_PART_FOUNDATION: format(name, size, "Foundation");
+		case SAMPP_BUILD_PART_WALL: format(name, size, "Wall");
+		case SAMPP_BUILD_PART_DOORFRAME: format(name, size, "Door Frame");
+		case SAMPP_BUILD_PART_FLOOR: format(name, size, "Floor/Ceiling");
+		case SAMPP_BUILD_PART_ROOF: format(name, size, "Roof");
+		case SAMPP_BUILD_PART_STAIRS: format(name, size, "Stairs");
+		case SAMPP_BUILD_PART_DOOR: format(name, size, "Door");
+		case SAMPP_BUILD_PART_REMOVE: format(name, size, "Remove Tool");
+		default: format(name, size, "Build Part");
+	}
+	return 1;
+}
+
 stock SetBuildPreviewCandidate(playerid, bool:placeable, parentFoundation, slotIndex, slotKind, const reason[] = "")
 {
 	gBuildPreviewPlaceable[playerid] = placeable;
@@ -258,6 +309,19 @@ stock DestroyBuildPreview(playerid)
 	return 1;
 }
 
+stock ResetBuildObjectSlot(playerid, index)
+{
+	gBuildObjects[playerid][index] = INVALID_OBJECT_ID;
+	gBuildObjectPart[playerid][index] = SAMPP_BUILD_PART_NONE;
+	gBuildObjectFoundation[playerid][index] = -1;
+	gBuildObjectSlotKind[playerid][index] = BUILD_DEMO_SLOT_NONE;
+	gBuildObjectSlotIndex[playerid][index] = -1;
+	gBuildObjectX[playerid][index] = 0.0;
+	gBuildObjectY[playerid][index] = 0.0;
+	gBuildObjectZ[playerid][index] = 0.0;
+	return 1;
+}
+
 stock ResetBuildDemoPlayer(playerid)
 {
 	gBuildSession[playerid] = BuildDemoSession(playerid);
@@ -274,7 +338,8 @@ stock ResetBuildDemoPlayer(playerid)
 
 	for (new i = 0; i < BUILD_DEMO_MAX_OBJECTS; i++)
 	{
-		gBuildObjects[playerid][i] = INVALID_OBJECT_ID;
+		ResetBuildObjectSlot(playerid, i);
+		gBuildFoundationActive[playerid][i] = false;
 		gBuildFoundationGridX[playerid][i] = 0.0;
 		gBuildFoundationGridY[playerid][i] = 0.0;
 		gBuildFoundationGridZ[playerid][i] = 0.0;
@@ -294,13 +359,13 @@ stock DestroyBuildDemoObjects(playerid)
 {
 	DestroyBuildPreview(playerid);
 
-	for (new i = 0; i < gBuildObjectCount[playerid]; i++)
+	for (new i = 0; i < BUILD_DEMO_MAX_OBJECTS; i++)
 	{
 		if (gBuildObjects[playerid][i] != INVALID_OBJECT_ID)
 		{
 			DestroyObject(gBuildObjects[playerid][i]);
-			gBuildObjects[playerid][i] = INVALID_OBJECT_ID;
 		}
+		ResetBuildObjectSlot(playerid, i);
 	}
 
 	gBuildObjectCount[playerid] = 0;
@@ -308,6 +373,7 @@ stock DestroyBuildDemoObjects(playerid)
 	gBuildFoundationCount[playerid] = 0;
 	for (new i = 0; i < BUILD_DEMO_MAX_OBJECTS; i++)
 	{
+		gBuildFoundationActive[playerid][i] = false;
 		gBuildFoundationGridX[playerid][i] = 0.0;
 		gBuildFoundationGridY[playerid][i] = 0.0;
 		gBuildFoundationGridZ[playerid][i] = 0.0;
@@ -323,7 +389,7 @@ stock DestroyBuildDemoObjects(playerid)
 	return 1;
 }
 
-stock bool:AddBuildDemoObject(playerid, objectid)
+stock bool:AddBuildDemoObject(playerid, objectid, partid, foundationIndex, slotKind, slotIndex, Float:x, Float:y, Float:z)
 {
 	if (objectid == INVALID_OBJECT_ID)
 	{
@@ -338,14 +404,37 @@ stock bool:AddBuildDemoObject(playerid, objectid)
 		return false;
 	}
 
-	gBuildObjects[playerid][gBuildObjectCount[playerid]++] = objectid;
-	return true;
+	for (new i = 0; i < BUILD_DEMO_MAX_OBJECTS; i++)
+	{
+		if (gBuildObjects[playerid][i] == INVALID_OBJECT_ID)
+		{
+			gBuildObjects[playerid][i] = objectid;
+			gBuildObjectPart[playerid][i] = partid;
+			gBuildObjectFoundation[playerid][i] = foundationIndex;
+			gBuildObjectSlotKind[playerid][i] = slotKind;
+			gBuildObjectSlotIndex[playerid][i] = slotIndex;
+			gBuildObjectX[playerid][i] = x;
+			gBuildObjectY[playerid][i] = y;
+			gBuildObjectZ[playerid][i] = z;
+			gBuildObjectCount[playerid]++;
+			return true;
+		}
+	}
+
+	DestroyObject(objectid);
+	SAMPP_BuildSendResult(playerid, SAMPP_BUILD_RESULT_ERROR, "Demo object slots are full.");
+	return false;
 }
 
 stock bool:IsBuildFoundationSlotOccupied(playerid, Float:x, Float:y)
 {
-	for (new i = 0; i < gBuildFoundationCount[playerid]; i++)
+	for (new i = 0; i < BUILD_DEMO_MAX_OBJECTS; i++)
 	{
+		if (!gBuildFoundationActive[playerid][i])
+		{
+			continue;
+		}
+
 		if (GetBuildDistance2D(x, y, gBuildFoundationGridX[playerid][i], gBuildFoundationGridY[playerid][i]) <= BUILD_DEMO_FOUNDATION_OCCUPIED_RADIUS)
 		{
 			return true;
@@ -354,14 +443,30 @@ stock bool:IsBuildFoundationSlotOccupied(playerid, Float:x, Float:y)
 	return false;
 }
 
-stock bool:RegisterBuildFoundation(playerid, Float:x, Float:y, Float:z, Float:a)
+stock bool:RegisterBuildFoundation(playerid, Float:x, Float:y, Float:z, Float:a, &outIndex)
 {
 	if (gBuildFoundationCount[playerid] >= BUILD_DEMO_MAX_OBJECTS)
 	{
 		return false;
 	}
 
-	new index = gBuildFoundationCount[playerid]++;
+	new index = -1;
+	for (new i = 0; i < BUILD_DEMO_MAX_OBJECTS; i++)
+	{
+		if (!gBuildFoundationActive[playerid][i])
+		{
+			index = i;
+			break;
+		}
+	}
+
+	if (index == -1)
+	{
+		return false;
+	}
+
+	gBuildFoundationActive[playerid][index] = true;
+	gBuildFoundationCount[playerid]++;
 	gBuildFoundationGridX[playerid][index] = x;
 	gBuildFoundationGridY[playerid][index] = y;
 	gBuildFoundationGridZ[playerid][index] = z;
@@ -379,6 +484,7 @@ stock bool:RegisterBuildFoundation(playerid, Float:x, Float:y, Float:z, Float:a)
 	gBuildFoundationY[playerid] = y;
 	gBuildFoundationZ[playerid] = z;
 	gBuildFoundationA[playerid] = NormalizeBuildAngle(a);
+	outIndex = index;
 	return true;
 }
 
@@ -433,8 +539,13 @@ stock bool:GetNearestFoundationCenterToPoint(playerid, Float:aimX, Float:aimY, &
 
 	new bestIndex = 0;
 	new Float:bestDistance = 999999.0;
-	for (new i = 0; i < gBuildFoundationCount[playerid]; i++)
+	for (new i = 0; i < BUILD_DEMO_MAX_OBJECTS; i++)
 	{
+		if (!gBuildFoundationActive[playerid][i])
+		{
+			continue;
+		}
+
 		new Float:distance = GetBuildDistance2D(aimX, aimY, gBuildFoundationGridX[playerid][i], gBuildFoundationGridY[playerid][i]);
 		if (distance < bestDistance)
 		{
@@ -468,8 +579,13 @@ stock bool:GetNearestFoundationSnapToPoint(playerid, Float:aimX, Float:aimY, &pa
 	new Float:bestA = 0.0;
 	new bool:bestOccupied = false;
 
-	for (new i = 0; i < gBuildFoundationCount[playerid]; i++)
+	for (new i = 0; i < BUILD_DEMO_MAX_OBJECTS; i++)
 	{
+		if (!gBuildFoundationActive[playerid][i])
+		{
+			continue;
+		}
+
 		for (new slot = 0; slot < 4; slot++)
 		{
 			new Float:testA = NormalizeBuildAngle(gBuildFoundationGridA[playerid][i] + float(slot * 90));
@@ -517,8 +633,13 @@ stock bool:GetNearestFoundationEdgeToPoint(playerid, Float:aimX, Float:aimY, &fo
 	new bestFoundation = 0;
 	new bestEdge = 0;
 	new Float:bestDistance = 999999.0;
-	for (new foundation = 0; foundation < gBuildFoundationCount[playerid]; foundation++)
+	for (new foundation = 0; foundation < BUILD_DEMO_MAX_OBJECTS; foundation++)
 	{
+		if (!gBuildFoundationActive[playerid][foundation])
+		{
+			continue;
+		}
+
 		for (new i = 0; i < 4; i++)
 		{
 			new Float:testA = NormalizeBuildAngle(gBuildFoundationGridA[playerid][foundation] + float(i * 90));
@@ -547,7 +668,7 @@ stock bool:GetNearestFoundationEdgeToPoint(playerid, Float:aimX, Float:aimY, &fo
 
 stock bool:GetNearestFoundationEdgeOnFoundationToPoint(playerid, foundationIndex, Float:aimX, Float:aimY, &edgeIndex, &Float:edgeX, &Float:edgeY, &Float:edgeZ, &Float:edgeA, &Float:edgeDistance)
 {
-	if (foundationIndex < 0 || foundationIndex >= gBuildFoundationCount[playerid])
+	if (foundationIndex < 0 || foundationIndex >= BUILD_DEMO_MAX_OBJECTS || !gBuildFoundationActive[playerid][foundationIndex])
 	{
 		return false;
 	}
@@ -785,7 +906,7 @@ stock bool:ComputeBuildPreview(playerid, partid, rotationStep, bool:flipped, &mo
 
 stock RefreshBuildPreview(playerid, bool:force = false)
 {
-	if (!gBuildActive[playerid] || gBuildSelectedPart[playerid] == 0)
+	if (!gBuildActive[playerid] || gBuildSelectedPart[playerid] == 0 || gBuildSelectedPart[playerid] == SAMPP_BUILD_PART_REMOVE)
 	{
 		DestroyBuildPreview(playerid);
 		return 0;
@@ -861,9 +982,10 @@ stock OpenBuildDemo(playerid)
 	SAMPP_BuildAddPart(playerid, SAMPP_BUILD_PART_ROOF, BUILD_MODEL_ROOF, "Roof", "Structure", "140 wood");
 	SAMPP_BuildAddPart(playerid, SAMPP_BUILD_PART_STAIRS, BUILD_MODEL_STAIRS, "Stairs", "Access", "75 wood");
 	SAMPP_BuildAddPart(playerid, SAMPP_BUILD_PART_DOOR, BUILD_MODEL_DOOR, "Door", "Access", "50 wood");
+	SAMPP_BuildAddPart(playerid, SAMPP_BUILD_PART_REMOVE, 0, "Remove", "Tools", "orange");
 
 	SendClientMessage(playerid, BUILD_DEMO_OK_COLOUR, "[BuildDemo] Build UI opened. Select a part to show a live preview.");
-	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] LMB confirms. MMB switches side for walls/doors. RMB returns to menu; RMB again or ESC closes.");
+	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] LMB confirms. MMB switches side for walls/doors. Remove mode deletes targeted placed parts.");
 	return 1;
 }
 
@@ -876,20 +998,25 @@ stock CloseBuildDemo(playerid)
 	return 1;
 }
 
-stock bool:CommitBuildDemoSlot(playerid, partid)
+stock bool:CommitBuildDemoSlot(playerid, partid, &foundationOut, &slotKindOut, &slotOut)
 {
 	new parent = gBuildPreviewParentFoundation[playerid];
 	new slot = gBuildPreviewSlotIndex[playerid];
+	foundationOut = -1;
+	slotKindOut = gBuildPreviewSlotKind[playerid];
+	slotOut = slot;
 
 	switch (partid)
 	{
 		case SAMPP_BUILD_PART_FOUNDATION:
 		{
-			return RegisterBuildFoundation(playerid, gBuildPreviewX[playerid], gBuildPreviewY[playerid], gBuildPreviewZ[playerid], gBuildPreviewRZ[playerid]);
+			slotKindOut = BUILD_DEMO_SLOT_NONE;
+			slotOut = -1;
+			return RegisterBuildFoundation(playerid, gBuildPreviewX[playerid], gBuildPreviewY[playerid], gBuildPreviewZ[playerid], gBuildPreviewRZ[playerid], foundationOut);
 		}
 		case SAMPP_BUILD_PART_WALL:
 		{
-			if (parent < 0 || parent >= gBuildFoundationCount[playerid] || slot < 0 || slot >= 4)
+			if (parent < 0 || parent >= BUILD_DEMO_MAX_OBJECTS || !gBuildFoundationActive[playerid][parent] || slot < 0 || slot >= 4)
 			{
 				return false;
 			}
@@ -898,11 +1025,14 @@ stock bool:CommitBuildDemoSlot(playerid, partid)
 				return false;
 			}
 			gBuildFoundationEdgePiece[playerid][parent][slot] = BUILD_DEMO_PIECE_WALL;
+			foundationOut = parent;
+			slotKindOut = BUILD_DEMO_SLOT_EDGE;
+			slotOut = slot;
 			return true;
 		}
 		case SAMPP_BUILD_PART_DOORFRAME:
 		{
-			if (parent < 0 || parent >= gBuildFoundationCount[playerid] || slot < 0 || slot >= 4)
+			if (parent < 0 || parent >= BUILD_DEMO_MAX_OBJECTS || !gBuildFoundationActive[playerid][parent] || slot < 0 || slot >= 4)
 			{
 				return false;
 			}
@@ -911,11 +1041,14 @@ stock bool:CommitBuildDemoSlot(playerid, partid)
 				return false;
 			}
 			gBuildFoundationEdgePiece[playerid][parent][slot] = BUILD_DEMO_PIECE_DOORFRAME;
+			foundationOut = parent;
+			slotKindOut = BUILD_DEMO_SLOT_EDGE;
+			slotOut = slot;
 			return true;
 		}
 		case SAMPP_BUILD_PART_FLOOR:
 		{
-			if (parent < 0 || parent >= gBuildFoundationCount[playerid])
+			if (parent < 0 || parent >= BUILD_DEMO_MAX_OBJECTS || !gBuildFoundationActive[playerid][parent])
 			{
 				return false;
 			}
@@ -924,11 +1057,14 @@ stock bool:CommitBuildDemoSlot(playerid, partid)
 				return false;
 			}
 			gBuildFoundationTopPiece[playerid][parent] = BUILD_DEMO_PIECE_FLOOR;
+			foundationOut = parent;
+			slotKindOut = BUILD_DEMO_SLOT_TOP;
+			slotOut = 0;
 			return true;
 		}
 		case SAMPP_BUILD_PART_ROOF:
 		{
-			if (parent < 0 || parent >= gBuildFoundationCount[playerid])
+			if (parent < 0 || parent >= BUILD_DEMO_MAX_OBJECTS || !gBuildFoundationActive[playerid][parent])
 			{
 				return false;
 			}
@@ -937,11 +1073,14 @@ stock bool:CommitBuildDemoSlot(playerid, partid)
 				return false;
 			}
 			gBuildFoundationTopPiece[playerid][parent] = BUILD_DEMO_PIECE_ROOF;
+			foundationOut = parent;
+			slotKindOut = BUILD_DEMO_SLOT_TOP;
+			slotOut = 0;
 			return true;
 		}
 		case SAMPP_BUILD_PART_STAIRS:
 		{
-			if (parent < 0 || parent >= gBuildFoundationCount[playerid])
+			if (parent < 0 || parent >= BUILD_DEMO_MAX_OBJECTS || !gBuildFoundationActive[playerid][parent])
 			{
 				return false;
 			}
@@ -950,11 +1089,14 @@ stock bool:CommitBuildDemoSlot(playerid, partid)
 				return false;
 			}
 			gBuildFoundationStairsPiece[playerid][parent] = BUILD_DEMO_PIECE_STAIRS;
+			foundationOut = parent;
+			slotKindOut = BUILD_DEMO_SLOT_STAIRS;
+			slotOut = 0;
 			return true;
 		}
 		case SAMPP_BUILD_PART_DOOR:
 		{
-			if (parent < 0 || parent >= gBuildFoundationCount[playerid] || slot < 0 || slot >= 4)
+			if (parent < 0 || parent >= BUILD_DEMO_MAX_OBJECTS || !gBuildFoundationActive[playerid][parent] || slot < 0 || slot >= 4)
 			{
 				return false;
 			}
@@ -963,11 +1105,269 @@ stock bool:CommitBuildDemoSlot(playerid, partid)
 				return false;
 			}
 			gBuildFoundationEdgeDoor[playerid][parent][slot] = true;
+			foundationOut = parent;
+			slotKindOut = BUILD_DEMO_SLOT_DOOR;
+			slotOut = slot;
 			return true;
 		}
 	}
 
 	return false;
+}
+
+stock bool:FindBuildObjectFromAim(playerid, &objectIndex)
+{
+	new Float:px, Float:py, Float:pz;
+	new Float:camX, Float:camY, Float:camZ;
+	new Float:frontX, Float:frontY, Float:frontZ;
+	if (!GetPlayerPos(playerid, px, py, pz)
+		|| !GetPlayerCameraPos(playerid, camX, camY, camZ)
+		|| !GetPlayerCameraFrontVector(playerid, frontX, frontY, frontZ))
+	{
+		return false;
+	}
+
+	new Float:frontLen = floatsqroot((frontX * frontX) + (frontY * frontY) + (frontZ * frontZ));
+	if (frontLen <= 0.001)
+	{
+		return false;
+	}
+
+	frontX /= frontLen;
+	frontY /= frontLen;
+	frontZ /= frontLen;
+
+	new bestIndex = -1;
+	new Float:bestScore = 999999.0;
+	for (new i = 0; i < BUILD_DEMO_MAX_OBJECTS; i++)
+	{
+		if (gBuildObjects[playerid][i] == INVALID_OBJECT_ID)
+		{
+			continue;
+		}
+
+		new Float:playerDistance = GetBuildDistance2D(px, py, gBuildObjectX[playerid][i], gBuildObjectY[playerid][i]);
+		if (playerDistance > BUILD_DEMO_REMOVE_MAX_PLAYER_DISTANCE)
+		{
+			continue;
+		}
+
+		new Float:dx = gBuildObjectX[playerid][i] - camX;
+		new Float:dy = gBuildObjectY[playerid][i] - camY;
+		new Float:dz = gBuildObjectZ[playerid][i] - camZ;
+		new Float:along = (dx * frontX) + (dy * frontY) + (dz * frontZ);
+		if (along < 0.35 || along > BUILD_DEMO_REMOVE_MAX_RAY_DISTANCE)
+		{
+			continue;
+		}
+
+		new Float:distSq = (dx * dx) + (dy * dy) + (dz * dz);
+		new Float:perpSq = distSq - (along * along);
+		if (perpSq < 0.0)
+		{
+			perpSq = 0.0;
+		}
+
+		new Float:perp = floatsqroot(perpSq);
+		new Float:radius = GetBuildRemoveAimRadius(gBuildObjectPart[playerid][i]);
+		if (perp > radius)
+		{
+			continue;
+		}
+
+		new Float:score = perp + (along * 0.012);
+		if (score < bestScore)
+		{
+			bestScore = score;
+			bestIndex = i;
+		}
+	}
+
+	if (bestIndex == -1)
+	{
+		return false;
+	}
+
+	objectIndex = bestIndex;
+	return true;
+}
+
+stock bool:BuildFoundationHasChildren(playerid, foundationIndex)
+{
+	if (foundationIndex < 0 || foundationIndex >= BUILD_DEMO_MAX_OBJECTS || !gBuildFoundationActive[playerid][foundationIndex])
+	{
+		return false;
+	}
+
+	if (gBuildFoundationTopPiece[playerid][foundationIndex] != BUILD_DEMO_PIECE_NONE
+		|| gBuildFoundationStairsPiece[playerid][foundationIndex] != BUILD_DEMO_PIECE_NONE)
+	{
+		return true;
+	}
+
+	for (new slot = 0; slot < 4; slot++)
+	{
+		if (gBuildFoundationEdgePiece[playerid][foundationIndex][slot] != BUILD_DEMO_PIECE_NONE
+			|| gBuildFoundationEdgeDoor[playerid][foundationIndex][slot])
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+stock RefreshBuildFoundationSummary(playerid)
+{
+	gBuildHasFoundation[playerid] = false;
+	gBuildFoundationX[playerid] = 0.0;
+	gBuildFoundationY[playerid] = 0.0;
+	gBuildFoundationZ[playerid] = 0.0;
+	gBuildFoundationA[playerid] = 0.0;
+
+	for (new i = 0; i < BUILD_DEMO_MAX_OBJECTS; i++)
+	{
+		if (!gBuildFoundationActive[playerid][i])
+		{
+			continue;
+		}
+
+		gBuildHasFoundation[playerid] = true;
+		gBuildFoundationX[playerid] = gBuildFoundationGridX[playerid][i];
+		gBuildFoundationY[playerid] = gBuildFoundationGridY[playerid][i];
+		gBuildFoundationZ[playerid] = gBuildFoundationGridZ[playerid][i];
+		gBuildFoundationA[playerid] = gBuildFoundationGridA[playerid][i];
+		return 1;
+	}
+	return 1;
+}
+
+stock bool:RemoveBuildObjectAtIndex(playerid, objectIndex)
+{
+	if (objectIndex < 0 || objectIndex >= BUILD_DEMO_MAX_OBJECTS || gBuildObjects[playerid][objectIndex] == INVALID_OBJECT_ID)
+	{
+		return false;
+	}
+
+	new partid = gBuildObjectPart[playerid][objectIndex];
+	new foundation = gBuildObjectFoundation[playerid][objectIndex];
+	new slotKind = gBuildObjectSlotKind[playerid][objectIndex];
+	new slot = gBuildObjectSlotIndex[playerid][objectIndex];
+
+	if (partid == SAMPP_BUILD_PART_FOUNDATION && BuildFoundationHasChildren(playerid, foundation))
+	{
+		SAMPP_BuildSendResult(playerid, SAMPP_BUILD_RESULT_ERROR, "Remove child pieces before removing this foundation.");
+		return false;
+	}
+
+	if (partid == SAMPP_BUILD_PART_DOORFRAME
+		&& foundation >= 0 && foundation < BUILD_DEMO_MAX_OBJECTS
+		&& slot >= 0 && slot < 4
+		&& gBuildFoundationEdgeDoor[playerid][foundation][slot])
+	{
+		SAMPP_BuildSendResult(playerid, SAMPP_BUILD_RESULT_ERROR, "Remove the door before removing this door frame.");
+		return false;
+	}
+
+	switch (partid)
+	{
+		case SAMPP_BUILD_PART_FOUNDATION:
+		{
+			if (foundation >= 0 && foundation < BUILD_DEMO_MAX_OBJECTS && gBuildFoundationActive[playerid][foundation])
+			{
+				gBuildFoundationActive[playerid][foundation] = false;
+				gBuildFoundationGridX[playerid][foundation] = 0.0;
+				gBuildFoundationGridY[playerid][foundation] = 0.0;
+				gBuildFoundationGridZ[playerid][foundation] = 0.0;
+				gBuildFoundationGridA[playerid][foundation] = 0.0;
+				gBuildFoundationTopPiece[playerid][foundation] = BUILD_DEMO_PIECE_NONE;
+				gBuildFoundationStairsPiece[playerid][foundation] = BUILD_DEMO_PIECE_NONE;
+				for (new edge = 0; edge < 4; edge++)
+				{
+					gBuildFoundationEdgePiece[playerid][foundation][edge] = BUILD_DEMO_PIECE_NONE;
+					gBuildFoundationEdgeDoor[playerid][foundation][edge] = false;
+				}
+				if (gBuildFoundationCount[playerid] > 0)
+				{
+					gBuildFoundationCount[playerid]--;
+				}
+				RefreshBuildFoundationSummary(playerid);
+			}
+		}
+		case SAMPP_BUILD_PART_WALL:
+		{
+			if (slotKind == BUILD_DEMO_SLOT_EDGE && foundation >= 0 && foundation < BUILD_DEMO_MAX_OBJECTS && slot >= 0 && slot < 4)
+			{
+				gBuildFoundationEdgePiece[playerid][foundation][slot] = BUILD_DEMO_PIECE_NONE;
+			}
+		}
+		case SAMPP_BUILD_PART_DOORFRAME:
+		{
+			if (slotKind == BUILD_DEMO_SLOT_EDGE && foundation >= 0 && foundation < BUILD_DEMO_MAX_OBJECTS && slot >= 0 && slot < 4)
+			{
+				gBuildFoundationEdgePiece[playerid][foundation][slot] = BUILD_DEMO_PIECE_NONE;
+				gBuildFoundationEdgeDoor[playerid][foundation][slot] = false;
+			}
+		}
+		case SAMPP_BUILD_PART_FLOOR, SAMPP_BUILD_PART_ROOF:
+		{
+			if (slotKind == BUILD_DEMO_SLOT_TOP && foundation >= 0 && foundation < BUILD_DEMO_MAX_OBJECTS)
+			{
+				gBuildFoundationTopPiece[playerid][foundation] = BUILD_DEMO_PIECE_NONE;
+			}
+		}
+		case SAMPP_BUILD_PART_STAIRS:
+		{
+			if (slotKind == BUILD_DEMO_SLOT_STAIRS && foundation >= 0 && foundation < BUILD_DEMO_MAX_OBJECTS)
+			{
+				gBuildFoundationStairsPiece[playerid][foundation] = BUILD_DEMO_PIECE_NONE;
+			}
+		}
+		case SAMPP_BUILD_PART_DOOR:
+		{
+			if (slotKind == BUILD_DEMO_SLOT_DOOR && foundation >= 0 && foundation < BUILD_DEMO_MAX_OBJECTS && slot >= 0 && slot < 4)
+			{
+				gBuildFoundationEdgeDoor[playerid][foundation][slot] = false;
+			}
+		}
+		default:
+		{
+			return false;
+		}
+	}
+
+	DestroyObject(gBuildObjects[playerid][objectIndex]);
+	ResetBuildObjectSlot(playerid, objectIndex);
+	if (gBuildObjectCount[playerid] > 0)
+	{
+		gBuildObjectCount[playerid]--;
+	}
+	return true;
+}
+
+stock RemoveBuildDemoTargetPart(playerid)
+{
+	if (!gBuildActive[playerid])
+	{
+		return SAMPP_BuildSendResult(playerid, SAMPP_BUILD_RESULT_ERROR, "Build session is not active.");
+	}
+
+	new objectIndex;
+	if (!FindBuildObjectFromAim(playerid, objectIndex))
+	{
+		return SAMPP_BuildSendResult(playerid, SAMPP_BUILD_RESULT_ERROR, "No build part targeted.");
+	}
+
+	new partName[32];
+	GetBuildPartDisplayName(gBuildObjectPart[playerid][objectIndex], partName, sizeof partName);
+	if (!RemoveBuildObjectAtIndex(playerid, objectIndex))
+	{
+		return 1;
+	}
+
+	DestroyBuildPreview(playerid);
+	new message[96];
+	format(message, sizeof message, "%s removed.", partName);
+	return SAMPP_BuildSendResult(playerid, SAMPP_BUILD_RESULT_SUCCESS, message);
 }
 
 stock PlaceBuildDemoPart(playerid, partid, rotationStep, bool:flipped)
@@ -977,6 +1377,11 @@ stock PlaceBuildDemoPart(playerid, partid, rotationStep, bool:flipped)
 	if (!gBuildActive[playerid])
 	{
 		return SAMPP_BuildSendResult(playerid, SAMPP_BUILD_RESULT_ERROR, "Build session is not active.");
+	}
+
+	if (partid == SAMPP_BUILD_PART_REMOVE)
+	{
+		return RemoveBuildDemoTargetPart(playerid);
 	}
 
 	if (gBuildObjectCount[playerid] >= BUILD_DEMO_MAX_OBJECTS)
@@ -1020,12 +1425,16 @@ stock PlaceBuildDemoPart(playerid, partid, rotationStep, bool:flipped)
 	{
 		return SAMPP_BuildSendResult(playerid, SAMPP_BUILD_RESULT_ERROR, "Could not create object. Check demo model ids.");
 	}
-	if (!CommitBuildDemoSlot(playerid, partid))
+
+	new foundationIndex;
+	new slotKind;
+	new slotIndex;
+	if (!CommitBuildDemoSlot(playerid, partid, foundationIndex, slotKind, slotIndex))
 	{
 		DestroyObject(objectid);
 		return SAMPP_BuildSendResult(playerid, SAMPP_BUILD_RESULT_ERROR, "Build slot changed before placement. Try again.");
 	}
-	if (!AddBuildDemoObject(playerid, objectid))
+	if (!AddBuildDemoObject(playerid, objectid, partid, foundationIndex, slotKind, slotIndex, gBuildPreviewX[playerid], gBuildPreviewY[playerid], gBuildPreviewZ[playerid]))
 	{
 		return 1;
 	}
@@ -1041,6 +1450,7 @@ stock SendBuildDemoHelp(playerid)
 	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] Select a part first; a temporary player-object preview follows your camera aim.");
 	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] LMB confirms the preview. RMB returns to the menu; RMB again or ESC closes. MMB switches side.");
 	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] Foundations snap to neighbours; walls/door frames snap to edge surfaces automatically.");
+	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] Tools > Remove enters orange remove mode. Aim a placed part and press LMB to delete it.");
 	return 1;
 }
 
@@ -1140,6 +1550,11 @@ stock SetBuildDemoSelection(playerid, partid, rotationStep, bool:flipped, bool:f
 	gBuildSelectedPart[playerid] = partid;
 	gBuildRotationStep[playerid] = 0;
 	gBuildFlipped[playerid] = BuildDemoPartSupportsVariant(partid) ? flipped : false;
+	if (partid == SAMPP_BUILD_PART_REMOVE)
+	{
+		DestroyBuildPreview(playerid);
+		return 1;
+	}
 	return RefreshBuildPreview(playerid, forceRefresh);
 }
 
@@ -1247,7 +1662,14 @@ public OnPlayerOMPPlusBuildSelect(playerid, sessionid, partid)
 	SetBuildDemoSelection(playerid, partid, 0, false, true);
 
 	new message[96];
-	format(message, sizeof message, "[BuildDemo] Selected part id %d. A preview is now active; LMB confirms it.", partid);
+	if (partid == SAMPP_BUILD_PART_REMOVE)
+	{
+		format(message, sizeof message, "[BuildDemo] Remove mode active. Aim a placed part and press LMB to delete it.");
+	}
+	else
+	{
+		format(message, sizeof message, "[BuildDemo] Selected part id %d. A preview is now active; LMB confirms it.", partid);
+	}
 	SendClientMessage(playerid, BUILD_DEMO_COLOUR, message);
 	return 1;
 }

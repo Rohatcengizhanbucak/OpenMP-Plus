@@ -8,6 +8,7 @@ Client ASI
 - renders the ImGui build menu
 - captures mouse/keyboard while the menu is open
 - sends selected part, side variant, preview, place, and cancel events
+- sends remove-tool selections through the same server-authoritative build flow
 
 Pawn / open.mp
 - decides whether the player can build
@@ -15,6 +16,7 @@ Pawn / open.mp
 - computes the final placement
 - performs snap validation
 - creates the real server object
+- tracks placed object metadata and validates removals
 ```
 
 The client never creates the real build piece. It only asks the server to place
@@ -82,6 +84,7 @@ files to the server `models` folder and keep
 
 ```text
 Left mouse      Place selected part.
+Left mouse      In Remove mode, delete the aimed placed build part.
 Right mouse     In placement mode, return to the part menu. In the menu, close build UI.
 ESC             Close build UI.
 Middle mouse    Switch side for Wall, Door Frame, and Door.
@@ -117,6 +120,19 @@ Stairs use a separate per-foundation stairs slot and face the foundation edge
 nearest to the player's aim. Door placement requires an existing Door Frame edge
 and is rejected if that frame already has a door. Middle mouse changes the door
 opening side.
+
+## Remove Tool
+
+The menu includes `Tools > Remove`. This is a special build part
+(`SAMPP_BUILD_PART_REMOVE`) rather than a real model. Selecting it enters an
+orange remove mode with no placement preview. Left mouse sends a normal
+`OnPlayerOMPPlusBuildPlace` event with the remove part id; Pawn then ray-checks
+the player's camera aim against the server-owned build object metadata.
+
+The demo removes only validated placed parts. Door Frames with installed Doors
+must have the Door removed first. Foundations can be removed only when their
+edge, top, stairs, and door slots are empty. This keeps the snap graph coherent
+and avoids accidental cascade deletes in the demo.
 
 ## Pawn API Surface
 

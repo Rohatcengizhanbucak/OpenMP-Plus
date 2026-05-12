@@ -122,7 +122,8 @@ namespace
 		BuildPartFloor = 4,
 		BuildPartRoof = 5,
 		BuildPartStairs = 6,
-		BuildPartDoor = 7
+		BuildPartDoor = 7,
+		BuildPartRemove = 100
 	};
 
 	bool IsPhysicalKeyDown(int virtualKey)
@@ -241,10 +242,17 @@ namespace
 			|| partId == BuildPartDoor;
 	}
 
+	bool IsRemoveTool(unsigned int partId)
+	{
+		return partId == BuildPartRemove;
+	}
+
 	const char* BuildControlHint(unsigned int partId, bool flipped)
 	{
 		switch (partId)
 		{
+		case BuildPartRemove:
+			return "Remove mode  |  Aim placed part  |  LMB remove  RMB menu";
 		case BuildPartWall:
 		case BuildPartDoorFrame:
 			return flipped
@@ -497,9 +505,16 @@ void CBuildManager::RenderImGui()
 				}
 
 				const bool selected = part.partId == m_selectedPartId;
+				const bool removeTool = IsRemoveTool(part.partId);
 				ImVec4 normal = selected ? ImVec4(0.24f, 0.25f, 0.25f, 0.98f) : ImVec4(0.025f, 0.030f, 0.032f, 0.94f);
 				ImVec4 hover = ImVec4(0.34f, 0.35f, 0.35f, 1.00f);
 				ImVec4 active = ImVec4(0.46f, 0.47f, 0.47f, 1.00f);
+				if (removeTool)
+				{
+					normal = selected ? ImVec4(0.84f, 0.38f, 0.10f, 0.98f) : ImVec4(0.42f, 0.18f, 0.05f, 0.96f);
+					hover = ImVec4(0.94f, 0.48f, 0.14f, 1.00f);
+					active = ImVec4(1.00f, 0.58f, 0.20f, 1.00f);
+				}
 				ImGui::PushStyleColor(ImGuiCol_Button, normal);
 				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hover);
 				ImGui::PushStyleColor(ImGuiCol_ButtonActive, active);
@@ -529,7 +544,8 @@ void CBuildManager::RenderImGui()
 					m_virtualCursorInitialized = false;
 					CDInput8DeviceProxy::RequestInputReset();
 					SendSelect(part.partId);
-					SendPreviewState();
+					if (!IsRemoveTool(part.partId))
+						SendPreviewState();
 				}
 
 				ImGui::PopStyleColor(3);
