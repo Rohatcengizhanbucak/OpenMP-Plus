@@ -14,8 +14,10 @@
 #define BUILD_DEMO_FOUNDATION_SNAP_RADIUS 3.75
 #define BUILD_DEMO_FOUNDATION_OCCUPIED_RADIUS 0.8
 #define BUILD_DEMO_FOUNDATION_Z_OFFSET -0.95
-#define BUILD_DEMO_FOUNDATION_HEIGHT_STEPS 4
-#define BUILD_DEMO_FOUNDATION_DEFAULT_HEIGHT_STEP 4
+#define BUILD_DEMO_FOUNDATION_HEIGHT_STEPS 12
+#define BUILD_DEMO_FOUNDATION_DEFAULT_HEIGHT_STEP 12
+#define BUILD_DEMO_FOUNDATION_HEIGHT_STEP 0.25
+#define BUILD_DEMO_FOUNDATION_MIN_VISUAL_HEIGHT 0.05
 #define BUILD_DEMO_WALL_HEIGHT 1.55
 #define BUILD_DEMO_ROOF_HEIGHT 3.05
 #define BUILD_DEMO_PREVIEW_MS 75
@@ -65,6 +67,10 @@
 #define BUILD_MODEL_FOUNDATION_PREVIEW_OK -2100
 #define BUILD_MODEL_FOUNDATION_PREVIEW_BAD -2200
 #define BUILD_MODEL_FOUNDATION_HIGHLIGHT -2400
+#define BUILD_MODEL_FOUNDATION_HEIGHT_BASE -2007
+#define BUILD_MODEL_FOUNDATION_PREVIEW_OK_HEIGHT_BASE -2107
+#define BUILD_MODEL_FOUNDATION_PREVIEW_BAD_HEIGHT_BASE -2207
+#define BUILD_MODEL_FOUNDATION_HIGHLIGHT_HEIGHT_BASE -2407
 #define BUILD_MODEL_FOUNDATION_H0 -2007
 #define BUILD_MODEL_FOUNDATION_H1 -2008
 #define BUILD_MODEL_FOUNDATION_H2 -2009
@@ -264,6 +270,16 @@ stock GetBuildRotationStepForPart(partid, rotationStep)
 	return 0;
 }
 
+stock Float:GetBuildFoundationHeightFromStep(heightStep)
+{
+	heightStep = ClampBuildFoundationHeightStep(heightStep);
+	if (heightStep <= 0)
+	{
+		return BUILD_DEMO_FOUNDATION_MIN_VISUAL_HEIGHT;
+	}
+	return float(heightStep) * BUILD_DEMO_FOUNDATION_HEIGHT_STEP;
+}
+
 stock Float:GetBuildEdgePieceYaw(partid, Float:edgeA, bool:flipped)
 {
 	new Float:offset = 0.0;
@@ -324,50 +340,45 @@ stock GetBuildPartModel(partid)
 
 stock GetBuildFoundationModel(heightStep)
 {
-	switch (ClampBuildFoundationHeightStep(heightStep))
+	heightStep = ClampBuildFoundationHeightStep(heightStep);
+	if (heightStep < BUILD_DEMO_FOUNDATION_HEIGHT_STEPS)
 	{
-		case 0: return BUILD_MODEL_FOUNDATION_H0;
-		case 1: return BUILD_MODEL_FOUNDATION_H1;
-		case 2: return BUILD_MODEL_FOUNDATION_H2;
-		case 3: return BUILD_MODEL_FOUNDATION_H3;
+		return BUILD_MODEL_FOUNDATION_HEIGHT_BASE - heightStep;
 	}
 	return BUILD_MODEL_FOUNDATION;
 }
 
 stock GetBuildFoundationPreviewModel(heightStep, bool:placeable)
 {
-	switch (ClampBuildFoundationHeightStep(heightStep))
+	heightStep = ClampBuildFoundationHeightStep(heightStep);
+	if (heightStep < BUILD_DEMO_FOUNDATION_HEIGHT_STEPS)
 	{
-		case 0: return placeable ? BUILD_MODEL_FOUNDATION_PREVIEW_OK_H0 : BUILD_MODEL_FOUNDATION_PREVIEW_BAD_H0;
-		case 1: return placeable ? BUILD_MODEL_FOUNDATION_PREVIEW_OK_H1 : BUILD_MODEL_FOUNDATION_PREVIEW_BAD_H1;
-		case 2: return placeable ? BUILD_MODEL_FOUNDATION_PREVIEW_OK_H2 : BUILD_MODEL_FOUNDATION_PREVIEW_BAD_H2;
-		case 3: return placeable ? BUILD_MODEL_FOUNDATION_PREVIEW_OK_H3 : BUILD_MODEL_FOUNDATION_PREVIEW_BAD_H3;
+		return placeable
+			? BUILD_MODEL_FOUNDATION_PREVIEW_OK_HEIGHT_BASE - heightStep
+			: BUILD_MODEL_FOUNDATION_PREVIEW_BAD_HEIGHT_BASE - heightStep;
 	}
 	return placeable ? BUILD_MODEL_FOUNDATION_PREVIEW_OK : BUILD_MODEL_FOUNDATION_PREVIEW_BAD;
 }
 
 stock GetBuildFoundationHighlightModel(heightStep)
 {
-	switch (ClampBuildFoundationHeightStep(heightStep))
+	heightStep = ClampBuildFoundationHeightStep(heightStep);
+	if (heightStep < BUILD_DEMO_FOUNDATION_HEIGHT_STEPS)
 	{
-		case 0: return BUILD_MODEL_FOUNDATION_HIGHLIGHT_H0;
-		case 1: return BUILD_MODEL_FOUNDATION_HIGHLIGHT_H1;
-		case 2: return BUILD_MODEL_FOUNDATION_HIGHLIGHT_H2;
-		case 3: return BUILD_MODEL_FOUNDATION_HIGHLIGHT_H3;
+		return BUILD_MODEL_FOUNDATION_HIGHLIGHT_HEIGHT_BASE - heightStep;
 	}
 	return BUILD_MODEL_FOUNDATION_HIGHLIGHT;
 }
 
 stock GetBuildFoundationDff(heightStep, dff[], size)
 {
-	switch (ClampBuildFoundationHeightStep(heightStep))
+	heightStep = ClampBuildFoundationHeightStep(heightStep);
+	if (heightStep < BUILD_DEMO_FOUNDATION_HEIGHT_STEPS)
 	{
-		case 0: format(dff, size, BUILD_MODEL_FOUNDATION_DFF_H0);
-		case 1: format(dff, size, BUILD_MODEL_FOUNDATION_DFF_H1);
-		case 2: format(dff, size, BUILD_MODEL_FOUNDATION_DFF_H2);
-		case 3: format(dff, size, BUILD_MODEL_FOUNDATION_DFF_H3);
-		default: format(dff, size, BUILD_MODEL_FOUNDATION_DFF);
+		format(dff, size, "foundation-h%d.dff", heightStep);
+		return 1;
 	}
+	format(dff, size, BUILD_MODEL_FOUNDATION_DFF);
 	return 1;
 }
 
@@ -603,7 +614,7 @@ stock bool:UpdateBuildRaySlab(Float:origin, Float:direction, Float:minBound, Flo
 	return tMin <= tMax;
 }
 
-stock bool:RayIntersectsBuildRemoveOBB(partid, Float:objectX, Float:objectY, Float:objectZ, Float:objectRZ, Float:camX, Float:camY, Float:camZ, Float:frontX, Float:frontY, Float:frontZ, &Float:distance)
+stock bool:RayIntersectsBuildRemoveOBB(partid, Float:objectX, Float:objectY, Float:objectZ, Float:objectRZ, Float:camX, Float:camY, Float:camZ, Float:frontX, Float:frontY, Float:frontZ, &Float:distance, heightStep = 0)
 {
 	new Float:minX;
 	new Float:maxX;
@@ -611,7 +622,16 @@ stock bool:RayIntersectsBuildRemoveOBB(partid, Float:objectX, Float:objectY, Flo
 	new Float:maxY;
 	new Float:minZ;
 	new Float:maxZ;
-	if (partid == SAMPP_BUILD_PART_DOOR)
+	if (partid == SAMPP_BUILD_PART_FOUNDATION)
+	{
+		minX = -(BUILD_DEMO_FOUNDATION_HALF + 0.12);
+		maxX = BUILD_DEMO_FOUNDATION_HALF + 0.12;
+		minY = -(BUILD_DEMO_FOUNDATION_HALF + 0.12);
+		maxY = BUILD_DEMO_FOUNDATION_HALF + 0.12;
+		minZ = -GetBuildFoundationHeightFromStep(heightStep) - 0.08;
+		maxZ = 0.20;
+	}
+	else if (partid == SAMPP_BUILD_PART_DOOR)
 	{
 		minX = -0.12;
 		maxX = BUILD_DEMO_DOOR_WIDTH + 0.12;
@@ -1711,7 +1731,7 @@ stock bool:FindBuildObjectFromAim(playerid, &objectIndex, &Float:targetDistance)
 		new Float:surfaceDistance;
 		if (!GetBuildHorizontalSurfaceHit(partid, gBuildObjectX[playerid][i], gBuildObjectY[playerid][i], gBuildObjectZ[playerid][i], objectRZ, camX, camY, camZ, frontX, frontY, frontZ, surfaceDistance)
 			&& !GetBuildVerticalSurfaceHit(partid, gBuildObjectX[playerid][i], gBuildObjectY[playerid][i], gBuildObjectZ[playerid][i], objectRZ, camX, camY, camZ, frontX, frontY, frontZ, surfaceDistance)
-			&& !RayIntersectsBuildRemoveOBB(partid, gBuildObjectX[playerid][i], gBuildObjectY[playerid][i], gBuildObjectZ[playerid][i], objectRZ, camX, camY, camZ, frontX, frontY, frontZ, surfaceDistance))
+			&& !RayIntersectsBuildRemoveOBB(partid, gBuildObjectX[playerid][i], gBuildObjectY[playerid][i], gBuildObjectZ[playerid][i], objectRZ, camX, camY, camZ, frontX, frontY, frontZ, surfaceDistance, gBuildObjectHeightStep[playerid][i]))
 		{
 			continue;
 		}

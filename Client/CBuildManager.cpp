@@ -133,7 +133,7 @@ namespace
 	const float RemoveBadgeMaxWidth = 302.0f;
 	const float RemoveBadgeHeight = 46.0f;
 	const float BuildUiScreenPadding = 12.0f;
-	const int BuildFoundationHeightSteps = 4;
+	const int BuildFoundationHeightSteps = 12;
 
 	bool IsPhysicalKeyDown(int virtualKey)
 	{
