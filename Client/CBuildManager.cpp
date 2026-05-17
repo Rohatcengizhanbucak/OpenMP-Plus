@@ -128,6 +128,13 @@ namespace
 		BuildPartRemove = 100
 	};
 
+	const float TargetReferenceOffsetX = 87.0f;
+	const float TargetReferenceMenuOffsetX = 58.0f;
+	const float RemoveBadgeMinWidth = 178.0f;
+	const float RemoveBadgeMaxWidth = 302.0f;
+	const float RemoveBadgeHeight = 46.0f;
+	const float BuildUiScreenPadding = 12.0f;
+
 	bool IsPhysicalKeyDown(int virtualKey)
 	{
 		return (GetAsyncKeyState(virtualKey) & 0x8000) != 0;
@@ -518,10 +525,12 @@ void CBuildManager::RenderImGui()
 
 	const ImVec2 displaySize = GetOverlayDisplaySize();
 	const float width = (std::max)(280.0f, (std::min)(340.0f, displaySize.x * 0.26f));
-	const float x = displaySize.x - width - 42.0f;
-	const float y = 118.0f;
+	const float cx = displaySize.x * 0.5f + TargetReferenceOffsetX;
+	const float cy = displaySize.y * 0.5f;
+	const float x = ClampFloat(cx + TargetReferenceMenuOffsetX, BuildUiScreenPadding, displaySize.x - width - BuildUiScreenPadding);
+	const float y = cy;
 
-	ImGui::SetNextWindowPos(ImVec2(x, y), ImGuiCond_Always);
+	ImGui::SetNextWindowPos(ImVec2(x, y), ImGuiCond_Always, ImVec2(0.0f, 0.5f));
 	ImGui::SetNextWindowSize(ImVec2(width, 0.0f), ImGuiCond_Always);
 	ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoCollapse;
 
@@ -839,58 +848,59 @@ void CBuildManager::ApplyImGuiInput()
 void CBuildManager::RenderRemoveOverlay()
 {
 	const ImVec2 displaySize = GetOverlayDisplaySize();
-	const float cx = displaySize.x * 0.5f;
-	const float cy = displaySize.y * 0.52f;
+	const float cx = displaySize.x * 0.5f + TargetReferenceOffsetX;
+	const float cy = displaySize.y * 0.5f;
 	const unsigned long now = GetTickCount();
 	const bool targetFresh = m_removeTarget.active && now - m_removeTarget.receivedAt <= 650;
-	const float pulse = 0.5f + 0.5f * std::sin(static_cast<float>(now) * 0.0105f);
-
-	ImDrawList* draw = ImGui::GetForegroundDrawList();
-	const ImU32 blackStrong = IM_COL32(0, 0, 0, 210);
-	const ImU32 blackSoft = IM_COL32(0, 0, 0, 130);
-	const ImU32 orange = targetFresh ? IM_COL32(255, 126, 28, 245) : IM_COL32(150, 92, 54, 135);
-	const ImU32 orangeSoft = targetFresh ? IM_COL32(255, 126, 28, 70 + static_cast<int>(pulse * 55.0f)) : IM_COL32(120, 80, 52, 42);
-	const ImU32 white = IM_COL32(246, 241, 232, targetFresh ? 245 : 155);
-
-	const float outer = targetFresh ? 24.0f + pulse * 2.5f : 19.5f;
-	draw->AddCircleFilled(ImVec2(cx, cy), outer + 4.0f, blackSoft, 48);
-	draw->AddCircleFilled(ImVec2(cx, cy), outer, orangeSoft, 48);
-	draw->AddCircle(ImVec2(cx, cy), outer, blackStrong, 48, 3.2f);
-	draw->AddCircle(ImVec2(cx, cy), outer - 3.0f, orange, 48, 2.1f);
-	draw->AddCircleFilled(ImVec2(cx, cy), targetFresh ? 5.5f : 3.8f, targetFresh ? orange : white, 32);
-
-	draw->AddLine(ImVec2(cx - 50.0f, cy), ImVec2(cx - outer - 8.0f, cy), blackStrong, 3.0f);
-	draw->AddLine(ImVec2(cx + outer + 8.0f, cy), ImVec2(cx + 50.0f, cy), blackStrong, 3.0f);
-	draw->AddLine(ImVec2(cx - 46.0f, cy), ImVec2(cx - outer - 10.0f, cy), orange, 1.5f);
-	draw->AddLine(ImVec2(cx + outer + 10.0f, cy), ImVec2(cx + 46.0f, cy), orange, 1.5f);
 
 	const char* fallbackName = BuildPartDisplayName(m_removeTarget.partId);
 	std::string targetLabel = targetFresh && !m_removeTarget.label.empty() ? m_removeTarget.label : fallbackName;
 	if (!targetFresh)
 		targetLabel = "No build target";
 
-	char line1[96] = {};
-	if (targetFresh)
-		std::snprintf(line1, sizeof(line1), "REMOVE %s", targetLabel.c_str());
-	else
-		std::snprintf(line1, sizeof(line1), "%s", targetLabel.c_str());
-
-	char line2[96] = {};
+	char rowAction[96] = {};
 	if (targetFresh && m_removeTarget.distance > 0.01f)
-		std::snprintf(line2, sizeof(line2), "LMB remove  |  %.1fm", m_removeTarget.distance);
+		std::snprintf(rowAction, sizeof(rowAction), "LMB remove  |  %.1fm", m_removeTarget.distance);
 	else
-		std::snprintf(line2, sizeof(line2), "Aim a placed part  |  RMB menu");
+		std::snprintf(rowAction, sizeof(rowAction), "Aim placed part  |  RMB menu");
 
-	const ImVec2 text1 = ImGui::CalcTextSize(line1);
-	const ImVec2 text2 = ImGui::CalcTextSize(line2);
-	const float panelW = (std::max)(text1.x, text2.x) + 28.0f;
-	const float panelH = 42.0f;
-	const ImVec2 panelMin(cx - panelW * 0.5f, cy + 35.0f);
-	const ImVec2 panelMax(panelMin.x + panelW, panelMin.y + panelH);
-	draw->AddRectFilled(panelMin, panelMax, IM_COL32(5, 5, 5, targetFresh ? 202 : 150), 6.0f);
-	draw->AddRect(panelMin, panelMax, targetFresh ? orange : IM_COL32(165, 150, 135, 125), 6.0f, 0, 1.2f);
-	draw->AddText(ImVec2(panelMin.x + 14.0f, panelMin.y + 7.0f), targetFresh ? orange : white, line1);
-	draw->AddText(ImVec2(panelMin.x + 14.0f, panelMin.y + 23.0f), white, line2);
+	const char* badgeMode = "REMOVE";
+	const std::string badgeTitle = targetFresh ? targetLabel : "MODE";
+	const ImVec2 modeText = ImGui::CalcTextSize(badgeMode);
+	const ImVec2 titleText = ImGui::CalcTextSize(badgeTitle.c_str());
+	const ImVec2 actionText = ImGui::CalcTextSize(rowAction);
+	const float tagWidth = modeText.x + 14.0f;
+	const float titleRowWidth = 10.0f + tagWidth + 8.0f + titleText.x + 12.0f;
+	const float actionRowWidth = actionText.x + 20.0f;
+	const float badgeWidth = ClampFloat((std::max)(titleRowWidth, actionRowWidth), RemoveBadgeMinWidth, RemoveBadgeMaxWidth);
+	const float badgeX = ClampFloat(cx + TargetReferenceMenuOffsetX, BuildUiScreenPadding, displaySize.x - badgeWidth - BuildUiScreenPadding);
+	const float badgeY = ClampFloat(cy - RemoveBadgeHeight * 0.5f, BuildUiScreenPadding, displaySize.y - RemoveBadgeHeight - BuildUiScreenPadding);
+	const ImVec2 badgeMin(badgeX, badgeY);
+	const ImVec2 badgeMax(badgeMin.x + badgeWidth, badgeMin.y + RemoveBadgeHeight);
+
+	ImDrawList* draw = ImGui::GetForegroundDrawList();
+	const ImU32 bg = IM_COL32(3, 4, 4, targetFresh ? 224 : 190);
+	const ImU32 bgSoft = IM_COL32(0, 0, 0, targetFresh ? 130 : 90);
+	const ImU32 accent = targetFresh ? IM_COL32(255, 126, 28, 245) : IM_COL32(160, 118, 78, 150);
+	const ImU32 accentSoft = targetFresh ? IM_COL32(255, 126, 28, 74) : IM_COL32(130, 100, 74, 48);
+	const ImU32 text = targetFresh ? IM_COL32(245, 240, 230, 245) : IM_COL32(196, 188, 176, 185);
+	const ImU32 textSoft = targetFresh ? IM_COL32(235, 226, 212, 225) : IM_COL32(168, 158, 146, 170);
+
+	draw->AddRectFilled(ImVec2(badgeMin.x + 3.0f, badgeMin.y + 3.0f), ImVec2(badgeMax.x + 3.0f, badgeMax.y + 3.0f), bgSoft, 6.0f);
+	draw->AddRectFilled(badgeMin, badgeMax, bg, 6.0f);
+	draw->AddRect(badgeMin, badgeMax, accent, 6.0f, 0, 1.3f);
+	draw->AddRectFilled(ImVec2(badgeMin.x, badgeMin.y), ImVec2(badgeMin.x + 4.0f, badgeMax.y), accent, 6.0f);
+
+	const ImVec2 tagMin(badgeMin.x + 10.0f, badgeMin.y + 6.0f);
+	const ImVec2 tagMax(tagMin.x + tagWidth, tagMin.y + 18.0f);
+	draw->AddRectFilled(tagMin, tagMax, accentSoft, 4.0f);
+	draw->AddText(ImVec2(tagMin.x + 7.0f, tagMin.y + 3.0f), accent, badgeMode);
+
+	const float titleX = tagMax.x + 8.0f;
+	const ImVec4 titleClip(titleX, badgeMin.y + 4.0f, badgeMax.x - 9.0f, badgeMin.y + 25.0f);
+	draw->AddText(ImGui::GetFont(), ImGui::GetFontSize(), ImVec2(titleX, badgeMin.y + 9.0f), text, badgeTitle.c_str(), badgeTitle.c_str() + badgeTitle.size(), 0.0f, &titleClip);
+	draw->AddRectFilled(ImVec2(badgeMin.x + 10.0f, badgeMin.y + 27.0f), ImVec2(badgeMax.x - 10.0f, badgeMin.y + 28.0f), accentSoft, 1.0f);
+	draw->AddText(ImVec2(badgeMin.x + 10.0f, badgeMin.y + 30.0f), textSoft, rowAction);
 }
 
 bool CBuildManager::IsMouseOverMenu()

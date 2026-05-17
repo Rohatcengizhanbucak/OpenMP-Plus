@@ -20,6 +20,7 @@
 #define BUILD_DEMO_REMOVE_TARGET_MS 90
 #define BUILD_DEMO_REMOVE_MAX_RAY_DISTANCE 28.0
 #define BUILD_DEMO_REMOVE_MAX_PLAYER_DISTANCE 16.0
+#define BUILD_DEMO_REMOVE_PRIORITY_EPSILON 0.25
 #define BUILD_DEMO_EDGE_SNAP_RADIUS 2.25
 #define BUILD_DEMO_CENTER_SNAP_RADIUS 2.35
 #define BUILD_DEMO_REJECT_REASON_SIZE 96
@@ -46,34 +47,34 @@
 #define BUILD_MODEL_FOUNDATION -2000
 #define BUILD_MODEL_FOUNDATION_PREVIEW_OK -2100
 #define BUILD_MODEL_FOUNDATION_PREVIEW_BAD -2200
-#define BUILD_MODEL_FOUNDATION_HIGHLIGHT -2300
+#define BUILD_MODEL_FOUNDATION_HIGHLIGHT -2400
 #define BUILD_BASE_MODEL_WALL 19380
 #define BUILD_MODEL_WALL -2001
 #define BUILD_MODEL_WALL_PREVIEW_OK -2101
 #define BUILD_MODEL_WALL_PREVIEW_BAD -2201
-#define BUILD_MODEL_WALL_HIGHLIGHT -2301
+#define BUILD_MODEL_WALL_HIGHLIGHT -2401
 #define BUILD_BASE_MODEL_DOORFRAME 19381
 #define BUILD_MODEL_DOORFRAME -2002
 #define BUILD_MODEL_DOORFRAME_PREVIEW_OK -2102
 #define BUILD_MODEL_DOORFRAME_PREVIEW_BAD -2202
-#define BUILD_MODEL_DOORFRAME_HIGHLIGHT -2302
+#define BUILD_MODEL_DOORFRAME_HIGHLIGHT -2402
 #define BUILD_BASE_MODEL_FLOOR 19378
 #define BUILD_MODEL_FLOOR -2003
 #define BUILD_MODEL_FLOOR_PREVIEW_OK -2103
 #define BUILD_MODEL_FLOOR_PREVIEW_BAD -2203
-#define BUILD_MODEL_FLOOR_HIGHLIGHT -2303
+#define BUILD_MODEL_FLOOR_HIGHLIGHT -2403
 #define BUILD_MODEL_ROOF 19377
 #define BUILD_MODEL_ROOF_PREVIEW_OK -2104
 #define BUILD_MODEL_ROOF_PREVIEW_BAD -2204
-#define BUILD_MODEL_ROOF_HIGHLIGHT -2304
+#define BUILD_MODEL_ROOF_HIGHLIGHT -2404
 #define BUILD_MODEL_STAIRS 19387
 #define BUILD_MODEL_STAIRS_PREVIEW_OK -2105
 #define BUILD_MODEL_STAIRS_PREVIEW_BAD -2205
-#define BUILD_MODEL_STAIRS_HIGHLIGHT -2305
+#define BUILD_MODEL_STAIRS_HIGHLIGHT -2405
 #define BUILD_MODEL_DOOR 1491
 #define BUILD_MODEL_DOOR_PREVIEW_OK -2106
 #define BUILD_MODEL_DOOR_PREVIEW_BAD -2206
-#define BUILD_MODEL_DOOR_HIGHLIGHT -2306
+#define BUILD_MODEL_DOOR_HIGHLIGHT -2406
 #define BUILD_MODEL_PREVIEW_OK_TXD "build-preview-green.txd"
 #define BUILD_MODEL_PREVIEW_BAD_TXD "build-preview-red.txd"
 #define BUILD_MODEL_REMOVE_HIGHLIGHT_TXD "build-preview-orange.txd"
@@ -325,6 +326,137 @@ stock Float:GetBuildRemoveAimRadius(partid)
 		}
 	}
 	return 1.20;
+}
+
+stock GetBuildRemovePriority(partid)
+{
+	switch (partid)
+	{
+		case SAMPP_BUILD_PART_WALL, SAMPP_BUILD_PART_DOORFRAME, SAMPP_BUILD_PART_DOOR:
+		{
+			return 0;
+		}
+		case SAMPP_BUILD_PART_FOUNDATION, SAMPP_BUILD_PART_FLOOR, SAMPP_BUILD_PART_ROOF:
+		{
+			return 1;
+		}
+	}
+	return 2;
+}
+
+stock GetBuildRemoveOBBHalfExtents(partid, &Float:halfX, &Float:halfY, &Float:halfZ)
+{
+	switch (partid)
+	{
+		case SAMPP_BUILD_PART_FOUNDATION:
+		{
+			halfX = BUILD_DEMO_FOUNDATION_HALF + 0.12;
+			halfY = BUILD_DEMO_FOUNDATION_HALF + 0.12;
+			halfZ = 0.18;
+			return 1;
+		}
+		case SAMPP_BUILD_PART_FLOOR, SAMPP_BUILD_PART_ROOF:
+		{
+			halfX = BUILD_DEMO_FOUNDATION_HALF + 0.12;
+			halfY = BUILD_DEMO_FOUNDATION_HALF + 0.12;
+			halfZ = 0.22;
+			return 1;
+		}
+		case SAMPP_BUILD_PART_WALL, SAMPP_BUILD_PART_DOORFRAME:
+		{
+			halfX = BUILD_DEMO_FOUNDATION_HALF + 0.28;
+			halfY = 0.22;
+			halfZ = 1.95;
+			return 1;
+		}
+		case SAMPP_BUILD_PART_DOOR:
+		{
+			halfX = 0.95;
+			halfY = 0.22;
+			halfZ = 1.40;
+			return 1;
+		}
+		case SAMPP_BUILD_PART_STAIRS:
+		{
+			halfX = BUILD_DEMO_FOUNDATION_HALF + 0.15;
+			halfY = BUILD_DEMO_FOUNDATION_HALF + 0.15;
+			halfZ = 0.95;
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
+stock bool:UpdateBuildRaySlab(Float:origin, Float:direction, Float:minBound, Float:maxBound, &Float:tMin, &Float:tMax)
+{
+	if (floatabs(direction) <= 0.0001)
+	{
+		return origin >= minBound && origin <= maxBound;
+	}
+
+	new Float:t1 = (minBound - origin) / direction;
+	new Float:t2 = (maxBound - origin) / direction;
+	if (t1 > t2)
+	{
+		new Float:tmp = t1;
+		t1 = t2;
+		t2 = tmp;
+	}
+
+	if (t1 > tMin)
+	{
+		tMin = t1;
+	}
+	if (t2 < tMax)
+	{
+		tMax = t2;
+	}
+
+	return tMin <= tMax;
+}
+
+stock bool:RayIntersectsBuildRemoveOBB(partid, Float:objectX, Float:objectY, Float:objectZ, Float:objectRZ, Float:camX, Float:camY, Float:camZ, Float:frontX, Float:frontY, Float:frontZ, &Float:distance)
+{
+	new Float:halfX;
+	new Float:halfY;
+	new Float:halfZ;
+	if (!GetBuildRemoveOBBHalfExtents(partid, halfX, halfY, halfZ))
+	{
+		return false;
+	}
+
+	new Float:dx = camX - objectX;
+	new Float:dy = camY - objectY;
+	new Float:dz = camZ - objectZ;
+	new Float:axisX = floatsin(-objectRZ, degrees);
+	new Float:axisY = floatcos(-objectRZ, degrees);
+	new Float:rightX = floatcos(-objectRZ, degrees);
+	new Float:rightY = -floatsin(-objectRZ, degrees);
+
+	new Float:localOriginX = (dx * axisX) + (dy * axisY);
+	new Float:localOriginY = (dx * rightX) + (dy * rightY);
+	new Float:localOriginZ = dz;
+	new Float:localDirX = (frontX * axisX) + (frontY * axisY);
+	new Float:localDirY = (frontX * rightX) + (frontY * rightY);
+	new Float:localDirZ = frontZ;
+
+	new Float:tMin = 0.35;
+	new Float:tMax = BUILD_DEMO_REMOVE_MAX_RAY_DISTANCE;
+	if (!UpdateBuildRaySlab(localOriginX, localDirX, -halfX, halfX, tMin, tMax)
+		|| !UpdateBuildRaySlab(localOriginY, localDirY, -halfY, halfY, tMin, tMax)
+		|| !UpdateBuildRaySlab(localOriginZ, localDirZ, -halfZ, halfZ, tMin, tMax))
+	{
+		return false;
+	}
+
+	if (tMax < 0.35 || tMin > BUILD_DEMO_REMOVE_MAX_RAY_DISTANCE)
+	{
+		return false;
+	}
+
+	distance = tMin >= 0.35 ? tMin : tMax;
+	return distance >= 0.35 && distance <= BUILD_DEMO_REMOVE_MAX_RAY_DISTANCE;
 }
 
 stock GetBuildPartDisplayName(partid, name[], size)
@@ -1220,7 +1352,92 @@ stock bool:CommitBuildDemoSlot(playerid, partid, &foundationOut, &slotKindOut, &
 	return false;
 }
 
-stock bool:FindBuildObjectFromAim(playerid, &objectIndex)
+stock bool:GetBuildHorizontalSurfaceHit(partid, Float:objectX, Float:objectY, Float:objectZ, Float:objectRZ, Float:camX, Float:camY, Float:camZ, Float:frontX, Float:frontY, Float:frontZ, &Float:distance)
+{
+	switch (partid)
+	{
+		case SAMPP_BUILD_PART_FOUNDATION, SAMPP_BUILD_PART_FLOOR, SAMPP_BUILD_PART_ROOF:
+		{
+			if (floatabs(frontZ) <= 0.01)
+			{
+				return false;
+			}
+
+			new Float:t = (objectZ - camZ) / frontZ;
+			if (t < 0.35 || t > BUILD_DEMO_REMOVE_MAX_RAY_DISTANCE)
+			{
+				return false;
+			}
+
+			new Float:hitX = camX + (frontX * t);
+			new Float:hitY = camY + (frontY * t);
+			new Float:dx = hitX - objectX;
+			new Float:dy = hitY - objectY;
+			new Float:axisX = floatsin(-objectRZ, degrees);
+			new Float:axisY = floatcos(-objectRZ, degrees);
+			new Float:rightX = floatcos(-objectRZ, degrees);
+			new Float:rightY = -floatsin(-objectRZ, degrees);
+			new Float:localA = (dx * axisX) + (dy * axisY);
+			new Float:localB = (dx * rightX) + (dy * rightY);
+			new Float:half = BUILD_DEMO_FOUNDATION_HALF + 0.22;
+
+			if (floatabs(localA) > half || floatabs(localB) > half)
+			{
+				return false;
+			}
+
+			distance = t;
+			return true;
+		}
+	}
+	return false;
+}
+
+stock bool:GetBuildVerticalSurfaceHit(partid, Float:objectX, Float:objectY, Float:objectZ, Float:objectRZ, Float:camX, Float:camY, Float:camZ, Float:frontX, Float:frontY, Float:frontZ, &Float:distance)
+{
+	switch (partid)
+	{
+		case SAMPP_BUILD_PART_WALL, SAMPP_BUILD_PART_DOORFRAME, SAMPP_BUILD_PART_DOOR:
+		{
+			new Float:normalA = NormalizeBuildAngle(objectRZ - 90.0);
+			new Float:normalX = floatsin(-normalA, degrees);
+			new Float:normalY = floatcos(-normalA, degrees);
+			new Float:denom = (frontX * normalX) + (frontY * normalY);
+			if (floatabs(denom) <= 0.01)
+			{
+				return false;
+			}
+
+			new Float:t = (((objectX - camX) * normalX) + ((objectY - camY) * normalY)) / denom;
+			if (t < 0.35 || t > BUILD_DEMO_REMOVE_MAX_RAY_DISTANCE)
+			{
+				return false;
+			}
+
+			new Float:hitX = camX + (frontX * t);
+			new Float:hitY = camY + (frontY * t);
+			new Float:hitZ = camZ + (frontZ * t);
+			new Float:dx = hitX - objectX;
+			new Float:dy = hitY - objectY;
+			new Float:widthX = floatsin(-objectRZ, degrees);
+			new Float:widthY = floatcos(-objectRZ, degrees);
+			new Float:localWidth = (dx * widthX) + (dy * widthY);
+			new Float:localHeight = hitZ - objectZ;
+			new Float:halfWidth = partid == SAMPP_BUILD_PART_DOOR ? 0.85 : 1.72;
+
+			if (floatabs(localWidth) > halfWidth || localHeight < -1.75 || localHeight > 1.95)
+			{
+				return false;
+			}
+
+			distance = t;
+			return true;
+		}
+	}
+	return false;
+}
+
+stock bool:FindBuildObjectFromAim(playerid, &objectIndex, &Float:targetDistance)
 {
 	new Float:px, Float:py, Float:pz;
 	new Float:camX, Float:camY, Float:camZ;
@@ -1243,7 +1460,9 @@ stock bool:FindBuildObjectFromAim(playerid, &objectIndex)
 	frontZ /= frontLen;
 
 	new bestIndex = -1;
-	new Float:bestScore = 999999.0;
+	new bestPriority = 99;
+	new Float:bestDistance = 999999.0;
+
 	for (new i = 0; i < BUILD_DEMO_MAX_OBJECTS; i++)
 	{
 		if (gBuildObjects[playerid][i] == INVALID_OBJECT_ID)
@@ -1257,34 +1476,22 @@ stock bool:FindBuildObjectFromAim(playerid, &objectIndex)
 			continue;
 		}
 
-		new Float:dx = gBuildObjectX[playerid][i] - camX;
-		new Float:dy = gBuildObjectY[playerid][i] - camY;
-		new Float:dz = gBuildObjectZ[playerid][i] - camZ;
-		new Float:along = (dx * frontX) + (dy * frontY) + (dz * frontZ);
-		if (along < 0.35 || along > BUILD_DEMO_REMOVE_MAX_RAY_DISTANCE)
+		new partid = gBuildObjectPart[playerid][i];
+		new Float:surfaceDistance;
+		if (!GetBuildHorizontalSurfaceHit(partid, gBuildObjectX[playerid][i], gBuildObjectY[playerid][i], gBuildObjectZ[playerid][i], gBuildObjectRZ[playerid][i], camX, camY, camZ, frontX, frontY, frontZ, surfaceDistance)
+			&& !GetBuildVerticalSurfaceHit(partid, gBuildObjectX[playerid][i], gBuildObjectY[playerid][i], gBuildObjectZ[playerid][i], gBuildObjectRZ[playerid][i], camX, camY, camZ, frontX, frontY, frontZ, surfaceDistance)
+			&& !RayIntersectsBuildRemoveOBB(partid, gBuildObjectX[playerid][i], gBuildObjectY[playerid][i], gBuildObjectZ[playerid][i], gBuildObjectRZ[playerid][i], camX, camY, camZ, frontX, frontY, frontZ, surfaceDistance))
 		{
 			continue;
 		}
 
-		new Float:distSq = (dx * dx) + (dy * dy) + (dz * dz);
-		new Float:perpSq = distSq - (along * along);
-		if (perpSq < 0.0)
+		new priority = GetBuildRemovePriority(partid);
+		if (surfaceDistance + BUILD_DEMO_REMOVE_PRIORITY_EPSILON < bestDistance
+			|| (floatabs(surfaceDistance - bestDistance) <= BUILD_DEMO_REMOVE_PRIORITY_EPSILON && priority < bestPriority))
 		{
-			perpSq = 0.0;
-		}
-
-		new Float:perp = floatsqroot(perpSq);
-		new Float:radius = GetBuildRemoveAimRadius(gBuildObjectPart[playerid][i]);
-		if (perp > radius)
-		{
-			continue;
-		}
-
-		new Float:score = perp + (along * 0.012);
-		if (score < bestScore)
-		{
-			bestScore = score;
+			bestPriority = priority;
 			bestIndex = i;
+			bestDistance = surfaceDistance;
 		}
 	}
 
@@ -1294,6 +1501,7 @@ stock bool:FindBuildObjectFromAim(playerid, &objectIndex)
 	}
 
 	objectIndex = bestIndex;
+	targetDistance = bestDistance;
 	return true;
 }
 
@@ -1370,7 +1578,7 @@ stock SyncBuildRemoveHighlight(playerid, objectIndex)
 	return gBuildRemoveHighlightObject[playerid][0] != INVALID_OBJECT_ID;
 }
 
-stock SendBuildRemoveFocus(playerid, bool:active, objectIndex = -1)
+stock SendBuildRemoveFocus(playerid, bool:active, objectIndex = -1, Float:distance = 0.0)
 {
 	if (!active || objectIndex < 0 || objectIndex >= BUILD_DEMO_MAX_OBJECTS || gBuildObjects[playerid][objectIndex] == INVALID_OBJECT_ID)
 	{
@@ -1383,7 +1591,11 @@ stock SendBuildRemoveFocus(playerid, bool:active, objectIndex = -1)
 	new partName[32];
 	GetBuildPartDisplayName(gBuildObjectPart[playerid][objectIndex], partName, sizeof partName);
 	gBuildRemoveFocusedObject[playerid] = objectIndex;
-	return SAMPP_BuildSetRemoveTarget(playerid, true, gBuildObjectPart[playerid][objectIndex], partName, GetBuildObjectDistanceToPlayer(playerid, objectIndex));
+	if (distance <= 0.01)
+	{
+		distance = GetBuildObjectDistanceToPlayer(playerid, objectIndex);
+	}
+	return SAMPP_BuildSetRemoveTarget(playerid, true, gBuildObjectPart[playerid][objectIndex], partName, distance);
 }
 
 stock RefreshBuildRemoveFocus(playerid, bool:force = false)
@@ -1405,13 +1617,14 @@ stock RefreshBuildRemoveFocus(playerid, bool:force = false)
 	gBuildRemoveTargetNextUpdate[playerid] = now + BUILD_DEMO_REMOVE_TARGET_MS;
 
 	new objectIndex;
-	if (!FindBuildObjectFromAim(playerid, objectIndex))
+	new Float:targetDistance;
+	if (!FindBuildObjectFromAim(playerid, objectIndex, targetDistance))
 	{
 		SendBuildRemoveFocus(playerid, false);
 		return 0;
 	}
 
-	SendBuildRemoveFocus(playerid, true, objectIndex);
+	SendBuildRemoveFocus(playerid, true, objectIndex, targetDistance);
 	return 1;
 }
 
@@ -1575,7 +1788,8 @@ stock RemoveBuildDemoTargetPart(playerid)
 	}
 
 	new objectIndex;
-	if (!FindBuildObjectFromAim(playerid, objectIndex))
+	new Float:targetDistance;
+	if (!FindBuildObjectFromAim(playerid, objectIndex, targetDistance))
 	{
 		return SAMPP_BuildSendResult(playerid, SAMPP_BUILD_RESULT_ERROR, "No build part targeted.");
 	}

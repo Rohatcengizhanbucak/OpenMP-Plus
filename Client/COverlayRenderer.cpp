@@ -17,10 +17,12 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 namespace
 {
 	typedef HRESULT(WINAPI* Reset_t)(IDirect3DDevice9*, D3DPRESENT_PARAMETERS*);
+	typedef HRESULT(WINAPI* Present_t)(IDirect3DDevice9*, CONST RECT*, CONST RECT*, HWND, CONST RGNDATA*);
 	typedef HRESULT(WINAPI* EndScene_t)(IDirect3DDevice9*);
 
 	static const uintptr_t GtaSaD3DDeviceAddress = 0x00C97C28;
 	static const unsigned int ResetVTableIndex = 16;
+	static const unsigned int PresentVTableIndex = 17;
 	static const unsigned int EndSceneVTableIndex = 42;
 
 	static bool g_enabled = false;
@@ -31,7 +33,9 @@ namespace
 	static IDirect3DDevice9* g_device = NULL;
 	static HWND g_window = NULL;
 	static Reset_t g_originalReset = NULL;
+	static Present_t g_originalPresent = NULL;
 	static EndScene_t g_originalEndScene = NULL;
+	static bool g_renderedSincePresent = false;
 
 	static bool IsReadableAddress(const void* ptr, size_t bytes)
 	{
@@ -169,15 +173,29 @@ namespace
 	static HRESULT WINAPI Hook_Reset(IDirect3DDevice9* device, D3DPRESENT_PARAMETERS* presentationParameters)
 	{
 		COverlayRenderer::InvalidateDeviceObjects();
+		g_renderedSincePresent = false;
 		HRESULT result = g_originalReset(device, presentationParameters);
 		if (SUCCEEDED(result))
 			COverlayRenderer::RestoreDeviceObjects();
 		return result;
 	}
 
+	static HRESULT WINAPI Hook_Present(IDirect3DDevice9* device, CONST RECT* sourceRect, CONST RECT* destRect, HWND destWindowOverride, CONST RGNDATA* dirtyRegion)
+	{
+		const HRESULT beginScene = device ? device->BeginScene() : D3DERR_INVALIDCALL;
+		if (SUCCEEDED(beginScene))
+		{
+			COverlayRenderer::Render(device);
+			device->EndScene();
+		}
+
+		HRESULT result = g_originalPresent(device, sourceRect, destRect, destWindowOverride, dirtyRegion);
+		g_renderedSincePresent = false;
+		return result;
+	}
+
 	static HRESULT WINAPI Hook_EndScene(IDirect3DDevice9* device)
 	{
-		COverlayRenderer::Render(device);
 		return g_originalEndScene(device);
 	}
 }
@@ -218,7 +236,7 @@ bool COverlayRenderer::ValidateDevice(IDirect3DDevice9* device)
 		if (!IsReadableAddress(vtable, sizeof(void*) * (EndSceneVTableIndex + 1)))
 			return false;
 
-		return IsExecutableAddress(vtable[ResetVTableIndex]) && IsExecutableAddress(vtable[EndSceneVTableIndex]);
+		return IsExecutableAddress(vtable[ResetVTableIndex]) && IsExecutableAddress(vtable[PresentVTableIndex]) && IsExecutableAddress(vtable[EndSceneVTableIndex]);
 	}
 	__except (EXCEPTION_EXECUTE_HANDLER)
 	{
@@ -263,16 +281,20 @@ bool COverlayRenderer::TryInstall()
 	}
 
 	g_originalReset = reinterpret_cast<Reset_t>(DetourFunction(reinterpret_cast<PBYTE>(vtable[ResetVTableIndex]), reinterpret_cast<PBYTE>(Hook_Reset)));
+	g_originalPresent = reinterpret_cast<Present_t>(DetourFunction(reinterpret_cast<PBYTE>(vtable[PresentVTableIndex]), reinterpret_cast<PBYTE>(Hook_Present)));
 	g_originalEndScene = reinterpret_cast<EndScene_t>(DetourFunction(reinterpret_cast<PBYTE>(vtable[EndSceneVTableIndex]), reinterpret_cast<PBYTE>(Hook_EndScene)));
 
-	if (!g_originalReset || !g_originalEndScene)
+	if (!g_originalReset || !g_originalPresent || !g_originalEndScene)
 	{
 		if (g_originalEndScene)
 			DetourRemove(reinterpret_cast<PBYTE>(g_originalEndScene), reinterpret_cast<PBYTE>(Hook_EndScene));
+		if (g_originalPresent)
+			DetourRemove(reinterpret_cast<PBYTE>(g_originalPresent), reinterpret_cast<PBYTE>(Hook_Present));
 		if (g_originalReset)
 			DetourRemove(reinterpret_cast<PBYTE>(g_originalReset), reinterpret_cast<PBYTE>(Hook_Reset));
 
 		g_originalReset = NULL;
+		g_originalPresent = NULL;
 		g_originalEndScene = NULL;
 		g_failed = true;
 		CLog::Write("ImGui target overlay hook failed; target UI disabled");
@@ -341,6 +363,8 @@ void COverlayRenderer::Render(IDirect3DDevice9* device)
 		return;
 	if (g_rendering)
 		return;
+	if (g_renderedSincePresent)
+		return;
 
 	g_rendering = true;
 	__try
@@ -365,6 +389,7 @@ void COverlayRenderer::Render(IDirect3DDevice9* device)
 
 		ImGui::Render();
 		ImGui_ImplDX9_RenderDrawData(ImGui::GetDrawData());
+		g_renderedSincePresent = true;
 	}
 	__except (EXCEPTION_EXECUTE_HANDLER)
 	{
@@ -434,13 +459,17 @@ void COverlayRenderer::Shutdown()
 	{
 		if (g_originalEndScene)
 			DetourRemove(reinterpret_cast<PBYTE>(g_originalEndScene), reinterpret_cast<PBYTE>(Hook_EndScene));
+		if (g_originalPresent)
+			DetourRemove(reinterpret_cast<PBYTE>(g_originalPresent), reinterpret_cast<PBYTE>(Hook_Present));
 		if (g_originalReset)
 			DetourRemove(reinterpret_cast<PBYTE>(g_originalReset), reinterpret_cast<PBYTE>(Hook_Reset));
 		g_hooksInstalled = false;
 	}
 
 	g_originalEndScene = NULL;
+	g_originalPresent = NULL;
 	g_originalReset = NULL;
+	g_renderedSincePresent = false;
 	g_device = NULL;
 	g_window = NULL;
 }
