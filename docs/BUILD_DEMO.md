@@ -46,6 +46,8 @@ examples/models/wall.dff
 examples/models/wall.txd
 examples/models/door-frame.dff
 examples/models/door-frame.txd
+examples/models/door.dff
+examples/models/door.txd
 examples/models/floor.dff
 examples/models/floor.txd
 examples/models/build-preview-green.txd
@@ -68,10 +70,13 @@ The wall is registered with
 The door frame and floor are registered with
 `AddSimpleModel(-1, 19381, -2002, "door-frame.dff", "door-frame.txd")`
 and `AddSimpleModel(-1, 19378, -2003, "floor.dff", "floor.txd")`.
-The live placement preview uses separate model ids `-2100..-2106` for valid
-green previews and `-2200..-2206` for invalid red previews. Remove highlight
-uses `-2300..-2306` with `build-preview-orange.txd`. Copy these DFF/TXD files
-to the server `models` folder and keep
+The Door is a custom model registered as
+`AddSimpleModel(-1, 19380, -2006, "door.dff", "door.txd")`; its mesh is sized
+to the Door Frame opening. The live placement preview uses separate model ids
+`-2100..-2106` for valid green previews and `-2200..-2206` for invalid red
+previews. Remove highlight uses the orange preview TXD on the custom
+build-piece highlight models. Copy these DFF/TXD files to the server `models`
+folder and keep
 `artwork.enable` set to `true` in `config.json`.
 
 ## Commands
@@ -123,7 +128,8 @@ slot in this demo, so one cannot be stacked on the other.
 Stairs use a separate per-foundation stairs slot and face the foundation edge
 nearest to the player's aim. Door placement requires an existing Door Frame edge
 and is rejected if that frame already has a door. Middle mouse changes the door
-opening side.
+hinge side. Once placed, aim at a nearby Door and use the direct `ALT` target
+prompt to toggle it open or closed; no menu is opened for this single action.
 
 ## Remove Tool
 

@@ -47,6 +47,7 @@ namespace OMPPlusProtocol
 	enum TargetFlags : uint32_t
 	{
 		TargetFlagHidePrompt = 1 << 0,
+		TargetFlagDirectSelect = 1 << 1,
 		TargetFlagPayloadV2 = 1u << 30
 	};
 

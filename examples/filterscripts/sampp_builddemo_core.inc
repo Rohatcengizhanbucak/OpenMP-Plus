@@ -21,6 +21,10 @@
 #define BUILD_DEMO_WALL_YAW_OFFSET 90.0
 #define BUILD_DEMO_DOORFRAME_YAW_OFFSET 90.0
 #define BUILD_DEMO_DOOR_YAW_OFFSET 90.0
+#define BUILD_DEMO_DOOR_Z_OFFSET BUILD_DEMO_WALL_HEIGHT
+#define BUILD_DEMO_DOOR_WIDTH 1.502
+#define BUILD_DEMO_DOOR_HALF_WIDTH 0.751
+#define BUILD_DEMO_DOOR_HINGE_OFFSET 0.732
 #define BUILD_DEMO_STAIRS_YAW_OFFSET 0.0
 
 #define BUILD_DEMO_SLOT_NONE 0
@@ -59,7 +63,8 @@
 #define BUILD_MODEL_STAIRS 19387
 #define BUILD_MODEL_STAIRS_PREVIEW_OK -2105
 #define BUILD_MODEL_STAIRS_PREVIEW_BAD -2205
-#define BUILD_MODEL_DOOR 1491
+#define BUILD_BASE_MODEL_DOOR 19380
+#define BUILD_MODEL_DOOR -2006
 #define BUILD_MODEL_DOOR_PREVIEW_OK -2106
 #define BUILD_MODEL_DOOR_PREVIEW_BAD -2206
 #define BUILD_MODEL_PREVIEW_OK_TXD "build-preview-green.txd"
@@ -70,6 +75,8 @@
 #define BUILD_MODEL_WALL_TXD "wall.txd"
 #define BUILD_MODEL_DOORFRAME_DFF "door-frame.dff"
 #define BUILD_MODEL_DOORFRAME_TXD "door-frame.txd"
+#define BUILD_MODEL_DOOR_DFF "door.dff"
+#define BUILD_MODEL_DOOR_TXD "door.txd"
 #define BUILD_MODEL_FLOOR_DFF "floor.dff"
 #define BUILD_MODEL_FLOOR_TXD "floor.txd"
 
@@ -175,6 +182,14 @@ stock GetForwardPoint(Float:x, Float:y, Float:a, Float:distance, &Float:outX, &F
 {
 	outX = x + (floatsin(-a, degrees) * distance);
 	outY = y + (floatcos(-a, degrees) * distance);
+	return 1;
+}
+
+stock FitBuildDoorToFrame(Float:baseX, Float:baseY, Float:baseZ, Float:edgeA, bool:flipped, &Float:x, &Float:y, &Float:z, &Float:rz)
+{
+	rz = GetBuildEdgePieceYaw(SAMPP_BUILD_PART_DOOR, edgeA, flipped);
+	GetForwardPoint(baseX, baseY, rz, -BUILD_DEMO_DOOR_HINGE_OFFSET, x, y);
+	z = baseZ + BUILD_DEMO_DOOR_Z_OFFSET;
 	return 1;
 }
 
@@ -748,16 +763,12 @@ stock bool:ComputeBuildPreview(playerid, partid, rotationStep, bool:flipped, &mo
 			new Float:edgeDistance;
 			if (!GetNearestFoundationEdgeToPoint(playerid, aimX, aimY, foundationIndex, edgeIndex, x, y, z, edgeA, edgeDistance))
 			{
-				x = aimX;
-				y = aimY;
-				z = aimZ - BUILD_DEMO_FOUNDATION_Z_OFFSET;
-				rz = GetBuildEdgePieceYaw(SAMPP_BUILD_PART_DOOR, GetBuildGridAngle(playerAngle), flipped);
+				FitBuildDoorToFrame(aimX, aimY, aimZ, GetBuildGridAngle(playerAngle), flipped, x, y, z, rz);
 				SetBuildPreviewCandidate(playerid, false, -1, -1, BUILD_DEMO_SLOT_DOOR, "Doors require a placed door frame.");
 				return true;
 			}
 
-			z += 0.05;
-			rz = GetBuildEdgePieceYaw(SAMPP_BUILD_PART_DOOR, edgeA, flipped);
+			FitBuildDoorToFrame(x, y, z, edgeA, flipped, x, y, z, rz);
 			if (edgeDistance > BUILD_DEMO_EDGE_SNAP_RADIUS)
 			{
 				SetBuildPreviewCandidate(playerid, false, foundationIndex, edgeIndex, BUILD_DEMO_SLOT_DOOR, "Aim closer to a door frame.");
@@ -1053,21 +1064,22 @@ stock RegisterBuildDemoModels()
 	new bool:foundationRegistered = AddSimpleModel(-1, BUILD_BASE_MODEL_FOUNDATION, BUILD_MODEL_FOUNDATION, BUILD_MODEL_FOUNDATION_DFF, BUILD_MODEL_FOUNDATION_TXD);
 	new bool:wallRegistered = AddSimpleModel(-1, BUILD_BASE_MODEL_WALL, BUILD_MODEL_WALL, BUILD_MODEL_WALL_DFF, BUILD_MODEL_WALL_TXD);
 	new bool:doorFrameRegistered = AddSimpleModel(-1, BUILD_BASE_MODEL_DOORFRAME, BUILD_MODEL_DOORFRAME, BUILD_MODEL_DOORFRAME_DFF, BUILD_MODEL_DOORFRAME_TXD);
+	new bool:doorRegistered = AddSimpleModel(-1, BUILD_BASE_MODEL_DOOR, BUILD_MODEL_DOOR, BUILD_MODEL_DOOR_DFF, BUILD_MODEL_DOOR_TXD);
 	new bool:floorRegistered = AddSimpleModel(-1, BUILD_BASE_MODEL_FLOOR, BUILD_MODEL_FLOOR, BUILD_MODEL_FLOOR_DFF, BUILD_MODEL_FLOOR_TXD);
 	new bool:foundationPreviewOK = AddSimpleModel(-1, BUILD_BASE_MODEL_FOUNDATION, BUILD_MODEL_FOUNDATION_PREVIEW_OK, BUILD_MODEL_FOUNDATION_DFF, BUILD_MODEL_PREVIEW_OK_TXD);
 	new bool:wallPreviewOK = AddSimpleModel(-1, BUILD_BASE_MODEL_WALL, BUILD_MODEL_WALL_PREVIEW_OK, BUILD_MODEL_WALL_DFF, BUILD_MODEL_PREVIEW_OK_TXD);
 	new bool:doorFramePreviewOK = AddSimpleModel(-1, BUILD_BASE_MODEL_DOORFRAME, BUILD_MODEL_DOORFRAME_PREVIEW_OK, BUILD_MODEL_DOORFRAME_DFF, BUILD_MODEL_PREVIEW_OK_TXD);
+	new bool:doorPreviewOK = AddSimpleModel(-1, BUILD_BASE_MODEL_DOOR, BUILD_MODEL_DOOR_PREVIEW_OK, BUILD_MODEL_DOOR_DFF, BUILD_MODEL_PREVIEW_OK_TXD);
 	new bool:floorPreviewOK = AddSimpleModel(-1, BUILD_BASE_MODEL_FLOOR, BUILD_MODEL_FLOOR_PREVIEW_OK, BUILD_MODEL_FLOOR_DFF, BUILD_MODEL_PREVIEW_OK_TXD);
 	new bool:roofPreviewOK = AddSimpleModel(-1, BUILD_BASE_MODEL_FLOOR, BUILD_MODEL_ROOF_PREVIEW_OK, BUILD_MODEL_FLOOR_DFF, BUILD_MODEL_PREVIEW_OK_TXD);
 	new bool:stairsPreviewOK = AddSimpleModel(-1, BUILD_BASE_MODEL_WALL, BUILD_MODEL_STAIRS_PREVIEW_OK, BUILD_MODEL_WALL_DFF, BUILD_MODEL_PREVIEW_OK_TXD);
-	new bool:doorPreviewOK = AddSimpleModel(-1, BUILD_BASE_MODEL_DOORFRAME, BUILD_MODEL_DOOR_PREVIEW_OK, BUILD_MODEL_DOORFRAME_DFF, BUILD_MODEL_PREVIEW_OK_TXD);
 	new bool:foundationPreviewBad = AddSimpleModel(-1, BUILD_BASE_MODEL_FOUNDATION, BUILD_MODEL_FOUNDATION_PREVIEW_BAD, BUILD_MODEL_FOUNDATION_DFF, BUILD_MODEL_PREVIEW_BAD_TXD);
 	new bool:wallPreviewBad = AddSimpleModel(-1, BUILD_BASE_MODEL_WALL, BUILD_MODEL_WALL_PREVIEW_BAD, BUILD_MODEL_WALL_DFF, BUILD_MODEL_PREVIEW_BAD_TXD);
 	new bool:doorFramePreviewBad = AddSimpleModel(-1, BUILD_BASE_MODEL_DOORFRAME, BUILD_MODEL_DOORFRAME_PREVIEW_BAD, BUILD_MODEL_DOORFRAME_DFF, BUILD_MODEL_PREVIEW_BAD_TXD);
+	new bool:doorPreviewBad = AddSimpleModel(-1, BUILD_BASE_MODEL_DOOR, BUILD_MODEL_DOOR_PREVIEW_BAD, BUILD_MODEL_DOOR_DFF, BUILD_MODEL_PREVIEW_BAD_TXD);
 	new bool:floorPreviewBad = AddSimpleModel(-1, BUILD_BASE_MODEL_FLOOR, BUILD_MODEL_FLOOR_PREVIEW_BAD, BUILD_MODEL_FLOOR_DFF, BUILD_MODEL_PREVIEW_BAD_TXD);
 	new bool:roofPreviewBad = AddSimpleModel(-1, BUILD_BASE_MODEL_FLOOR, BUILD_MODEL_ROOF_PREVIEW_BAD, BUILD_MODEL_FLOOR_DFF, BUILD_MODEL_PREVIEW_BAD_TXD);
 	new bool:stairsPreviewBad = AddSimpleModel(-1, BUILD_BASE_MODEL_WALL, BUILD_MODEL_STAIRS_PREVIEW_BAD, BUILD_MODEL_WALL_DFF, BUILD_MODEL_PREVIEW_BAD_TXD);
-	new bool:doorPreviewBad = AddSimpleModel(-1, BUILD_BASE_MODEL_DOORFRAME, BUILD_MODEL_DOOR_PREVIEW_BAD, BUILD_MODEL_DOORFRAME_DFF, BUILD_MODEL_PREVIEW_BAD_TXD);
 
 	if (foundationRegistered)
 	{
@@ -1096,6 +1108,15 @@ stock RegisterBuildDemoModels()
 		print("[BuildDemo] Could not register custom door frame model -2002. Check artwork config and model files.");
 	}
 
+	if (doorRegistered)
+	{
+		print("[BuildDemo] Registered custom door model -2006 from models/door.dff and models/door.txd.");
+	}
+	else
+	{
+		print("[BuildDemo] Could not register custom door model -2006. Check artwork config and model files.");
+	}
+
 	if (floorRegistered)
 	{
 		print("[BuildDemo] Registered custom floor model -2003 from models/floor.dff and models/floor.txd.");
@@ -1105,19 +1126,19 @@ stock RegisterBuildDemoModels()
 		print("[BuildDemo] Could not register custom floor model -2003. Check artwork config and model files.");
 	}
 
-	if (foundationPreviewOK && wallPreviewOK && doorFramePreviewOK && floorPreviewOK && roofPreviewOK && stairsPreviewOK && doorPreviewOK
-		&& foundationPreviewBad && wallPreviewBad && doorFramePreviewBad && floorPreviewBad && roofPreviewBad && stairsPreviewBad && doorPreviewBad)
+	if (foundationPreviewOK && wallPreviewOK && doorFramePreviewOK && doorPreviewOK && floorPreviewOK && roofPreviewOK && stairsPreviewOK
+		&& foundationPreviewBad && wallPreviewBad && doorFramePreviewBad && doorPreviewBad && floorPreviewBad && roofPreviewBad && stairsPreviewBad)
 	{
-		print("[BuildDemo] Registered green/red preview build models -2100..-2106 and -2200..-2206.");
+		print("[BuildDemo] Registered green/red preview build models.");
 	}
 	else
 	{
 		print("[BuildDemo] Could not register one or more preview models. Check models/build-preview-green.txd and models/build-preview-red.txd.");
 	}
 
-	registered = foundationRegistered && wallRegistered && doorFrameRegistered && floorRegistered
-		&& foundationPreviewOK && wallPreviewOK && doorFramePreviewOK && floorPreviewOK && roofPreviewOK && stairsPreviewOK && doorPreviewOK
-		&& foundationPreviewBad && wallPreviewBad && doorFramePreviewBad && floorPreviewBad && roofPreviewBad && stairsPreviewBad && doorPreviewBad;
+	registered = foundationRegistered && wallRegistered && doorFrameRegistered && doorRegistered && floorRegistered
+		&& foundationPreviewOK && wallPreviewOK && doorFramePreviewOK && doorPreviewOK && floorPreviewOK && roofPreviewOK && stairsPreviewOK
+		&& foundationPreviewBad && wallPreviewBad && doorFramePreviewBad && doorPreviewBad && floorPreviewBad && roofPreviewBad && stairsPreviewBad;
 	return registered ? 1 : 0;
 }
 

@@ -110,6 +110,7 @@
 #define SAMPP_CAPTURE_PRIORITY_MENU 60
 
 #define SAMPP_TARGET_FLAG_HIDE_PROMPT 1
+#define SAMPP_TARGET_FLAG_DIRECT_SELECT 2
 #define SAMPP_TARGET_FLAG_PAYLOAD_V2 1073741824
 
 #define SAMPP_TARGET_TYPE_GENERIC 0
@@ -342,6 +343,11 @@ stock bool:SAMPP_TargetAddToggle(playerid, targetid, optionid, const label[], co
 stock bool:SAMPP_TargetAddDanger(playerid, targetid, optionid, const label[], const icon[] = "")
 {
 	return SAMPP_TargetAddRow(playerid, targetid, optionid, SAMPP_TARGET_ROW_DANGER, label, icon, true) != 0;
+}
+
+stock bool:SAMPP_TargetBeginDirect(playerid, targetid, target_type, const title[], ttl_ms = 500, flags = 0)
+{
+	return SAMPP_TargetBeginEx(playerid, targetid, target_type, title, ttl_ms, flags | SAMPP_TARGET_FLAG_DIRECT_SELECT) != 0;
 }
 
 stock bool:SAMPP_CaptureKeyNearPoint(playerid, key, Float:x, Float:y, Float:z, Float:radius, const action[], priority = SAMPP_CAPTURE_PRIORITY_ITEM, ttl_ms = SAMPP_CAPTURE_LEASE_DEFAULT_MS, flags = SAMPP_CAPTURE_DEFAULT_FLAGS, event_mask = SAMPP_KEY_EVENT_DOWN)

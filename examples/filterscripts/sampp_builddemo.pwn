@@ -27,6 +27,21 @@
 #define BUILD_DEMO_WALL_YAW_OFFSET 90.0
 #define BUILD_DEMO_DOORFRAME_YAW_OFFSET 90.0
 #define BUILD_DEMO_DOOR_YAW_OFFSET 90.0
+#define BUILD_DEMO_DOOR_Z_OFFSET BUILD_DEMO_WALL_HEIGHT
+#define BUILD_DEMO_DOOR_WIDTH 1.502
+#define BUILD_DEMO_DOOR_HALF_WIDTH 0.751
+#define BUILD_DEMO_DOOR_HINGE_OFFSET 0.732
+#define BUILD_DEMO_DOOR_OPEN_ANGLE 90.0
+#define BUILD_DEMO_DOOR_MOVE_SPEED 2.5
+#define BUILD_DEMO_DOOR_MOVE_MS 700
+#define BUILD_DEMO_DOOR_INTERACT_MS 100
+#define BUILD_DEMO_DOOR_INTERACT_DISTANCE 3.5
+#define BUILD_DEMO_DOOR_INTERACT_RAY_DISTANCE 4.5
+#define BUILD_DEMO_DOOR_TARGET_TTL_MS 1200
+#define BUILD_DEMO_DOOR_TARGET_REPUBLISH_MS 350
+#define BUILD_DEMO_DOOR_TARGET_LOST_GRACE_MS 450
+#define BUILD_DEMO_DOOR_TARGET_BASE 935000
+#define BUILD_DEMO_DOOR_OPTION_TOGGLE 1
 #define BUILD_DEMO_STAIRS_YAW_OFFSET 0.0
 
 #define BUILD_DEMO_SLOT_NONE 0
@@ -71,7 +86,8 @@
 #define BUILD_MODEL_STAIRS_PREVIEW_OK -2105
 #define BUILD_MODEL_STAIRS_PREVIEW_BAD -2205
 #define BUILD_MODEL_STAIRS_HIGHLIGHT -2405
-#define BUILD_MODEL_DOOR 1491
+#define BUILD_BASE_MODEL_DOOR 19380
+#define BUILD_MODEL_DOOR -2006
 #define BUILD_MODEL_DOOR_PREVIEW_OK -2106
 #define BUILD_MODEL_DOOR_PREVIEW_BAD -2206
 #define BUILD_MODEL_DOOR_HIGHLIGHT -2406
@@ -84,6 +100,8 @@
 #define BUILD_MODEL_WALL_TXD "wall.txd"
 #define BUILD_MODEL_DOORFRAME_DFF "door-frame.dff"
 #define BUILD_MODEL_DOORFRAME_TXD "door-frame.txd"
+#define BUILD_MODEL_DOOR_DFF "door.dff"
+#define BUILD_MODEL_DOOR_TXD "door.txd"
 #define BUILD_MODEL_FLOOR_DFF "floor.dff"
 #define BUILD_MODEL_FLOOR_TXD "floor.txd"
 
@@ -103,6 +121,13 @@ static Float:gBuildObjectZ[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
 static Float:gBuildObjectRX[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
 static Float:gBuildObjectRY[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
 static Float:gBuildObjectRZ[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
+static bool:gBuildDoorOpen[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
+static gBuildDoorMovingUntil[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
+static gBuildDoorFocusedObject[MAX_PLAYERS];
+static bool:gBuildDoorTargetActive[MAX_PLAYERS];
+static gBuildDoorInteractNextUpdate[MAX_PLAYERS];
+static gBuildDoorTargetNextPublish[MAX_PLAYERS];
+static gBuildDoorTargetClearAfter[MAX_PLAYERS];
 static gBuildObjectCount[MAX_PLAYERS];
 static gBuildPreviewObject[MAX_PLAYERS];
 static gBuildPreviewModel[MAX_PLAYERS];
@@ -142,6 +167,11 @@ static gBuildFoundationStairsPiece[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
 stock BuildDemoSession(playerid)
 {
 	return BUILD_DEMO_SESSION_BASE + playerid + 1;
+}
+
+stock BuildDoorTargetId(playerid)
+{
+	return BUILD_DEMO_DOOR_TARGET_BASE + playerid + 1;
 }
 
 stock Float:NormalizeBuildAngle(Float:a)
@@ -204,6 +234,14 @@ stock GetForwardPoint(Float:x, Float:y, Float:a, Float:distance, &Float:outX, &F
 {
 	outX = x + (floatsin(-a, degrees) * distance);
 	outY = y + (floatcos(-a, degrees) * distance);
+	return 1;
+}
+
+stock FitBuildDoorToFrame(Float:baseX, Float:baseY, Float:baseZ, Float:edgeA, bool:flipped, &Float:x, &Float:y, &Float:z, &Float:rz)
+{
+	rz = GetBuildEdgePieceYaw(SAMPP_BUILD_PART_DOOR, edgeA, flipped);
+	GetForwardPoint(baseX, baseY, rz, -BUILD_DEMO_DOOR_HINGE_OFFSET, x, y);
+	z = baseZ + BUILD_DEMO_DOOR_Z_OFFSET;
 	return 1;
 }
 
@@ -322,7 +360,7 @@ stock Float:GetBuildRemoveAimRadius(partid)
 		}
 		case SAMPP_BUILD_PART_DOOR:
 		{
-			return 1.20;
+			return 0.90;
 		}
 	}
 	return 1.20;
@@ -342,6 +380,20 @@ stock GetBuildRemovePriority(partid)
 		}
 	}
 	return 2;
+}
+
+stock Float:GetBuildObjectCurrentRZ(playerid, objectIndex)
+{
+	if (objectIndex < 0 || objectIndex >= BUILD_DEMO_MAX_OBJECTS)
+	{
+		return 0.0;
+	}
+
+	if (gBuildObjectPart[playerid][objectIndex] == SAMPP_BUILD_PART_DOOR && gBuildDoorOpen[playerid][objectIndex])
+	{
+		return NormalizeBuildAngle(gBuildObjectRZ[playerid][objectIndex] + BUILD_DEMO_DOOR_OPEN_ANGLE);
+	}
+	return gBuildObjectRZ[playerid][objectIndex];
 }
 
 stock GetBuildRemoveOBBHalfExtents(partid, &Float:halfX, &Float:halfY, &Float:halfZ)
@@ -371,9 +423,9 @@ stock GetBuildRemoveOBBHalfExtents(partid, &Float:halfX, &Float:halfY, &Float:ha
 		}
 		case SAMPP_BUILD_PART_DOOR:
 		{
-			halfX = 0.95;
-			halfY = 0.22;
-			halfZ = 1.40;
+			halfX = 0.90;
+			halfY = 0.18;
+			halfZ = 1.45;
 			return 1;
 		}
 		case SAMPP_BUILD_PART_STAIRS:
@@ -418,12 +470,36 @@ stock bool:UpdateBuildRaySlab(Float:origin, Float:direction, Float:minBound, Flo
 
 stock bool:RayIntersectsBuildRemoveOBB(partid, Float:objectX, Float:objectY, Float:objectZ, Float:objectRZ, Float:camX, Float:camY, Float:camZ, Float:frontX, Float:frontY, Float:frontZ, &Float:distance)
 {
-	new Float:halfX;
-	new Float:halfY;
-	new Float:halfZ;
-	if (!GetBuildRemoveOBBHalfExtents(partid, halfX, halfY, halfZ))
+	new Float:minX;
+	new Float:maxX;
+	new Float:minY;
+	new Float:maxY;
+	new Float:minZ;
+	new Float:maxZ;
+	if (partid == SAMPP_BUILD_PART_DOOR)
 	{
-		return false;
+		minX = -0.12;
+		maxX = BUILD_DEMO_DOOR_WIDTH + 0.12;
+		minY = -0.18;
+		maxY = 0.18;
+		minZ = -1.55;
+		maxZ = 1.05;
+	}
+	else
+	{
+		new Float:halfX;
+		new Float:halfY;
+		new Float:halfZ;
+		if (!GetBuildRemoveOBBHalfExtents(partid, halfX, halfY, halfZ))
+		{
+			return false;
+		}
+		minX = -halfX;
+		maxX = halfX;
+		minY = -halfY;
+		maxY = halfY;
+		minZ = -halfZ;
+		maxZ = halfZ;
 	}
 
 	new Float:dx = camX - objectX;
@@ -443,9 +519,9 @@ stock bool:RayIntersectsBuildRemoveOBB(partid, Float:objectX, Float:objectY, Flo
 
 	new Float:tMin = 0.35;
 	new Float:tMax = BUILD_DEMO_REMOVE_MAX_RAY_DISTANCE;
-	if (!UpdateBuildRaySlab(localOriginX, localDirX, -halfX, halfX, tMin, tMax)
-		|| !UpdateBuildRaySlab(localOriginY, localDirY, -halfY, halfY, tMin, tMax)
-		|| !UpdateBuildRaySlab(localOriginZ, localDirZ, -halfZ, halfZ, tMin, tMax))
+	if (!UpdateBuildRaySlab(localOriginX, localDirX, minX, maxX, tMin, tMax)
+		|| !UpdateBuildRaySlab(localOriginY, localDirY, minY, maxY, tMin, tMax)
+		|| !UpdateBuildRaySlab(localOriginZ, localDirZ, minZ, maxZ, tMin, tMax))
 	{
 		return false;
 	}
@@ -546,6 +622,8 @@ stock ResetBuildObjectSlot(playerid, index)
 	gBuildObjectRX[playerid][index] = 0.0;
 	gBuildObjectRY[playerid][index] = 0.0;
 	gBuildObjectRZ[playerid][index] = 0.0;
+	gBuildDoorOpen[playerid][index] = false;
+	gBuildDoorMovingUntil[playerid][index] = 0;
 	return 1;
 }
 
@@ -554,6 +632,11 @@ stock ResetBuildDemoPlayer(playerid)
 	gBuildSession[playerid] = BuildDemoSession(playerid);
 	gBuildActive[playerid] = false;
 	gBuildObjectCount[playerid] = 0;
+	gBuildDoorFocusedObject[playerid] = -1;
+	gBuildDoorTargetActive[playerid] = false;
+	gBuildDoorInteractNextUpdate[playerid] = 0;
+	gBuildDoorTargetNextPublish[playerid] = 0;
+	gBuildDoorTargetClearAfter[playerid] = 0;
 	gBuildPreviewObject[playerid] = INVALID_OBJECT_ID;
 	for (new layer = 0; layer < 2; layer++)
 	{
@@ -591,6 +674,7 @@ stock DestroyBuildDemoObjects(playerid)
 {
 	DestroyBuildPreview(playerid);
 	DestroyBuildRemoveHighlight(playerid);
+	EndBuildDoorInteraction(playerid);
 
 	for (new i = 0; i < BUILD_DEMO_MAX_OBJECTS; i++)
 	{
@@ -652,6 +736,8 @@ stock bool:AddBuildDemoObject(playerid, objectid, partid, foundationIndex, slotK
 			gBuildObjectRX[playerid][i] = rx;
 			gBuildObjectRY[playerid][i] = ry;
 			gBuildObjectRZ[playerid][i] = rz;
+			gBuildDoorOpen[playerid][i] = false;
+			gBuildDoorMovingUntil[playerid][i] = 0;
 			gBuildObjectCount[playerid]++;
 			return true;
 		}
@@ -1107,16 +1193,12 @@ stock bool:ComputeBuildPreview(playerid, partid, rotationStep, bool:flipped, &mo
 			new Float:edgeDistance;
 			if (!GetNearestFoundationEdgeToPoint(playerid, aimX, aimY, foundationIndex, edgeIndex, x, y, z, edgeA, edgeDistance))
 			{
-				x = aimX;
-				y = aimY;
-				z = aimZ - BUILD_DEMO_FOUNDATION_Z_OFFSET;
-				rz = GetBuildEdgePieceYaw(SAMPP_BUILD_PART_DOOR, GetBuildGridAngle(playerAngle), flipped);
+				FitBuildDoorToFrame(aimX, aimY, aimZ, GetBuildGridAngle(playerAngle), flipped, x, y, z, rz);
 				SetBuildPreviewCandidate(playerid, false, -1, -1, BUILD_DEMO_SLOT_DOOR, "Doors require a placed door frame.");
 				return true;
 			}
 
-			z += 0.05;
-			rz = GetBuildEdgePieceYaw(SAMPP_BUILD_PART_DOOR, edgeA, flipped);
+			FitBuildDoorToFrame(x, y, z, edgeA, flipped, x, y, z, rz);
 			if (edgeDistance > BUILD_DEMO_EDGE_SNAP_RADIUS)
 			{
 				SetBuildPreviewCandidate(playerid, false, foundationIndex, edgeIndex, BUILD_DEMO_SLOT_DOOR, "Aim closer to a door frame.");
@@ -1423,9 +1505,19 @@ stock bool:GetBuildVerticalSurfaceHit(partid, Float:objectX, Float:objectY, Floa
 			new Float:widthY = floatcos(-objectRZ, degrees);
 			new Float:localWidth = (dx * widthX) + (dy * widthY);
 			new Float:localHeight = hitZ - objectZ;
-			new Float:halfWidth = partid == SAMPP_BUILD_PART_DOOR ? 0.85 : 1.72;
+			new Float:minWidth = -1.72;
+			new Float:maxWidth = 1.72;
+			new Float:minHeight = -1.75;
+			new Float:maxHeight = 1.95;
+			if (partid == SAMPP_BUILD_PART_DOOR)
+			{
+				minWidth = -0.12;
+				maxWidth = BUILD_DEMO_DOOR_WIDTH + 0.12;
+				minHeight = -1.55;
+				maxHeight = 1.05;
+			}
 
-			if (floatabs(localWidth) > halfWidth || localHeight < -1.75 || localHeight > 1.95)
+			if (localWidth < minWidth || localWidth > maxWidth || localHeight < minHeight || localHeight > maxHeight)
 			{
 				return false;
 			}
@@ -1477,10 +1569,11 @@ stock bool:FindBuildObjectFromAim(playerid, &objectIndex, &Float:targetDistance)
 		}
 
 		new partid = gBuildObjectPart[playerid][i];
+		new Float:objectRZ = GetBuildObjectCurrentRZ(playerid, i);
 		new Float:surfaceDistance;
-		if (!GetBuildHorizontalSurfaceHit(partid, gBuildObjectX[playerid][i], gBuildObjectY[playerid][i], gBuildObjectZ[playerid][i], gBuildObjectRZ[playerid][i], camX, camY, camZ, frontX, frontY, frontZ, surfaceDistance)
-			&& !GetBuildVerticalSurfaceHit(partid, gBuildObjectX[playerid][i], gBuildObjectY[playerid][i], gBuildObjectZ[playerid][i], gBuildObjectRZ[playerid][i], camX, camY, camZ, frontX, frontY, frontZ, surfaceDistance)
-			&& !RayIntersectsBuildRemoveOBB(partid, gBuildObjectX[playerid][i], gBuildObjectY[playerid][i], gBuildObjectZ[playerid][i], gBuildObjectRZ[playerid][i], camX, camY, camZ, frontX, frontY, frontZ, surfaceDistance))
+		if (!GetBuildHorizontalSurfaceHit(partid, gBuildObjectX[playerid][i], gBuildObjectY[playerid][i], gBuildObjectZ[playerid][i], objectRZ, camX, camY, camZ, frontX, frontY, frontZ, surfaceDistance)
+			&& !GetBuildVerticalSurfaceHit(partid, gBuildObjectX[playerid][i], gBuildObjectY[playerid][i], gBuildObjectZ[playerid][i], objectRZ, camX, camY, camZ, frontX, frontY, frontZ, surfaceDistance)
+			&& !RayIntersectsBuildRemoveOBB(partid, gBuildObjectX[playerid][i], gBuildObjectY[playerid][i], gBuildObjectZ[playerid][i], objectRZ, camX, camY, camZ, frontX, frontY, frontZ, surfaceDistance))
 		{
 			continue;
 		}
@@ -1505,6 +1598,239 @@ stock bool:FindBuildObjectFromAim(playerid, &objectIndex, &Float:targetDistance)
 	return true;
 }
 
+stock EndBuildDoorInteraction(playerid)
+{
+	if (gBuildDoorTargetActive[playerid])
+	{
+		if (IsUsingSAMPP(playerid))
+		{
+			SAMPP_TargetClear(playerid);
+		}
+	}
+	gBuildDoorFocusedObject[playerid] = -1;
+	gBuildDoorTargetActive[playerid] = false;
+	gBuildDoorTargetNextPublish[playerid] = 0;
+	gBuildDoorTargetClearAfter[playerid] = 0;
+	return 1;
+}
+
+stock ResetBuildDoorTargetState(playerid)
+{
+	gBuildDoorFocusedObject[playerid] = -1;
+	gBuildDoorTargetActive[playerid] = false;
+	gBuildDoorTargetNextPublish[playerid] = 0;
+	gBuildDoorTargetClearAfter[playerid] = 0;
+	return 1;
+}
+
+stock bool:GetBuildDoorInteractionPoseHit(playerid, objectIndex, Float:objectRZ, Float:camX, Float:camY, Float:camZ, Float:frontX, Float:frontY, Float:frontZ, &Float:surfaceDistance)
+{
+	if (!GetBuildVerticalSurfaceHit(SAMPP_BUILD_PART_DOOR, gBuildObjectX[playerid][objectIndex], gBuildObjectY[playerid][objectIndex], gBuildObjectZ[playerid][objectIndex], objectRZ, camX, camY, camZ, frontX, frontY, frontZ, surfaceDistance)
+		&& !RayIntersectsBuildRemoveOBB(SAMPP_BUILD_PART_DOOR, gBuildObjectX[playerid][objectIndex], gBuildObjectY[playerid][objectIndex], gBuildObjectZ[playerid][objectIndex], objectRZ, camX, camY, camZ, frontX, frontY, frontZ, surfaceDistance))
+	{
+		return false;
+	}
+
+	return surfaceDistance <= BUILD_DEMO_DOOR_INTERACT_RAY_DISTANCE;
+}
+
+stock bool:FindBuildDoorFromAim(playerid, &objectIndex, &Float:targetDistance)
+{
+	new Float:px, Float:py, Float:pz;
+	new Float:camX, Float:camY, Float:camZ;
+	new Float:frontX, Float:frontY, Float:frontZ;
+	if (!GetPlayerPos(playerid, px, py, pz)
+		|| !GetPlayerCameraPos(playerid, camX, camY, camZ)
+		|| !GetPlayerCameraFrontVector(playerid, frontX, frontY, frontZ))
+	{
+		return false;
+	}
+
+	new Float:frontLen = floatsqroot((frontX * frontX) + (frontY * frontY) + (frontZ * frontZ));
+	if (frontLen <= 0.001)
+	{
+		return false;
+	}
+
+	frontX /= frontLen;
+	frontY /= frontLen;
+	frontZ /= frontLen;
+
+	new bestIndex = -1;
+	new Float:bestDistance = 999999.0;
+	for (new i = 0; i < BUILD_DEMO_MAX_OBJECTS; i++)
+	{
+		if (gBuildObjects[playerid][i] == INVALID_OBJECT_ID || gBuildObjectPart[playerid][i] != SAMPP_BUILD_PART_DOOR)
+		{
+			continue;
+		}
+
+		if (GetPlayerDistanceFromPoint(playerid, gBuildObjectX[playerid][i], gBuildObjectY[playerid][i], gBuildObjectZ[playerid][i]) > BUILD_DEMO_DOOR_INTERACT_DISTANCE)
+		{
+			continue;
+		}
+
+		new Float:surfaceDistance;
+		new bool:hit = GetBuildDoorInteractionPoseHit(playerid, i, gBuildObjectRZ[playerid][i], camX, camY, camZ, frontX, frontY, frontZ, surfaceDistance);
+		if (gBuildDoorOpen[playerid][i])
+		{
+			new Float:openDistance;
+			if (GetBuildDoorInteractionPoseHit(playerid, i, GetBuildObjectCurrentRZ(playerid, i), camX, camY, camZ, frontX, frontY, frontZ, openDistance)
+				&& (!hit || openDistance < surfaceDistance))
+			{
+				surfaceDistance = openDistance;
+				hit = true;
+			}
+		}
+
+		if (!hit)
+		{
+			continue;
+		}
+
+		if (surfaceDistance < bestDistance)
+		{
+			bestDistance = surfaceDistance;
+			bestIndex = i;
+		}
+	}
+
+	if (bestIndex == -1)
+	{
+		return false;
+	}
+
+	objectIndex = bestIndex;
+	targetDistance = bestDistance;
+	return true;
+}
+
+stock RefreshBuildDoorInteraction(playerid, bool:force = false)
+{
+	if (gBuildActive[playerid] || !IsUsingSAMPP(playerid) || !SAMPP_HasFeature(playerid, SAMPP_FEATURE_TARGET) || IsPlayerInAnyVehicle(playerid))
+	{
+		return EndBuildDoorInteraction(playerid);
+	}
+
+	new now = GetTickCount();
+	if (!force && now < gBuildDoorInteractNextUpdate[playerid])
+	{
+		return 1;
+	}
+	gBuildDoorInteractNextUpdate[playerid] = now + BUILD_DEMO_DOOR_INTERACT_MS;
+
+	new objectIndex;
+	new Float:targetDistance;
+	if (!FindBuildDoorFromAim(playerid, objectIndex, targetDistance))
+	{
+		if (gBuildDoorTargetActive[playerid] && now < gBuildDoorTargetClearAfter[playerid])
+		{
+			return 1;
+		}
+		return EndBuildDoorInteraction(playerid);
+	}
+
+	new bool:focusChanged = gBuildDoorFocusedObject[playerid] != objectIndex;
+	gBuildDoorFocusedObject[playerid] = objectIndex;
+	gBuildDoorTargetActive[playerid] = true;
+	gBuildDoorTargetClearAfter[playerid] = now + BUILD_DEMO_DOOR_TARGET_LOST_GRACE_MS;
+
+	if (!force && !focusChanged && now < gBuildDoorTargetNextPublish[playerid])
+	{
+		return 1;
+	}
+	gBuildDoorTargetNextPublish[playerid] = now + BUILD_DEMO_DOOR_TARGET_REPUBLISH_MS;
+
+	new targetid = BuildDoorTargetId(playerid);
+	new action[32];
+	format(action, sizeof action, "%s Door", gBuildDoorOpen[playerid][objectIndex] ? ("Close") : ("Open"));
+
+	if (!SAMPP_TargetBeginDirect(playerid, targetid, SAMPP_TARGET_TYPE_OBJECT, action, BUILD_DEMO_DOOR_TARGET_TTL_MS))
+	{
+		return EndBuildDoorInteraction(playerid);
+	}
+	SAMPP_TargetSetLayout(playerid, targetid, SAMPP_TARGET_LAYOUT_MINIMAL);
+	SAMPP_TargetAddAction(playerid, targetid, BUILD_DEMO_DOOR_OPTION_TOGGLE, action, "door");
+	if (!SAMPP_TargetCommit(playerid, targetid))
+	{
+		return EndBuildDoorInteraction(playerid);
+	}
+
+	return 1;
+}
+
+stock ToggleBuildDoor(playerid, objectIndex)
+{
+	if (objectIndex < 0 || objectIndex >= BUILD_DEMO_MAX_OBJECTS
+		|| gBuildObjects[playerid][objectIndex] == INVALID_OBJECT_ID
+		|| gBuildObjectPart[playerid][objectIndex] != SAMPP_BUILD_PART_DOOR)
+	{
+		return 0;
+	}
+
+	new now = GetTickCount();
+	if (now < gBuildDoorMovingUntil[playerid][objectIndex])
+	{
+		return 1;
+	}
+
+	new bool:open = !gBuildDoorOpen[playerid][objectIndex];
+	new Float:targetRZ = NormalizeBuildAngle(gBuildObjectRZ[playerid][objectIndex] + (open ? BUILD_DEMO_DOOR_OPEN_ANGLE : 0.0));
+
+	StopObject(gBuildObjects[playerid][objectIndex]);
+	if (!MoveObject(
+		gBuildObjects[playerid][objectIndex],
+		gBuildObjectX[playerid][objectIndex],
+		gBuildObjectY[playerid][objectIndex],
+		gBuildObjectZ[playerid][objectIndex],
+		BUILD_DEMO_DOOR_MOVE_SPEED,
+		gBuildObjectRX[playerid][objectIndex],
+		gBuildObjectRY[playerid][objectIndex],
+		targetRZ))
+	{
+		SetObjectRot(gBuildObjects[playerid][objectIndex], gBuildObjectRX[playerid][objectIndex], gBuildObjectRY[playerid][objectIndex], targetRZ);
+	}
+
+	gBuildDoorOpen[playerid][objectIndex] = open;
+	gBuildDoorMovingUntil[playerid][objectIndex] = now + BUILD_DEMO_DOOR_MOVE_MS;
+	if (gBuildRemoveFocusedObject[playerid] == objectIndex)
+	{
+		SyncBuildRemoveHighlight(playerid, objectIndex);
+	}
+	return 1;
+}
+
+stock ToggleFocusedBuildDoor(playerid)
+{
+	new objectIndex;
+	new Float:targetDistance;
+	if (!FindBuildDoorFromAim(playerid, objectIndex, targetDistance))
+	{
+		return EndBuildDoorInteraction(playerid);
+	}
+	return ToggleBuildDoor(playerid, objectIndex);
+}
+
+stock RunBuildDoorTargetOption(playerid, optionid)
+{
+	if (optionid != BUILD_DEMO_DOOR_OPTION_TOGGLE)
+	{
+		ResetBuildDoorTargetState(playerid);
+		return 1;
+	}
+
+	new objectIndex;
+	new Float:targetDistance;
+	if (!FindBuildDoorFromAim(playerid, objectIndex, targetDistance))
+	{
+		ResetBuildDoorTargetState(playerid);
+		return 1;
+	}
+
+	ResetBuildDoorTargetState(playerid);
+	return ToggleBuildDoor(playerid, objectIndex);
+}
+
 stock Float:GetBuildObjectDistanceToPlayer(playerid, objectIndex)
 {
 	new Float:px, Float:py, Float:pz;
@@ -1513,8 +1839,15 @@ stock Float:GetBuildObjectDistanceToPlayer(playerid, objectIndex)
 		return 0.0;
 	}
 
-	new Float:dx = px - gBuildObjectX[playerid][objectIndex];
-	new Float:dy = py - gBuildObjectY[playerid][objectIndex];
+	new Float:objectX = gBuildObjectX[playerid][objectIndex];
+	new Float:objectY = gBuildObjectY[playerid][objectIndex];
+	if (gBuildObjectPart[playerid][objectIndex] == SAMPP_BUILD_PART_DOOR)
+	{
+		GetForwardPoint(gBuildObjectX[playerid][objectIndex], gBuildObjectY[playerid][objectIndex], GetBuildObjectCurrentRZ(playerid, objectIndex), BUILD_DEMO_DOOR_HALF_WIDTH, objectX, objectY);
+	}
+
+	new Float:dx = px - objectX;
+	new Float:dy = py - objectY;
 	new Float:dz = pz - gBuildObjectZ[playerid][objectIndex];
 	return floatsqroot((dx * dx) + (dy * dy) + (dz * dz));
 }
@@ -1538,7 +1871,7 @@ stock SyncBuildRemoveHighlight(playerid, objectIndex)
 	new Float:z = gBuildObjectZ[playerid][objectIndex];
 	new Float:rx = gBuildObjectRX[playerid][objectIndex];
 	new Float:ry = gBuildObjectRY[playerid][objectIndex];
-	new Float:rz = gBuildObjectRZ[playerid][objectIndex];
+	new Float:rz = GetBuildObjectCurrentRZ(playerid, objectIndex);
 
 	new layerCount = GetBuildRemoveHighlightLayerCount(partid);
 	for (new layer = 0; layer < 2; layer++)
@@ -1772,6 +2105,10 @@ stock bool:RemoveBuildObjectAtIndex(playerid, objectIndex)
 	}
 
 	DestroyObject(gBuildObjects[playerid][objectIndex]);
+	if (gBuildDoorFocusedObject[playerid] == objectIndex)
+	{
+		EndBuildDoorInteraction(playerid);
+	}
 	ResetBuildObjectSlot(playerid, objectIndex);
 	if (gBuildObjectCount[playerid] > 0)
 	{
@@ -1889,6 +2226,7 @@ stock SendBuildDemoHelp(playerid)
 	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] Select a part first; a temporary player-object preview follows your camera aim.");
 	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] LMB confirms the preview. RMB returns to the menu; RMB again or ESC closes. MMB switches side.");
 	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] Foundations snap to neighbours; walls/door frames snap to edge surfaces automatically.");
+	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] Aim a placed door from nearby and use the ALT target prompt to open or close it.");
 	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] Tools > Remove enters orange remove mode. Aim a placed part and press LMB to delete it.");
 	return 1;
 }
@@ -1904,28 +2242,29 @@ stock RegisterBuildDemoModels()
 	new bool:foundationRegistered = AddSimpleModel(-1, BUILD_BASE_MODEL_FOUNDATION, BUILD_MODEL_FOUNDATION, BUILD_MODEL_FOUNDATION_DFF, BUILD_MODEL_FOUNDATION_TXD);
 	new bool:wallRegistered = AddSimpleModel(-1, BUILD_BASE_MODEL_WALL, BUILD_MODEL_WALL, BUILD_MODEL_WALL_DFF, BUILD_MODEL_WALL_TXD);
 	new bool:doorFrameRegistered = AddSimpleModel(-1, BUILD_BASE_MODEL_DOORFRAME, BUILD_MODEL_DOORFRAME, BUILD_MODEL_DOORFRAME_DFF, BUILD_MODEL_DOORFRAME_TXD);
+	new bool:doorRegistered = AddSimpleModel(-1, BUILD_BASE_MODEL_DOOR, BUILD_MODEL_DOOR, BUILD_MODEL_DOOR_DFF, BUILD_MODEL_DOOR_TXD);
 	new bool:floorRegistered = AddSimpleModel(-1, BUILD_BASE_MODEL_FLOOR, BUILD_MODEL_FLOOR, BUILD_MODEL_FLOOR_DFF, BUILD_MODEL_FLOOR_TXD);
 	new bool:foundationPreviewOK = AddSimpleModel(-1, BUILD_BASE_MODEL_FOUNDATION, BUILD_MODEL_FOUNDATION_PREVIEW_OK, BUILD_MODEL_FOUNDATION_DFF, BUILD_MODEL_PREVIEW_OK_TXD);
 	new bool:wallPreviewOK = AddSimpleModel(-1, BUILD_BASE_MODEL_WALL, BUILD_MODEL_WALL_PREVIEW_OK, BUILD_MODEL_WALL_DFF, BUILD_MODEL_PREVIEW_OK_TXD);
 	new bool:doorFramePreviewOK = AddSimpleModel(-1, BUILD_BASE_MODEL_DOORFRAME, BUILD_MODEL_DOORFRAME_PREVIEW_OK, BUILD_MODEL_DOORFRAME_DFF, BUILD_MODEL_PREVIEW_OK_TXD);
+	new bool:doorPreviewOK = AddSimpleModel(-1, BUILD_BASE_MODEL_DOOR, BUILD_MODEL_DOOR_PREVIEW_OK, BUILD_MODEL_DOOR_DFF, BUILD_MODEL_PREVIEW_OK_TXD);
 	new bool:floorPreviewOK = AddSimpleModel(-1, BUILD_BASE_MODEL_FLOOR, BUILD_MODEL_FLOOR_PREVIEW_OK, BUILD_MODEL_FLOOR_DFF, BUILD_MODEL_PREVIEW_OK_TXD);
 	new bool:roofPreviewOK = AddSimpleModel(-1, BUILD_BASE_MODEL_FLOOR, BUILD_MODEL_ROOF_PREVIEW_OK, BUILD_MODEL_FLOOR_DFF, BUILD_MODEL_PREVIEW_OK_TXD);
 	new bool:stairsPreviewOK = AddSimpleModel(-1, BUILD_BASE_MODEL_WALL, BUILD_MODEL_STAIRS_PREVIEW_OK, BUILD_MODEL_WALL_DFF, BUILD_MODEL_PREVIEW_OK_TXD);
-	new bool:doorPreviewOK = AddSimpleModel(-1, BUILD_BASE_MODEL_DOORFRAME, BUILD_MODEL_DOOR_PREVIEW_OK, BUILD_MODEL_DOORFRAME_DFF, BUILD_MODEL_PREVIEW_OK_TXD);
 	new bool:foundationPreviewBad = AddSimpleModel(-1, BUILD_BASE_MODEL_FOUNDATION, BUILD_MODEL_FOUNDATION_PREVIEW_BAD, BUILD_MODEL_FOUNDATION_DFF, BUILD_MODEL_PREVIEW_BAD_TXD);
 	new bool:wallPreviewBad = AddSimpleModel(-1, BUILD_BASE_MODEL_WALL, BUILD_MODEL_WALL_PREVIEW_BAD, BUILD_MODEL_WALL_DFF, BUILD_MODEL_PREVIEW_BAD_TXD);
 	new bool:doorFramePreviewBad = AddSimpleModel(-1, BUILD_BASE_MODEL_DOORFRAME, BUILD_MODEL_DOORFRAME_PREVIEW_BAD, BUILD_MODEL_DOORFRAME_DFF, BUILD_MODEL_PREVIEW_BAD_TXD);
+	new bool:doorPreviewBad = AddSimpleModel(-1, BUILD_BASE_MODEL_DOOR, BUILD_MODEL_DOOR_PREVIEW_BAD, BUILD_MODEL_DOOR_DFF, BUILD_MODEL_PREVIEW_BAD_TXD);
 	new bool:floorPreviewBad = AddSimpleModel(-1, BUILD_BASE_MODEL_FLOOR, BUILD_MODEL_FLOOR_PREVIEW_BAD, BUILD_MODEL_FLOOR_DFF, BUILD_MODEL_PREVIEW_BAD_TXD);
 	new bool:roofPreviewBad = AddSimpleModel(-1, BUILD_BASE_MODEL_FLOOR, BUILD_MODEL_ROOF_PREVIEW_BAD, BUILD_MODEL_FLOOR_DFF, BUILD_MODEL_PREVIEW_BAD_TXD);
 	new bool:stairsPreviewBad = AddSimpleModel(-1, BUILD_BASE_MODEL_WALL, BUILD_MODEL_STAIRS_PREVIEW_BAD, BUILD_MODEL_WALL_DFF, BUILD_MODEL_PREVIEW_BAD_TXD);
-	new bool:doorPreviewBad = AddSimpleModel(-1, BUILD_BASE_MODEL_DOORFRAME, BUILD_MODEL_DOOR_PREVIEW_BAD, BUILD_MODEL_DOORFRAME_DFF, BUILD_MODEL_PREVIEW_BAD_TXD);
 	new bool:foundationHighlight = AddSimpleModel(-1, BUILD_BASE_MODEL_FOUNDATION, BUILD_MODEL_FOUNDATION_HIGHLIGHT, BUILD_MODEL_FOUNDATION_DFF, BUILD_MODEL_REMOVE_HIGHLIGHT_TXD);
 	new bool:wallHighlight = AddSimpleModel(-1, BUILD_BASE_MODEL_WALL, BUILD_MODEL_WALL_HIGHLIGHT, BUILD_MODEL_WALL_DFF, BUILD_MODEL_REMOVE_HIGHLIGHT_TXD);
 	new bool:doorFrameHighlight = AddSimpleModel(-1, BUILD_BASE_MODEL_DOORFRAME, BUILD_MODEL_DOORFRAME_HIGHLIGHT, BUILD_MODEL_DOORFRAME_DFF, BUILD_MODEL_REMOVE_HIGHLIGHT_TXD);
+	new bool:doorHighlight = AddSimpleModel(-1, BUILD_BASE_MODEL_DOOR, BUILD_MODEL_DOOR_HIGHLIGHT, BUILD_MODEL_DOOR_DFF, BUILD_MODEL_REMOVE_HIGHLIGHT_TXD);
 	new bool:floorHighlight = AddSimpleModel(-1, BUILD_BASE_MODEL_FLOOR, BUILD_MODEL_FLOOR_HIGHLIGHT, BUILD_MODEL_FLOOR_DFF, BUILD_MODEL_REMOVE_HIGHLIGHT_TXD);
 	new bool:roofHighlight = AddSimpleModel(-1, BUILD_BASE_MODEL_FLOOR, BUILD_MODEL_ROOF_HIGHLIGHT, BUILD_MODEL_FLOOR_DFF, BUILD_MODEL_REMOVE_HIGHLIGHT_TXD);
 	new bool:stairsHighlight = AddSimpleModel(-1, BUILD_BASE_MODEL_WALL, BUILD_MODEL_STAIRS_HIGHLIGHT, BUILD_MODEL_WALL_DFF, BUILD_MODEL_REMOVE_HIGHLIGHT_TXD);
-	new bool:doorHighlight = AddSimpleModel(-1, BUILD_BASE_MODEL_DOORFRAME, BUILD_MODEL_DOOR_HIGHLIGHT, BUILD_MODEL_DOORFRAME_DFF, BUILD_MODEL_REMOVE_HIGHLIGHT_TXD);
 
 	if (foundationRegistered)
 	{
@@ -1954,6 +2293,15 @@ stock RegisterBuildDemoModels()
 		print("[BuildDemo] Could not register custom door frame model -2002. Check artwork config and model files.");
 	}
 
+	if (doorRegistered)
+	{
+		print("[BuildDemo] Registered custom door model -2006 from models/door.dff and models/door.txd.");
+	}
+	else
+	{
+		print("[BuildDemo] Could not register custom door model -2006. Check artwork config and model files.");
+	}
+
 	if (floorRegistered)
 	{
 		print("[BuildDemo] Registered custom floor model -2003 from models/floor.dff and models/floor.txd.");
@@ -1963,9 +2311,9 @@ stock RegisterBuildDemoModels()
 		print("[BuildDemo] Could not register custom floor model -2003. Check artwork config and model files.");
 	}
 
-	if (foundationPreviewOK && wallPreviewOK && doorFramePreviewOK && floorPreviewOK && roofPreviewOK && stairsPreviewOK && doorPreviewOK
-		&& foundationPreviewBad && wallPreviewBad && doorFramePreviewBad && floorPreviewBad && roofPreviewBad && stairsPreviewBad && doorPreviewBad
-		&& foundationHighlight && wallHighlight && doorFrameHighlight && floorHighlight && roofHighlight && stairsHighlight && doorHighlight)
+	if (foundationPreviewOK && wallPreviewOK && doorFramePreviewOK && doorPreviewOK && floorPreviewOK && roofPreviewOK && stairsPreviewOK
+		&& foundationPreviewBad && wallPreviewBad && doorFramePreviewBad && doorPreviewBad && floorPreviewBad && roofPreviewBad && stairsPreviewBad
+		&& foundationHighlight && wallHighlight && doorFrameHighlight && doorHighlight && floorHighlight && roofHighlight && stairsHighlight)
 	{
 		print("[BuildDemo] Registered green/red preview build models and orange remove highlight models.");
 	}
@@ -1974,10 +2322,10 @@ stock RegisterBuildDemoModels()
 		print("[BuildDemo] Could not register one or more preview/highlight models. Check green/red/orange preview TXDs.");
 	}
 
-	registered = foundationRegistered && wallRegistered && doorFrameRegistered && floorRegistered
-		&& foundationPreviewOK && wallPreviewOK && doorFramePreviewOK && floorPreviewOK && roofPreviewOK && stairsPreviewOK && doorPreviewOK
-		&& foundationPreviewBad && wallPreviewBad && doorFramePreviewBad && floorPreviewBad && roofPreviewBad && stairsPreviewBad && doorPreviewBad
-		&& foundationHighlight && wallHighlight && doorFrameHighlight && floorHighlight && roofHighlight && stairsHighlight && doorHighlight;
+	registered = foundationRegistered && wallRegistered && doorFrameRegistered && doorRegistered && floorRegistered
+		&& foundationPreviewOK && wallPreviewOK && doorFramePreviewOK && doorPreviewOK && floorPreviewOK && roofPreviewOK && stairsPreviewOK
+		&& foundationPreviewBad && wallPreviewBad && doorFramePreviewBad && doorPreviewBad && floorPreviewBad && roofPreviewBad && stairsPreviewBad
+		&& foundationHighlight && wallHighlight && doorFrameHighlight && doorHighlight && floorHighlight && roofHighlight && stairsHighlight;
 	return registered ? 1 : 0;
 }
 
@@ -2060,6 +2408,8 @@ public OnPlayerDisconnect(playerid, reason)
 
 public OnPlayerUpdate(playerid)
 {
+	RefreshBuildDoorInteraction(playerid);
+
 	if (gBuildActive[playerid])
 	{
 		if (gBuildSelectedPart[playerid] == SAMPP_BUILD_PART_REMOVE)
@@ -2130,6 +2480,16 @@ public OnPlayerOMPPlusBuildSelect(playerid, sessionid, partid)
 	}
 	SendClientMessage(playerid, BUILD_DEMO_COLOUR, message);
 	return 1;
+}
+
+public OnPlayerOMPPlusTargetSelect(playerid, targetid, optionid)
+{
+	if (targetid != BuildDoorTargetId(playerid))
+	{
+		return 1;
+	}
+
+	return RunBuildDoorTargetOption(playerid, optionid);
 }
 
 public OnPlayerOMPPlusBuildPreview(playerid, sessionid, partid, rotation_step, bool:flipped)

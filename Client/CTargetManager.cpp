@@ -3,6 +3,7 @@
 #include <SAMP+/client/CGraphics.h>
 #include <SAMP+/client/CKeyBinds.h>
 #include <SAMP+/client/CLog.h>
+#include <SAMP+/client/COverlayLayout.h>
 #include <SAMP+/client/COverlayRenderer.h>
 #include <SAMP+/client/CTargetManager.h>
 #include <SAMP+/client/Network.h>
@@ -86,8 +87,6 @@ namespace
 
 	const unsigned char MaxTargetOptions = 8;
 	const unsigned char MaxTargetRows = 12;
-	const float MenuOffsetX = 58.0f;
-	const float TargetOffsetX = 87.0f;
 	const float PromptLegendOffsetX = 45.0f;
 	const float PromptTitleHeight = 24.0f;
 	const float PromptKeyWidth = 36.0f;
@@ -391,7 +390,11 @@ void CTargetManager::Process()
 
 	if (altDown && !m_lastAltDown)
 	{
-		if (m_menuOpen)
+		if (IsDirectSelectContext())
+		{
+			SendDirectSelect();
+		}
+		else if (m_menuOpen)
 		{
 			if (!inputGuardActive)
 			{
@@ -446,7 +449,7 @@ void CTargetManager::Draw(IDirect3DDevice9* device)
 	EnsureFont(device);
 
 	CPoint2D& resolution = CGraphics::GetScreenResolution();
-	const float cx = static_cast<float>(resolution.X()) * 0.5f + TargetOffsetX;
+	const float cx = OverlayLayout::GetTargetCenterX(static_cast<float>(resolution.X()));
 	const float cy = static_cast<float>(resolution.Y()) * 0.5f;
 
 	if (m_menuOpen)
@@ -716,7 +719,7 @@ void CTargetManager::RenderImGui()
 	ImGuiIO& io = ImGui::GetIO();
 	ApplyImGuiInput();
 
-	const float cx = io.DisplaySize.x * 0.5f + TargetOffsetX;
+	const float cx = OverlayLayout::GetTargetCenterX(io.DisplaySize.x);
 	const float cy = io.DisplaySize.y * 0.5f;
 	const ImU32 black = IM_COL32(5, 7, 8, 220);
 	const ImU32 blackSoft = IM_COL32(0, 0, 0, 128);
@@ -766,7 +769,7 @@ void CTargetManager::RenderImGui()
 
 	const float width = GetMenuWidth();
 	const float totalHeight = GetMenuHeight(width);
-	ImGui::SetNextWindowPos(ImVec2(cx + MenuOffsetX, cy - totalHeight * 0.5f), ImGuiCond_Always);
+	ImGui::SetNextWindowPos(ImVec2(OverlayLayout::GetMenuX(io.DisplaySize.x), cy - totalHeight * 0.5f), ImGuiCond_Always);
 	ImGui::SetNextWindowSize(ImVec2(width, totalHeight), ImGuiCond_Always);
 	ImGui::SetNextWindowBgAlpha(0.96f);
 
@@ -1034,11 +1037,38 @@ bool CTargetManager::ShouldDrawPrompt()
 	return (m_flags & OMPPlusProtocol::TargetFlagHidePrompt) == 0;
 }
 
+bool CTargetManager::IsDirectSelectContext()
+{
+	return (m_flags & OMPPlusProtocol::TargetFlagDirectSelect) != 0;
+}
+
 bool CTargetManager::IsSelectableRow(unsigned char rowType)
 {
 	return rowType == OMPPlusProtocol::TargetRowAction
 		|| rowType == OMPPlusProtocol::TargetRowToggle
 		|| rowType == OMPPlusProtocol::TargetRowDanger;
+}
+
+unsigned int CTargetManager::GetFirstSelectableOptionId()
+{
+	for (size_t i = 0; i < m_options.size(); ++i)
+	{
+		const sTargetOption& option = m_options[i];
+		if (option.enabled && IsSelectableRow(option.rowType) && option.optionId != 0)
+			return option.optionId;
+	}
+	return 0;
+}
+
+bool CTargetManager::SendDirectSelect()
+{
+	const unsigned int optionId = GetFirstSelectableOptionId();
+	if (optionId == 0)
+		return false;
+
+	BeginKeyboardReleaseLease();
+	SendSelect(optionId);
+	return true;
 }
 
 bool CTargetManager::UseLeftAlignedRows()
@@ -1230,11 +1260,10 @@ void CTargetManager::InitializeVirtualCursor()
 	if (height <= 0.0f)
 		height = 720.0f;
 
-	const float cx = width * 0.5f + TargetOffsetX;
 	const float cy = height * 0.5f;
 	const float menuWidth = GetMenuWidth();
 	const float totalHeight = GetMenuHeight(menuWidth);
-	const float menuX = cx + MenuOffsetX;
+	const float menuX = OverlayLayout::GetMenuX(width);
 	const float menuY = cy - totalHeight * 0.5f;
 	float rowY = menuY + GetHeaderHeight() + RowGap + GetDescriptionHeight(menuWidth);
 	float cursorY = menuY + totalHeight * 0.5f;
@@ -1319,11 +1348,10 @@ void CTargetManager::SendSelect(unsigned int optionId)
 void CTargetManager::UpdateHover()
 {
 	CPoint2D& resolution = CGraphics::GetScreenResolution();
-	const float cx = static_cast<float>(resolution.X()) * 0.5f + TargetOffsetX;
 	const float cy = static_cast<float>(resolution.Y()) * 0.5f;
 	const float menuWidth = GetMenuWidth();
 	const float totalHeight = GetMenuHeight(menuWidth);
-	const float x = cx + MenuOffsetX;
+	const float x = OverlayLayout::GetMenuX(static_cast<float>(resolution.X()));
 	const float y = cy - totalHeight * 0.5f;
 	float rowY = y + GetHeaderHeight() + RowGap + GetDescriptionHeight(menuWidth);
 
@@ -1480,7 +1508,7 @@ void CTargetManager::DrawMenu(IDirect3DDevice9* device, float cx, float cy)
 {
 	const float menuWidth = GetMenuWidth();
 	const float headerHeight = GetHeaderHeight();
-	const float x = cx + MenuOffsetX;
+	const float x = cx + OverlayLayout::MenuOffsetX;
 	const float totalHeight = GetMenuHeight(menuWidth);
 	const float y = cy - totalHeight * 0.5f;
 

@@ -3,6 +3,7 @@
 #include <SAMP+/client/CBuildManager.h>
 #include <SAMP+/client/CGraphics.h>
 #include <SAMP+/client/CLog.h>
+#include <SAMP+/client/COverlayLayout.h>
 #include <SAMP+/client/CTargetManager.h>
 #include <SAMP+/client/Network.h>
 #include <SAMP+/client/Proxy/CDInput8DeviceProxy.h>
@@ -128,8 +129,6 @@ namespace
 		BuildPartRemove = 100
 	};
 
-	const float TargetReferenceOffsetX = 87.0f;
-	const float TargetReferenceMenuOffsetX = 58.0f;
 	const float RemoveBadgeMinWidth = 178.0f;
 	const float RemoveBadgeMaxWidth = 302.0f;
 	const float RemoveBadgeHeight = 46.0f;
@@ -143,6 +142,21 @@ namespace
 	float ClampFloat(float value, float minValue, float maxValue)
 	{
 		return (std::max)(minValue, (std::min)(value, maxValue));
+	}
+
+	float GetBuildMenuWidth(float displayWidth)
+	{
+		return (std::max)(280.0f, (std::min)(340.0f, displayWidth * 0.26f));
+	}
+
+	float GetBuildMenuX(float displayWidth, float menuWidth)
+	{
+		return ClampFloat(OverlayLayout::GetMenuX(displayWidth), BuildUiScreenPadding, displayWidth - menuWidth - BuildUiScreenPadding);
+	}
+
+	float GetBuildMenuY(float displayHeight)
+	{
+		return displayHeight * 0.5f;
 	}
 
 	ImVec2 GetOverlayDisplaySize()
@@ -524,11 +538,9 @@ void CBuildManager::RenderImGui()
 	ApplyImGuiInput();
 
 	const ImVec2 displaySize = GetOverlayDisplaySize();
-	const float width = (std::max)(280.0f, (std::min)(340.0f, displaySize.x * 0.26f));
-	const float cx = displaySize.x * 0.5f + TargetReferenceOffsetX;
-	const float cy = displaySize.y * 0.5f;
-	const float x = ClampFloat(cx + TargetReferenceMenuOffsetX, BuildUiScreenPadding, displaySize.x - width - BuildUiScreenPadding);
-	const float y = cy;
+	const float width = GetBuildMenuWidth(displaySize.x);
+	const float x = GetBuildMenuX(displaySize.x, width);
+	const float y = GetBuildMenuY(displaySize.y);
 
 	ImGui::SetNextWindowPos(ImVec2(x, y), ImGuiCond_Always, ImVec2(0.0f, 0.5f));
 	ImGui::SetNextWindowSize(ImVec2(width, 0.0f), ImGuiCond_Always);
@@ -803,11 +815,11 @@ bool CBuildManager::ReadBoundString(RakNet::BitStream& bitStream, std::string& v
 void CBuildManager::InitializeVirtualCursor()
 {
 	const ImVec2 displaySize = GetOverlayDisplaySize();
-	const float width = displaySize.x;
+	const float menuWidth = GetBuildMenuWidth(displaySize.x);
+	const float menuX = GetBuildMenuX(displaySize.x, menuWidth);
 
-	const float menuWidth = (std::max)(280.0f, (std::min)(340.0f, width * 0.26f));
-	m_virtualCursorX = width - menuWidth * 0.5f - 42.0f;
-	m_virtualCursorY = 210.0f;
+	m_virtualCursorX = menuX + menuWidth * 0.5f;
+	m_virtualCursorY = GetBuildMenuY(displaySize.y);
 	m_virtualCursorInitialized = true;
 	MoveWindowCursorToDisplayPoint(ImVec2(m_virtualCursorX, m_virtualCursorY));
 }
@@ -848,7 +860,7 @@ void CBuildManager::ApplyImGuiInput()
 void CBuildManager::RenderRemoveOverlay()
 {
 	const ImVec2 displaySize = GetOverlayDisplaySize();
-	const float cx = displaySize.x * 0.5f + TargetReferenceOffsetX;
+	const float cx = OverlayLayout::GetTargetCenterX(displaySize.x);
 	const float cy = displaySize.y * 0.5f;
 	const unsigned long now = GetTickCount();
 	const bool targetFresh = m_removeTarget.active && now - m_removeTarget.receivedAt <= 650;
@@ -873,7 +885,7 @@ void CBuildManager::RenderRemoveOverlay()
 	const float titleRowWidth = 10.0f + tagWidth + 8.0f + titleText.x + 12.0f;
 	const float actionRowWidth = actionText.x + 20.0f;
 	const float badgeWidth = ClampFloat((std::max)(titleRowWidth, actionRowWidth), RemoveBadgeMinWidth, RemoveBadgeMaxWidth);
-	const float badgeX = ClampFloat(cx + TargetReferenceMenuOffsetX, BuildUiScreenPadding, displaySize.x - badgeWidth - BuildUiScreenPadding);
+	const float badgeX = ClampFloat(OverlayLayout::GetMenuX(displaySize.x), BuildUiScreenPadding, displaySize.x - badgeWidth - BuildUiScreenPadding);
 	const float badgeY = ClampFloat(cy - RemoveBadgeHeight * 0.5f, BuildUiScreenPadding, displaySize.y - RemoveBadgeHeight - BuildUiScreenPadding);
 	const ImVec2 badgeMin(badgeX, badgeY);
 	const ImVec2 badgeMax(badgeMin.x + badgeWidth, badgeMin.y + RemoveBadgeHeight);

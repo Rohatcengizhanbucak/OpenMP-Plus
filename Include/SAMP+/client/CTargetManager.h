@@ -51,8 +51,11 @@ private:
 	static bool IsMouseSuppressed();
 	static bool HasKeyboardReleaseLease();
 	static bool ShouldDrawPrompt();
+	static bool IsDirectSelectContext();
 	static bool IsSelectableRow(unsigned char rowType);
 	static bool UseLeftAlignedRows();
+	static unsigned int GetFirstSelectableOptionId();
+	static bool SendDirectSelect();
 	static void SuppressMouseInput(unsigned long durationMs);
 	static void BeginKeyboardReleaseLease();
 	static void UpdateKeyboardReleaseLease();
