@@ -133,6 +133,7 @@ namespace
 	const float RemoveBadgeMaxWidth = 302.0f;
 	const float RemoveBadgeHeight = 46.0f;
 	const float BuildUiScreenPadding = 12.0f;
+	const int BuildFoundationHeightSteps = 4;
 
 	bool IsPhysicalKeyDown(int virtualKey)
 	{
@@ -265,6 +266,21 @@ namespace
 			|| partId == BuildPartDoor;
 	}
 
+	bool SupportsFoundationHeight(unsigned int partId)
+	{
+		return partId == BuildPartFoundation;
+	}
+
+	int ClampFoundationHeightStep(int step)
+	{
+		return (std::max)(0, (std::min)(step, BuildFoundationHeightSteps));
+	}
+
+	int DefaultBuildRotationStep(unsigned int partId)
+	{
+		return SupportsFoundationHeight(partId) ? BuildFoundationHeightSteps : 0;
+	}
+
 	bool IsRemoveTool(unsigned int partId)
 	{
 		return partId == BuildPartRemove;
@@ -301,6 +317,8 @@ namespace
 		{
 		case BuildPartRemove:
 			return "Remove mode  |  Aim placed part  |  LMB remove  RMB menu";
+		case BuildPartFoundation:
+			return "Q/E height  |  LMB place  RMB menu";
 		case BuildPartWall:
 		case BuildPartDoorFrame:
 			return flipped
@@ -505,6 +523,21 @@ void CBuildManager::Process()
 		return;
 	}
 
+	if (SupportsFoundationHeight(m_selectedPartId))
+	{
+		int heightStep = m_rotationStep;
+		if (qDown && !m_lastQDown)
+			--heightStep;
+		if (eDown && !m_lastEDown)
+			++heightStep;
+		heightStep = ClampFoundationHeightStep(heightStep);
+		if (heightStep != m_rotationStep)
+		{
+			m_rotationStep = heightStep;
+			SendPreviewState();
+		}
+	}
+
 	if (middleDown && !m_lastMiddleDown && SupportsBuildVariant(m_selectedPartId))
 	{
 		m_flipped = !m_flipped;
@@ -599,7 +632,7 @@ void CBuildManager::RenderImGui()
 				if (ImGui::Button(label, ImVec2(-1.0f, 30.0f)))
 				{
 					m_selectedPartId = part.partId;
-					m_rotationStep = 0;
+					m_rotationStep = DefaultBuildRotationStep(part.partId);
 					m_flipped = false;
 					m_removeTarget = sBuildRemoveTarget();
 					m_menuOpen = false;
@@ -694,6 +727,8 @@ bool CBuildManager::ShouldConsumeDirectInputEvent(DWORD offset, DWORD)
 		return false;
 	if (m_menuOpen)
 		return true;
+	if (SupportsFoundationHeight(m_selectedPartId) && (offset == DIK_Q || offset == DIK_E))
+		return true;
 	return offset == DIK_ESCAPE;
 }
 
@@ -712,6 +747,11 @@ void CBuildManager::FilterKeyboardState(DWORD size, LPVOID state)
 	{
 		BYTE* keyboard = reinterpret_cast<BYTE*>(state);
 		keyboard[DIK_ESCAPE] = 0;
+		if (SupportsFoundationHeight(m_selectedPartId))
+		{
+			keyboard[DIK_Q] = 0;
+			keyboard[DIK_E] = 0;
+		}
 	}
 }
 
@@ -758,11 +798,15 @@ DWORD CBuildManager::GetKeyboardReleaseOffsets(DWORD* offsets, DWORD capacity)
 		return count;
 	}
 
-	const DWORD placementOffsets[] = { DIK_ESCAPE };
-	const DWORD available = static_cast<DWORD>(sizeof(placementOffsets) / sizeof(placementOffsets[0]));
-	const DWORD count = capacity < available ? capacity : available;
-	for (DWORD i = 0; i < count; ++i)
-		offsets[i] = placementOffsets[i];
+	DWORD count = 0;
+	offsets[count++] = DIK_ESCAPE;
+	if (SupportsFoundationHeight(m_selectedPartId))
+	{
+		if (count < capacity)
+			offsets[count++] = DIK_Q;
+		if (count < capacity)
+			offsets[count++] = DIK_E;
+	}
 	return count;
 }
 

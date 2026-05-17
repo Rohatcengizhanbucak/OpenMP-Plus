@@ -14,6 +14,8 @@
 #define BUILD_DEMO_FOUNDATION_SNAP_RADIUS 3.75
 #define BUILD_DEMO_FOUNDATION_OCCUPIED_RADIUS 0.8
 #define BUILD_DEMO_FOUNDATION_Z_OFFSET -0.95
+#define BUILD_DEMO_FOUNDATION_HEIGHT_STEPS 4
+#define BUILD_DEMO_FOUNDATION_DEFAULT_HEIGHT_STEP 4
 #define BUILD_DEMO_WALL_HEIGHT 1.55
 #define BUILD_DEMO_ROOF_HEIGHT 3.05
 #define BUILD_DEMO_PREVIEW_MS 75
@@ -63,6 +65,22 @@
 #define BUILD_MODEL_FOUNDATION_PREVIEW_OK -2100
 #define BUILD_MODEL_FOUNDATION_PREVIEW_BAD -2200
 #define BUILD_MODEL_FOUNDATION_HIGHLIGHT -2400
+#define BUILD_MODEL_FOUNDATION_H0 -2007
+#define BUILD_MODEL_FOUNDATION_H1 -2008
+#define BUILD_MODEL_FOUNDATION_H2 -2009
+#define BUILD_MODEL_FOUNDATION_H3 -2010
+#define BUILD_MODEL_FOUNDATION_PREVIEW_OK_H0 -2107
+#define BUILD_MODEL_FOUNDATION_PREVIEW_OK_H1 -2108
+#define BUILD_MODEL_FOUNDATION_PREVIEW_OK_H2 -2109
+#define BUILD_MODEL_FOUNDATION_PREVIEW_OK_H3 -2110
+#define BUILD_MODEL_FOUNDATION_PREVIEW_BAD_H0 -2207
+#define BUILD_MODEL_FOUNDATION_PREVIEW_BAD_H1 -2208
+#define BUILD_MODEL_FOUNDATION_PREVIEW_BAD_H2 -2209
+#define BUILD_MODEL_FOUNDATION_PREVIEW_BAD_H3 -2210
+#define BUILD_MODEL_FOUNDATION_HIGHLIGHT_H0 -2407
+#define BUILD_MODEL_FOUNDATION_HIGHLIGHT_H1 -2408
+#define BUILD_MODEL_FOUNDATION_HIGHLIGHT_H2 -2409
+#define BUILD_MODEL_FOUNDATION_HIGHLIGHT_H3 -2410
 #define BUILD_BASE_MODEL_WALL 19380
 #define BUILD_MODEL_WALL -2001
 #define BUILD_MODEL_WALL_PREVIEW_OK -2101
@@ -95,6 +113,10 @@
 #define BUILD_MODEL_PREVIEW_BAD_TXD "build-preview-red.txd"
 #define BUILD_MODEL_REMOVE_HIGHLIGHT_TXD "build-preview-orange.txd"
 #define BUILD_MODEL_FOUNDATION_DFF "foundation.dff"
+#define BUILD_MODEL_FOUNDATION_DFF_H0 "foundation-h0.dff"
+#define BUILD_MODEL_FOUNDATION_DFF_H1 "foundation-h1.dff"
+#define BUILD_MODEL_FOUNDATION_DFF_H2 "foundation-h2.dff"
+#define BUILD_MODEL_FOUNDATION_DFF_H3 "foundation-h3.dff"
 #define BUILD_MODEL_FOUNDATION_TXD "foundation.txd"
 #define BUILD_MODEL_WALL_DFF "wall.dff"
 #define BUILD_MODEL_WALL_TXD "wall.txd"
@@ -121,6 +143,7 @@ static Float:gBuildObjectZ[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
 static Float:gBuildObjectRX[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
 static Float:gBuildObjectRY[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
 static Float:gBuildObjectRZ[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
+static gBuildObjectHeightStep[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
 static bool:gBuildDoorOpen[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
 static gBuildDoorMovingUntil[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
 static gBuildDoorFocusedObject[MAX_PLAYERS];
@@ -143,6 +166,7 @@ static bool:gBuildPreviewPlaceable[MAX_PLAYERS];
 static gBuildPreviewParentFoundation[MAX_PLAYERS];
 static gBuildPreviewSlotIndex[MAX_PLAYERS];
 static gBuildPreviewSlotKind[MAX_PLAYERS];
+static gBuildPreviewFoundationHeightStep[MAX_PLAYERS];
 static gBuildPreviewRejectReason[MAX_PLAYERS][BUILD_DEMO_REJECT_REASON_SIZE];
 static gBuildRemoveTargetNextUpdate[MAX_PLAYERS];
 static gBuildRemoveFocusedObject[MAX_PLAYERS];
@@ -209,6 +233,37 @@ stock bool:BuildDemoPartSupportsVariant(partid)
 	return false;
 }
 
+stock ClampBuildFoundationHeightStep(heightStep)
+{
+	if (heightStep < 0)
+	{
+		return 0;
+	}
+	if (heightStep > BUILD_DEMO_FOUNDATION_HEIGHT_STEPS)
+	{
+		return BUILD_DEMO_FOUNDATION_HEIGHT_STEPS;
+	}
+	return heightStep;
+}
+
+stock GetBuildDefaultRotationStep(partid)
+{
+	if (partid == SAMPP_BUILD_PART_FOUNDATION)
+	{
+		return BUILD_DEMO_FOUNDATION_DEFAULT_HEIGHT_STEP;
+	}
+	return 0;
+}
+
+stock GetBuildRotationStepForPart(partid, rotationStep)
+{
+	if (partid == SAMPP_BUILD_PART_FOUNDATION)
+	{
+		return ClampBuildFoundationHeightStep(rotationStep);
+	}
+	return 0;
+}
+
 stock Float:GetBuildEdgePieceYaw(partid, Float:edgeA, bool:flipped)
 {
 	new Float:offset = 0.0;
@@ -267,6 +322,64 @@ stock GetBuildPartModel(partid)
 	return 0;
 }
 
+stock GetBuildFoundationModel(heightStep)
+{
+	switch (ClampBuildFoundationHeightStep(heightStep))
+	{
+		case 0: return BUILD_MODEL_FOUNDATION_H0;
+		case 1: return BUILD_MODEL_FOUNDATION_H1;
+		case 2: return BUILD_MODEL_FOUNDATION_H2;
+		case 3: return BUILD_MODEL_FOUNDATION_H3;
+	}
+	return BUILD_MODEL_FOUNDATION;
+}
+
+stock GetBuildFoundationPreviewModel(heightStep, bool:placeable)
+{
+	switch (ClampBuildFoundationHeightStep(heightStep))
+	{
+		case 0: return placeable ? BUILD_MODEL_FOUNDATION_PREVIEW_OK_H0 : BUILD_MODEL_FOUNDATION_PREVIEW_BAD_H0;
+		case 1: return placeable ? BUILD_MODEL_FOUNDATION_PREVIEW_OK_H1 : BUILD_MODEL_FOUNDATION_PREVIEW_BAD_H1;
+		case 2: return placeable ? BUILD_MODEL_FOUNDATION_PREVIEW_OK_H2 : BUILD_MODEL_FOUNDATION_PREVIEW_BAD_H2;
+		case 3: return placeable ? BUILD_MODEL_FOUNDATION_PREVIEW_OK_H3 : BUILD_MODEL_FOUNDATION_PREVIEW_BAD_H3;
+	}
+	return placeable ? BUILD_MODEL_FOUNDATION_PREVIEW_OK : BUILD_MODEL_FOUNDATION_PREVIEW_BAD;
+}
+
+stock GetBuildFoundationHighlightModel(heightStep)
+{
+	switch (ClampBuildFoundationHeightStep(heightStep))
+	{
+		case 0: return BUILD_MODEL_FOUNDATION_HIGHLIGHT_H0;
+		case 1: return BUILD_MODEL_FOUNDATION_HIGHLIGHT_H1;
+		case 2: return BUILD_MODEL_FOUNDATION_HIGHLIGHT_H2;
+		case 3: return BUILD_MODEL_FOUNDATION_HIGHLIGHT_H3;
+	}
+	return BUILD_MODEL_FOUNDATION_HIGHLIGHT;
+}
+
+stock GetBuildFoundationDff(heightStep, dff[], size)
+{
+	switch (ClampBuildFoundationHeightStep(heightStep))
+	{
+		case 0: format(dff, size, BUILD_MODEL_FOUNDATION_DFF_H0);
+		case 1: format(dff, size, BUILD_MODEL_FOUNDATION_DFF_H1);
+		case 2: format(dff, size, BUILD_MODEL_FOUNDATION_DFF_H2);
+		case 3: format(dff, size, BUILD_MODEL_FOUNDATION_DFF_H3);
+		default: format(dff, size, BUILD_MODEL_FOUNDATION_DFF);
+	}
+	return 1;
+}
+
+stock GetBuildPartModelForState(partid, rotationStep)
+{
+	if (partid == SAMPP_BUILD_PART_FOUNDATION)
+	{
+		return GetBuildFoundationModel(rotationStep);
+	}
+	return GetBuildPartModel(partid);
+}
+
 stock GetBuildPreviewPartModel(partid, bool:placeable)
 {
 	switch (partid)
@@ -282,6 +395,15 @@ stock GetBuildPreviewPartModel(partid, bool:placeable)
 	return GetBuildPartModel(partid);
 }
 
+stock GetBuildPreviewPartModelForState(partid, bool:placeable, rotationStep)
+{
+	if (partid == SAMPP_BUILD_PART_FOUNDATION)
+	{
+		return GetBuildFoundationPreviewModel(rotationStep, placeable);
+	}
+	return GetBuildPreviewPartModel(partid, placeable);
+}
+
 stock GetBuildRemoveHighlightPartModel(partid)
 {
 	switch (partid)
@@ -295,6 +417,19 @@ stock GetBuildRemoveHighlightPartModel(partid)
 		case SAMPP_BUILD_PART_DOOR: return BUILD_MODEL_DOOR_HIGHLIGHT;
 	}
 	return 0;
+}
+
+stock GetBuildRemoveHighlightModelForObject(playerid, objectIndex)
+{
+	if (objectIndex < 0 || objectIndex >= BUILD_DEMO_MAX_OBJECTS)
+	{
+		return 0;
+	}
+	if (gBuildObjectPart[playerid][objectIndex] == SAMPP_BUILD_PART_FOUNDATION)
+	{
+		return GetBuildFoundationHighlightModel(gBuildObjectHeightStep[playerid][objectIndex]);
+	}
+	return GetBuildRemoveHighlightPartModel(gBuildObjectPart[playerid][objectIndex]);
 }
 
 stock GetBuildRemoveHighlightLayerCount(partid)
@@ -576,6 +711,7 @@ stock ResetBuildPreviewState(playerid)
 	gBuildPreviewRX[playerid] = 0.0;
 	gBuildPreviewRY[playerid] = 0.0;
 	gBuildPreviewRZ[playerid] = 0.0;
+	gBuildPreviewFoundationHeightStep[playerid] = BUILD_DEMO_FOUNDATION_DEFAULT_HEIGHT_STEP;
 	gBuildRemoveTargetNextUpdate[playerid] = 0;
 	gBuildRemoveFocusedObject[playerid] = -1;
 	SetBuildPreviewCandidate(playerid, false, -1, -1, BUILD_DEMO_SLOT_NONE, "");
@@ -622,6 +758,7 @@ stock ResetBuildObjectSlot(playerid, index)
 	gBuildObjectRX[playerid][index] = 0.0;
 	gBuildObjectRY[playerid][index] = 0.0;
 	gBuildObjectRZ[playerid][index] = 0.0;
+	gBuildObjectHeightStep[playerid][index] = 0;
 	gBuildDoorOpen[playerid][index] = false;
 	gBuildDoorMovingUntil[playerid][index] = 0;
 	return 1;
@@ -706,7 +843,7 @@ stock DestroyBuildDemoObjects(playerid)
 	return 1;
 }
 
-stock bool:AddBuildDemoObject(playerid, objectid, partid, foundationIndex, slotKind, slotIndex, Float:x, Float:y, Float:z, Float:rx, Float:ry, Float:rz)
+stock bool:AddBuildDemoObject(playerid, objectid, partid, foundationIndex, slotKind, slotIndex, heightStep, Float:x, Float:y, Float:z, Float:rx, Float:ry, Float:rz)
 {
 	if (objectid == INVALID_OBJECT_ID)
 	{
@@ -736,6 +873,7 @@ stock bool:AddBuildDemoObject(playerid, objectid, partid, foundationIndex, slotK
 			gBuildObjectRX[playerid][i] = rx;
 			gBuildObjectRY[playerid][i] = ry;
 			gBuildObjectRZ[playerid][i] = rz;
+			gBuildObjectHeightStep[playerid][i] = partid == SAMPP_BUILD_PART_FOUNDATION ? ClampBuildFoundationHeightStep(heightStep) : 0;
 			gBuildDoorOpen[playerid][i] = false;
 			gBuildDoorMovingUntil[playerid][i] = 0;
 			gBuildObjectCount[playerid]++;
@@ -1022,15 +1160,15 @@ stock bool:GetNearestFoundationEdgeOnFoundationToPoint(playerid, foundationIndex
 
 stock bool:ComputeBuildPreview(playerid, partid, rotationStep, bool:flipped, &modelid, &Float:x, &Float:y, &Float:z, &Float:rx, &Float:ry, &Float:rz)
 {
-	#pragma unused rotationStep
-
-	modelid = GetBuildPartModel(partid);
+	new stateRotationStep = GetBuildRotationStepForPart(partid, rotationStep);
+	modelid = GetBuildPartModelForState(partid, stateRotationStep);
 	if (modelid == 0)
 	{
 		SetBuildPreviewCandidate(playerid, false, -1, -1, BUILD_DEMO_SLOT_NONE, "Unknown build part.");
 		return false;
 	}
 
+	gBuildPreviewFoundationHeightStep[playerid] = partid == SAMPP_BUILD_PART_FOUNDATION ? stateRotationStep : 0;
 	rx = 0.0;
 	ry = 0.0;
 	rz = 0.0;
@@ -1245,7 +1383,7 @@ stock RefreshBuildPreview(playerid, bool:force = false)
 		return 0;
 	}
 
-	new previewModelId = GetBuildPreviewPartModel(gBuildSelectedPart[playerid], gBuildPreviewPlaceable[playerid]);
+	new previewModelId = GetBuildPreviewPartModelForState(gBuildSelectedPart[playerid], gBuildPreviewPlaceable[playerid], gBuildRotationStep[playerid]);
 	if (gBuildPreviewObject[playerid] == INVALID_OBJECT_ID || gBuildPreviewModel[playerid] != previewModelId)
 	{
 		DestroyBuildPreview(playerid);
@@ -1860,7 +1998,7 @@ stock SyncBuildRemoveHighlight(playerid, objectIndex)
 	}
 
 	new partid = gBuildObjectPart[playerid][objectIndex];
-	new modelid = GetBuildRemoveHighlightPartModel(partid);
+	new modelid = GetBuildRemoveHighlightModelForObject(playerid, objectIndex);
 	if (modelid == 0)
 	{
 		return DestroyBuildRemoveHighlight(playerid);
@@ -2148,8 +2286,6 @@ stock RemoveBuildDemoTargetPart(playerid)
 
 stock PlaceBuildDemoPart(playerid, partid, rotationStep, bool:flipped)
 {
-	#pragma unused rotationStep
-
 	if (!gBuildActive[playerid])
 	{
 		return SAMPP_BuildSendResult(playerid, SAMPP_BUILD_RESULT_ERROR, "Build session is not active.");
@@ -2166,7 +2302,7 @@ stock PlaceBuildDemoPart(playerid, partid, rotationStep, bool:flipped)
 	}
 
 	gBuildSelectedPart[playerid] = partid;
-	gBuildRotationStep[playerid] = 0;
+	gBuildRotationStep[playerid] = GetBuildRotationStepForPart(partid, rotationStep);
 	gBuildFlipped[playerid] = BuildDemoPartSupportsVariant(partid) ? flipped : false;
 
 	if (!RefreshBuildPreview(playerid, true))
@@ -2187,7 +2323,7 @@ stock PlaceBuildDemoPart(playerid, partid, rotationStep, bool:flipped)
 		return SAMPP_BuildSendResult(playerid, SAMPP_BUILD_RESULT_ERROR, message);
 	}
 
-	new modelid = GetBuildPartModel(partid);
+	new modelid = GetBuildPartModelForState(partid, gBuildRotationStep[playerid]);
 	new objectid = CreateObject(
 		modelid,
 		gBuildPreviewX[playerid],
@@ -2210,7 +2346,7 @@ stock PlaceBuildDemoPart(playerid, partid, rotationStep, bool:flipped)
 		DestroyObject(objectid);
 		return SAMPP_BuildSendResult(playerid, SAMPP_BUILD_RESULT_ERROR, "Build slot changed before placement. Try again.");
 	}
-	if (!AddBuildDemoObject(playerid, objectid, partid, foundationIndex, slotKind, slotIndex, gBuildPreviewX[playerid], gBuildPreviewY[playerid], gBuildPreviewZ[playerid], gBuildPreviewRX[playerid], gBuildPreviewRY[playerid], gBuildPreviewRZ[playerid]))
+	if (!AddBuildDemoObject(playerid, objectid, partid, foundationIndex, slotKind, slotIndex, gBuildPreviewFoundationHeightStep[playerid], gBuildPreviewX[playerid], gBuildPreviewY[playerid], gBuildPreviewZ[playerid], gBuildPreviewRX[playerid], gBuildPreviewRY[playerid], gBuildPreviewRZ[playerid]))
 	{
 		return 1;
 	}
@@ -2225,6 +2361,7 @@ stock SendBuildDemoHelp(playerid)
 	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] /builddemo opens a server-authoritative build menu.");
 	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] Select a part first; a temporary player-object preview follows your camera aim.");
 	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] LMB confirms the preview. RMB returns to the menu; RMB again or ESC closes. MMB switches side.");
+	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] Foundation height can be adjusted with Q/E before placement.");
 	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] Foundations snap to neighbours; walls/door frames snap to edge surfaces automatically.");
 	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] Aim a placed door from nearby and use the ALT target prompt to open or close it.");
 	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] Tools > Remove enters orange remove mode. Aim a placed part and press LMB to delete it.");
@@ -2266,13 +2403,23 @@ stock RegisterBuildDemoModels()
 	new bool:roofHighlight = AddSimpleModel(-1, BUILD_BASE_MODEL_FLOOR, BUILD_MODEL_ROOF_HIGHLIGHT, BUILD_MODEL_FLOOR_DFF, BUILD_MODEL_REMOVE_HIGHLIGHT_TXD);
 	new bool:stairsHighlight = AddSimpleModel(-1, BUILD_BASE_MODEL_WALL, BUILD_MODEL_STAIRS_HIGHLIGHT, BUILD_MODEL_WALL_DFF, BUILD_MODEL_REMOVE_HIGHLIGHT_TXD);
 
+	for (new heightStep = 0; heightStep < BUILD_DEMO_FOUNDATION_HEIGHT_STEPS; heightStep++)
+	{
+		new foundationDff[32];
+		GetBuildFoundationDff(heightStep, foundationDff, sizeof foundationDff);
+		foundationRegistered = AddSimpleModel(-1, BUILD_BASE_MODEL_FOUNDATION, GetBuildFoundationModel(heightStep), foundationDff, BUILD_MODEL_FOUNDATION_TXD) && foundationRegistered;
+		foundationPreviewOK = AddSimpleModel(-1, BUILD_BASE_MODEL_FOUNDATION, GetBuildFoundationPreviewModel(heightStep, true), foundationDff, BUILD_MODEL_PREVIEW_OK_TXD) && foundationPreviewOK;
+		foundationPreviewBad = AddSimpleModel(-1, BUILD_BASE_MODEL_FOUNDATION, GetBuildFoundationPreviewModel(heightStep, false), foundationDff, BUILD_MODEL_PREVIEW_BAD_TXD) && foundationPreviewBad;
+		foundationHighlight = AddSimpleModel(-1, BUILD_BASE_MODEL_FOUNDATION, GetBuildFoundationHighlightModel(heightStep), foundationDff, BUILD_MODEL_REMOVE_HIGHLIGHT_TXD) && foundationHighlight;
+	}
+
 	if (foundationRegistered)
 	{
-		print("[BuildDemo] Registered custom foundation model -2000 from models/foundation.dff and models/foundation.txd.");
+		print("[BuildDemo] Registered custom foundation height models from models/foundation*.dff and models/foundation.txd.");
 	}
 	else
 	{
-		print("[BuildDemo] Could not register custom foundation model -2000. Check artwork config and model files.");
+		print("[BuildDemo] Could not register custom foundation height models. Check artwork config and model files.");
 	}
 
 	if (wallRegistered)
@@ -2341,10 +2488,8 @@ stock GetBuildDemoSession(playerid)
 
 stock SetBuildDemoSelection(playerid, partid, rotationStep, bool:flipped, bool:forceRefresh = true)
 {
-	#pragma unused rotationStep
-
 	gBuildSelectedPart[playerid] = partid;
-	gBuildRotationStep[playerid] = 0;
+	gBuildRotationStep[playerid] = GetBuildRotationStepForPart(partid, rotationStep);
 	gBuildFlipped[playerid] = BuildDemoPartSupportsVariant(partid) ? flipped : false;
 	if (partid == SAMPP_BUILD_PART_REMOVE)
 	{
@@ -2467,7 +2612,7 @@ public OnPlayerOMPPlusBuildSelect(playerid, sessionid, partid)
 		return 1;
 	}
 
-	SetBuildDemoSelection(playerid, partid, 0, false, true);
+	SetBuildDemoSelection(playerid, partid, GetBuildDefaultRotationStep(partid), false, true);
 
 	new message[96];
 	if (partid == SAMPP_BUILD_PART_REMOVE)
