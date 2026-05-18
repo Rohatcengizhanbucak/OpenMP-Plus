@@ -858,7 +858,7 @@ stock ApplyBuildFirstFoundationAimLock(playerid, &Float:aimX, &Float:aimY, &Floa
 		return 1;
 	}
 
-	if (aimSurfaceState == BUILD_DEMO_AIM_SURFACE_BLOCKED_NON_GROUND)
+	if (aimSurfaceState != BUILD_DEMO_AIM_SURFACE_GROUND)
 	{
 		if (gBuildFirstFoundationAimLocked[playerid]
 			&& GetBuildDistance2D(aimX, aimY, gBuildFirstFoundationAimX[playerid], gBuildFirstFoundationAimY[playerid]) <= BUILD_DEMO_FIRST_FOUNDATION_LOCK_RADIUS)
@@ -868,7 +868,10 @@ stock ApplyBuildFirstFoundationAimLock(playerid, &Float:aimX, &Float:aimY, &Floa
 			aimZ = gBuildFirstFoundationAimZ[playerid];
 			minGroundZ = gBuildFirstFoundationMinGroundZ[playerid];
 			maxGroundZ = gBuildFirstFoundationMaxGroundZ[playerid];
-			aimSurfaceState = BUILD_DEMO_AIM_SURFACE_GROUND;
+			if (aimSurfaceState == BUILD_DEMO_AIM_SURFACE_NONE)
+			{
+				aimSurfaceState = BUILD_DEMO_AIM_SURFACE_GROUND;
+			}
 		}
 		return 1;
 	}
@@ -1514,21 +1517,45 @@ stock bool:ComputeBuildPreview(playerid, partid, rotationStep, bool:flipped, &mo
 			if (gBuildFoundationCount[playerid] == 0)
 			{
 				ApplyBuildFirstFoundationAimLock(playerid, aimX, aimY, aimZ, aimSurfaceState, footprintMinGroundZ, footprintMaxGroundZ);
+				if (aimSurfaceState == BUILD_DEMO_AIM_SURFACE_GROUND)
+				{
+					groundRangeReliable = true;
+				}
 			}
 			else
 			{
 				ResetBuildFirstFoundationAimLock(playerid);
 			}
-			if (aimSurfaceState == BUILD_DEMO_AIM_SURFACE_BLOCKED_NON_GROUND)
+			if (!groundRangeReliable || aimSurfaceState != BUILD_DEMO_AIM_SURFACE_GROUND)
 			{
 				x = aimX;
 				y = aimY;
-				z = footprintMaxGroundZ + BUILD_DEMO_FOUNDATION_TOP_CLEARANCE;
+				if (gBuildFoundationCount[playerid] == 0)
+				{
+					new Float:blockLift = GetBuildFoundationLiftFromStep(stateRotationStep);
+					z = aimZ + blockLift;
+					new Float:blockMinTopZ = footprintMaxGroundZ + BUILD_DEMO_FOUNDATION_TOP_CLEARANCE;
+					if (z < blockMinTopZ)
+					{
+						z = blockMinTopZ;
+					}
+				}
+				else
+				{
+					z = footprintMaxGroundZ + BUILD_DEMO_FOUNDATION_TOP_CLEARANCE;
+				}
 				rz = GetBuildGridAngle(playerAngle);
 				new Float:blockedRequiredHeight;
 				TryGetBuildFoundationAutoHeightStepFromRange(z, footprintMinGroundZ, footprintMaxGroundZ, gBuildPreviewFoundationHeightStep[playerid], blockedRequiredHeight);
 				modelid = GetBuildFoundationModel(gBuildPreviewFoundationHeightStep[playerid]);
-				SetBuildPreviewCandidate(playerid, false, -1, -1, BUILD_DEMO_SLOT_NONE, "Aim at terrain ground, not a wall or object.");
+				if (aimSurfaceState == BUILD_DEMO_AIM_SURFACE_BLOCKED_NON_GROUND)
+				{
+					SetBuildPreviewCandidate(playerid, false, -1, -1, BUILD_DEMO_SLOT_NONE, "Aim at terrain ground, not a wall or object.");
+				}
+				else
+				{
+					SetBuildPreviewCandidate(playerid, false, -1, -1, BUILD_DEMO_SLOT_NONE, "Could not read terrain ground for this foundation.");
+				}
 				return true;
 			}
 
@@ -1550,16 +1577,6 @@ stock bool:ComputeBuildPreview(playerid, partid, rotationStep, bool:flipped, &mo
 						return true;
 					}
 
-					if (gBuildFoundationSnapHeightLocked[playerid]
-						&& gBuildFoundationSnapHeightParent[playerid] == parentIndex
-						&& gBuildFoundationSnapHeightSlot[playerid] == slotIndex)
-					{
-						gBuildPreviewFoundationHeightStep[playerid] = gBuildFoundationSnapHeightStep[playerid];
-						modelid = GetBuildFoundationModel(gBuildPreviewFoundationHeightStep[playerid]);
-						SetBuildPreviewCandidate(playerid, true, parentIndex, slotIndex, BUILD_DEMO_SLOT_NONE, "");
-						return true;
-					}
-
 					new Float:requiredHeight;
 					new Float:snapMinGroundZ = footprintMinGroundZ;
 					new Float:snapMaxGroundZ = footprintMaxGroundZ;
@@ -1571,10 +1588,6 @@ stock bool:ComputeBuildPreview(playerid, partid, rotationStep, bool:flipped, &mo
 					if (snapMinGroundZ > snapMaxGroundZ)
 					{
 						snapMinGroundZ = snapMaxGroundZ;
-					}
-					if ((z - snapMinGroundZ) + BUILD_DEMO_FOUNDATION_GROUND_EMBED > BUILD_DEMO_FOUNDATION_MAX_HEIGHT + 0.001)
-					{
-						snapMinGroundZ = aimZ;
 					}
 					new bool:heightOk = !terrainIntersects && TryGetBuildFoundationAutoHeightStepFromRange(z, snapMinGroundZ, snapMaxGroundZ, gBuildPreviewFoundationHeightStep[playerid], requiredHeight);
 					modelid = GetBuildFoundationModel(gBuildPreviewFoundationHeightStep[playerid]);

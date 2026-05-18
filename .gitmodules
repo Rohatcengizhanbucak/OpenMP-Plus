@@ -4,3 +4,6 @@
 [submodule "ThirdParty/openmp-network"]
 	path = ThirdParty/openmp-network
 	url = https://github.com/openmultiplayer/open.mp-network.git
+[submodule "ThirdParty/RmlUi"]
+	path = ThirdParty/RmlUi
+	url = https://github.com/mikke89/RmlUi.git
