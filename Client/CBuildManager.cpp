@@ -128,6 +128,7 @@ namespace
 		BuildPartRoof = 5,
 		BuildPartStairs = 6,
 		BuildPartDoor = 7,
+		BuildPartFloorStairs = 8,
 		BuildPartRemove = 100
 	};
 
@@ -759,9 +760,11 @@ namespace
 		case BuildPartRoof:
 			return "Roof";
 		case BuildPartStairs:
-			return "Stairs";
+			return "Foundation Stairs";
 		case BuildPartDoor:
 			return "Door";
+		case BuildPartFloorStairs:
+			return "Floor Stairs";
 		case BuildPartRemove:
 			return "Remove";
 		default:
@@ -786,8 +789,13 @@ namespace
 			return flipped
 				? "Opens outward  |  MMB switch side  |  LMB place  RMB menu"
 				: "Opens inward  |  MMB switch side  |  LMB place  RMB menu";
+		case BuildPartFloor:
+		case BuildPartRoof:
+			return "Requires wall supports  |  LMB place  RMB menu";
 		case BuildPartStairs:
-			return "Aim edge to choose direction  |  LMB place  RMB menu";
+			return "Ground to foundation  |  Aim edge  |  LMB place  RMB menu";
+		case BuildPartFloorStairs:
+			return "Open top stairs  |  Aim edge  |  LMB place  RMB menu";
 		case 0:
 			return "Select a part  |  RMB close";
 		default:

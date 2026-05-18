@@ -6,6 +6,7 @@
 #define BUILD_DEMO_WARN_COLOUR 0xFFB86CFF
 
 #define BUILD_DEMO_MAX_OBJECTS 64
+#define BUILD_DEMO_MAX_LEVELS 3
 #define BUILD_DEMO_SESSION_BASE 930000
 #define BUILD_DEMO_MAX_DISTANCE 12.0
 #define BUILD_DEMO_FALLBACK_DISTANCE 5.0
@@ -36,8 +37,10 @@
 #define BUILD_DEMO_REMOVE_MAX_RAY_DISTANCE 28.0
 #define BUILD_DEMO_REMOVE_MAX_PLAYER_DISTANCE 16.0
 #define BUILD_DEMO_REMOVE_PRIORITY_EPSILON 0.25
+#define BUILD_DEMO_REMOVE_ACCESSORY_PASS_THROUGH 5.0
 #define BUILD_DEMO_EDGE_SNAP_RADIUS 2.25
 #define BUILD_DEMO_CENTER_SNAP_RADIUS 2.35
+#define BUILD_DEMO_TOP_SUPPORT_MIN_EDGES 2
 #define BUILD_DEMO_REJECT_REASON_SIZE 96
 #define BUILD_DEMO_WALL_YAW_OFFSET 90.0
 #define BUILD_DEMO_DOORFRAME_YAW_OFFSET 90.0
@@ -64,6 +67,7 @@
 #define BUILD_DEMO_SLOT_TOP 2
 #define BUILD_DEMO_SLOT_STAIRS 3
 #define BUILD_DEMO_SLOT_DOOR 4
+#define BUILD_DEMO_SLOT_FLOOR_STAIRS 5
 
 #define BUILD_DEMO_PIECE_NONE 0
 #define BUILD_DEMO_PIECE_WALL 1
@@ -72,6 +76,7 @@
 #define BUILD_DEMO_PIECE_ROOF 4
 #define BUILD_DEMO_PIECE_STAIRS 5
 #define BUILD_DEMO_PIECE_DOOR 6
+#define BUILD_DEMO_PIECE_FLOOR_STAIRS 7
 
 #define BUILD_BASE_MODEL_FOUNDATION 19379
 #define BUILD_MODEL_FOUNDATION -2000
@@ -126,6 +131,11 @@
 #define BUILD_MODEL_DOOR_PREVIEW_OK -2106
 #define BUILD_MODEL_DOOR_PREVIEW_BAD -2206
 #define BUILD_MODEL_DOOR_HIGHLIGHT -2406
+#define BUILD_BASE_MODEL_FLOOR_STAIRS 19387
+#define BUILD_MODEL_FLOOR_STAIRS -2030
+#define BUILD_MODEL_FLOOR_STAIRS_PREVIEW_OK -2130
+#define BUILD_MODEL_FLOOR_STAIRS_PREVIEW_BAD -2230
+#define BUILD_MODEL_FLOOR_STAIRS_HIGHLIGHT -2430
 #define BUILD_MODEL_PREVIEW_OK_TXD "build-preview-green.txd"
 #define BUILD_MODEL_PREVIEW_BAD_TXD "build-preview-red.txd"
 #define BUILD_MODEL_REMOVE_HIGHLIGHT_TXD "build-preview-orange.txd"
@@ -143,6 +153,8 @@
 #define BUILD_MODEL_DOOR_TXD "door.txd"
 #define BUILD_MODEL_FLOOR_DFF "floor.dff"
 #define BUILD_MODEL_FLOOR_TXD "floor.txd"
+#define BUILD_MODEL_FLOOR_STAIRS_DFF "floor_stairs.dff"
+#define BUILD_MODEL_FLOOR_STAIRS_TXD "floor_stairs.txd"
 
 static gBuildSession[MAX_PLAYERS];
 static bool:gBuildActive[MAX_PLAYERS];
@@ -218,10 +230,14 @@ static Float:gBuildFoundationGridX[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
 static Float:gBuildFoundationGridY[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
 static Float:gBuildFoundationGridZ[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
 static Float:gBuildFoundationGridA[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
+static gBuildFoundationLevel[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
+static gBuildFoundationParentPlatform[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
+static gBuildFoundationParentObject[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
 static gBuildFoundationEdgePiece[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS][4];
 static bool:gBuildFoundationEdgeDoor[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS][4];
 static gBuildFoundationTopPiece[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
 static gBuildFoundationStairsPiece[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
+static gBuildFoundationFloorStairsPiece[MAX_PLAYERS][BUILD_DEMO_MAX_OBJECTS];
 
 stock BuildDemoSession(playerid)
 {
@@ -314,7 +330,7 @@ stock GetBuildRotationStepForPart(partid, rotationStep)
 
 stock GetBuildPlacementRotationStep(playerid, partid, rotationStep)
 {
-	if (partid == SAMPP_BUILD_PART_FOUNDATION && gBuildFoundationCount[playerid] > 0)
+	if (partid == SAMPP_BUILD_PART_FOUNDATION && GetBuildGroundFoundationCount(playerid) > 0)
 	{
 		return 0;
 	}
@@ -451,6 +467,7 @@ stock GetBuildPartModel(partid)
 		case SAMPP_BUILD_PART_ROOF: return BUILD_MODEL_ROOF;
 		case SAMPP_BUILD_PART_STAIRS: return BUILD_MODEL_STAIRS;
 		case SAMPP_BUILD_PART_DOOR: return BUILD_MODEL_DOOR;
+		case SAMPP_BUILD_PART_FLOOR_STAIRS: return BUILD_MODEL_FLOOR_STAIRS;
 	}
 	return 0;
 }
@@ -519,6 +536,7 @@ stock GetBuildPreviewPartModel(partid, bool:placeable)
 		case SAMPP_BUILD_PART_ROOF: return placeable ? BUILD_MODEL_ROOF_PREVIEW_OK : BUILD_MODEL_ROOF_PREVIEW_BAD;
 		case SAMPP_BUILD_PART_STAIRS: return placeable ? BUILD_MODEL_STAIRS_PREVIEW_OK : BUILD_MODEL_STAIRS_PREVIEW_BAD;
 		case SAMPP_BUILD_PART_DOOR: return placeable ? BUILD_MODEL_DOOR_PREVIEW_OK : BUILD_MODEL_DOOR_PREVIEW_BAD;
+		case SAMPP_BUILD_PART_FLOOR_STAIRS: return placeable ? BUILD_MODEL_FLOOR_STAIRS_PREVIEW_OK : BUILD_MODEL_FLOOR_STAIRS_PREVIEW_BAD;
 	}
 	return GetBuildPartModel(partid);
 }
@@ -543,6 +561,7 @@ stock GetBuildRemoveHighlightPartModel(partid)
 		case SAMPP_BUILD_PART_ROOF: return BUILD_MODEL_ROOF_HIGHLIGHT;
 		case SAMPP_BUILD_PART_STAIRS: return BUILD_MODEL_STAIRS_HIGHLIGHT;
 		case SAMPP_BUILD_PART_DOOR: return BUILD_MODEL_DOOR_HIGHLIGHT;
+		case SAMPP_BUILD_PART_FLOOR_STAIRS: return BUILD_MODEL_FLOOR_STAIRS_HIGHLIGHT;
 	}
 	return 0;
 }
@@ -597,7 +616,7 @@ stock OffsetBuildRemoveHighlight(partid, layer, Float:rz, &Float:x, &Float:y, &F
 			x = outX;
 			y = outY;
 		}
-		case SAMPP_BUILD_PART_STAIRS:
+		case SAMPP_BUILD_PART_STAIRS, SAMPP_BUILD_PART_FLOOR_STAIRS:
 		{
 			z += 0.045;
 		}
@@ -617,7 +636,7 @@ stock Float:GetBuildRemoveAimRadius(partid)
 		{
 			return 1.45;
 		}
-		case SAMPP_BUILD_PART_STAIRS:
+		case SAMPP_BUILD_PART_STAIRS, SAMPP_BUILD_PART_FLOOR_STAIRS:
 		{
 			return 1.60;
 		}
@@ -713,7 +732,7 @@ stock GetBuildRemoveOBBHalfExtents(partid, &Float:halfX, &Float:halfY, &Float:ha
 			halfZ = 1.45;
 			return 1;
 		}
-		case SAMPP_BUILD_PART_STAIRS:
+		case SAMPP_BUILD_PART_STAIRS, SAMPP_BUILD_PART_FLOOR_STAIRS:
 		{
 			halfX = BUILD_DEMO_FOUNDATION_HALF + 0.15;
 			halfY = BUILD_DEMO_FOUNDATION_HALF + 0.15;
@@ -838,8 +857,9 @@ stock GetBuildPartDisplayName(partid, name[], size)
 		case SAMPP_BUILD_PART_DOORFRAME: format(name, size, "Door Frame");
 		case SAMPP_BUILD_PART_FLOOR: format(name, size, "Floor/Ceiling");
 		case SAMPP_BUILD_PART_ROOF: format(name, size, "Roof");
-		case SAMPP_BUILD_PART_STAIRS: format(name, size, "Stairs");
+		case SAMPP_BUILD_PART_STAIRS: format(name, size, "Foundation Stairs");
 		case SAMPP_BUILD_PART_DOOR: format(name, size, "Door");
+		case SAMPP_BUILD_PART_FLOOR_STAIRS: format(name, size, "Floor Stairs");
 		case SAMPP_BUILD_PART_REMOVE: format(name, size, "Remove Tool");
 		default: format(name, size, "Build Part");
 	}
@@ -896,7 +916,7 @@ stock LockBuildFirstFoundationAim(playerid, Float:aimX, Float:aimY, Float:aimZ, 
 
 stock ApplyBuildFirstFoundationAimLock(playerid, &Float:aimX, &Float:aimY, &Float:aimZ, &aimSurfaceState, &Float:minGroundZ, &Float:maxGroundZ)
 {
-	if (gBuildFoundationCount[playerid] > 0)
+	if (GetBuildGroundFoundationCount(playerid) > 0)
 	{
 		ResetBuildFirstFoundationAimLock(playerid);
 		return 1;
@@ -1040,8 +1060,12 @@ stock ResetBuildDemoPlayer(playerid)
 		gBuildFoundationGridY[playerid][i] = 0.0;
 		gBuildFoundationGridZ[playerid][i] = 0.0;
 		gBuildFoundationGridA[playerid][i] = 0.0;
+		gBuildFoundationLevel[playerid][i] = 0;
+		gBuildFoundationParentPlatform[playerid][i] = -1;
+		gBuildFoundationParentObject[playerid][i] = -1;
 		gBuildFoundationTopPiece[playerid][i] = BUILD_DEMO_PIECE_NONE;
 		gBuildFoundationStairsPiece[playerid][i] = BUILD_DEMO_PIECE_NONE;
+		gBuildFoundationFloorStairsPiece[playerid][i] = BUILD_DEMO_PIECE_NONE;
 		for (new slot = 0; slot < 4; slot++)
 		{
 			gBuildFoundationEdgePiece[playerid][i][slot] = BUILD_DEMO_PIECE_NONE;
@@ -1076,8 +1100,12 @@ stock DestroyBuildDemoObjects(playerid)
 		gBuildFoundationGridY[playerid][i] = 0.0;
 		gBuildFoundationGridZ[playerid][i] = 0.0;
 		gBuildFoundationGridA[playerid][i] = 0.0;
+		gBuildFoundationLevel[playerid][i] = 0;
+		gBuildFoundationParentPlatform[playerid][i] = -1;
+		gBuildFoundationParentObject[playerid][i] = -1;
 		gBuildFoundationTopPiece[playerid][i] = BUILD_DEMO_PIECE_NONE;
 		gBuildFoundationStairsPiece[playerid][i] = BUILD_DEMO_PIECE_NONE;
+		gBuildFoundationFloorStairsPiece[playerid][i] = BUILD_DEMO_PIECE_NONE;
 		for (new slot = 0; slot < 4; slot++)
 		{
 			gBuildFoundationEdgePiece[playerid][i][slot] = BUILD_DEMO_PIECE_NONE;
@@ -1087,8 +1115,9 @@ stock DestroyBuildDemoObjects(playerid)
 	return 1;
 }
 
-stock bool:AddBuildDemoObject(playerid, objectid, partid, foundationIndex, slotKind, slotIndex, heightStep, Float:x, Float:y, Float:z, Float:rx, Float:ry, Float:rz)
+stock bool:AddBuildDemoObject(playerid, objectid, partid, foundationIndex, slotKind, slotIndex, heightStep, Float:x, Float:y, Float:z, Float:rx, Float:ry, Float:rz, &objectIndexOut)
 {
+	objectIndexOut = -1;
 	if (objectid == INVALID_OBJECT_ID)
 	{
 		SAMPP_BuildSendResult(playerid, SAMPP_BUILD_RESULT_ERROR, "Could not create object. Check demo model ids.");
@@ -1121,6 +1150,7 @@ stock bool:AddBuildDemoObject(playerid, objectid, partid, foundationIndex, slotK
 			gBuildDoorOpen[playerid][i] = false;
 			gBuildDoorMovingUntil[playerid][i] = 0;
 			gBuildObjectCount[playerid]++;
+			objectIndexOut = i;
 			return true;
 		}
 	}
@@ -1134,7 +1164,7 @@ stock bool:IsBuildFoundationSlotOccupied(playerid, Float:x, Float:y)
 {
 	for (new i = 0; i < BUILD_DEMO_MAX_OBJECTS; i++)
 	{
-		if (!gBuildFoundationActive[playerid][i])
+		if (!gBuildFoundationActive[playerid][i] || gBuildFoundationLevel[playerid][i] != 0)
 		{
 			continue;
 		}
@@ -1147,7 +1177,141 @@ stock bool:IsBuildFoundationSlotOccupied(playerid, Float:x, Float:y)
 	return false;
 }
 
-stock bool:RegisterBuildFoundation(playerid, Float:x, Float:y, Float:z, Float:a, &outIndex)
+stock GetBuildGroundFoundationCount(playerid)
+{
+	new count = 0;
+	for (new i = 0; i < BUILD_DEMO_MAX_OBJECTS; i++)
+	{
+		if (gBuildFoundationActive[playerid][i] && gBuildFoundationLevel[playerid][i] == 0)
+		{
+			count++;
+		}
+	}
+	return count;
+}
+
+stock bool:FindBuildPlatformByParentObject(playerid, objectIndex, &platformIndex)
+{
+	for (new i = 0; i < BUILD_DEMO_MAX_OBJECTS; i++)
+	{
+		if (!gBuildFoundationActive[playerid][i])
+		{
+			continue;
+		}
+		if (gBuildFoundationParentObject[playerid][i] == objectIndex)
+		{
+			platformIndex = i;
+			return true;
+		}
+	}
+	platformIndex = -1;
+	return false;
+}
+
+stock bool:FindBuildUpperPlatform(playerid, parentPlatform, &upperPlatform)
+{
+	for (new i = 0; i < BUILD_DEMO_MAX_OBJECTS; i++)
+	{
+		if (!gBuildFoundationActive[playerid][i])
+		{
+			continue;
+		}
+		if (gBuildFoundationParentPlatform[playerid][i] == parentPlatform)
+		{
+			upperPlatform = i;
+			return true;
+		}
+	}
+	upperPlatform = -1;
+	return false;
+}
+
+stock bool:IsBuildTopSupportPiece(piece)
+{
+	return piece == BUILD_DEMO_PIECE_WALL || piece == BUILD_DEMO_PIECE_DOORFRAME;
+}
+
+stock GetBuildTopSupportCount(playerid, foundationIndex)
+{
+	if (foundationIndex < 0 || foundationIndex >= BUILD_DEMO_MAX_OBJECTS || !gBuildFoundationActive[playerid][foundationIndex])
+	{
+		return 0;
+	}
+
+	new supportCount = 0;
+	for (new slot = 0; slot < 4; slot++)
+	{
+		if (IsBuildTopSupportPiece(gBuildFoundationEdgePiece[playerid][foundationIndex][slot]))
+		{
+			supportCount++;
+		}
+	}
+	return supportCount;
+}
+
+stock bool:HasBuildTopSupport(playerid, foundationIndex)
+{
+	return GetBuildTopSupportCount(playerid, foundationIndex) >= BUILD_DEMO_TOP_SUPPORT_MIN_EDGES;
+}
+
+stock bool:IsBuildRemoveAccessory(partid)
+{
+	return partid == SAMPP_BUILD_PART_STAIRS || partid == SAMPP_BUILD_PART_FLOOR_STAIRS;
+}
+
+stock bool:IsBuildRemoveAccessoryPassThroughTarget(partid)
+{
+	switch (partid)
+	{
+		case SAMPP_BUILD_PART_WALL, SAMPP_BUILD_PART_DOORFRAME, SAMPP_BUILD_PART_FLOOR, SAMPP_BUILD_PART_ROOF, SAMPP_BUILD_PART_DOOR:
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+stock Float:GetBuildFloorStairsCenterZFromLower(playerid, lowerPlatform)
+{
+	if (lowerPlatform < 0 || lowerPlatform >= BUILD_DEMO_MAX_OBJECTS || !gBuildFoundationActive[playerid][lowerPlatform])
+	{
+		return 0.0;
+	}
+
+	return gBuildFoundationGridZ[playerid][lowerPlatform] + (BUILD_DEMO_ROOF_HEIGHT * 0.5);
+}
+
+stock ClearBuildPlatformSlot(playerid, platformIndex)
+{
+	if (platformIndex < 0 || platformIndex >= BUILD_DEMO_MAX_OBJECTS || !gBuildFoundationActive[playerid][platformIndex])
+	{
+		return 0;
+	}
+
+	gBuildFoundationActive[playerid][platformIndex] = false;
+	gBuildFoundationGridX[playerid][platformIndex] = 0.0;
+	gBuildFoundationGridY[playerid][platformIndex] = 0.0;
+	gBuildFoundationGridZ[playerid][platformIndex] = 0.0;
+	gBuildFoundationGridA[playerid][platformIndex] = 0.0;
+	gBuildFoundationLevel[playerid][platformIndex] = 0;
+	gBuildFoundationParentPlatform[playerid][platformIndex] = -1;
+	gBuildFoundationParentObject[playerid][platformIndex] = -1;
+	gBuildFoundationTopPiece[playerid][platformIndex] = BUILD_DEMO_PIECE_NONE;
+	gBuildFoundationStairsPiece[playerid][platformIndex] = BUILD_DEMO_PIECE_NONE;
+	gBuildFoundationFloorStairsPiece[playerid][platformIndex] = BUILD_DEMO_PIECE_NONE;
+	for (new edge = 0; edge < 4; edge++)
+	{
+		gBuildFoundationEdgePiece[playerid][platformIndex][edge] = BUILD_DEMO_PIECE_NONE;
+		gBuildFoundationEdgeDoor[playerid][platformIndex][edge] = false;
+	}
+	if (gBuildFoundationCount[playerid] > 0)
+	{
+		gBuildFoundationCount[playerid]--;
+	}
+	return 1;
+}
+
+stock bool:RegisterBuildPlatform(playerid, Float:x, Float:y, Float:z, Float:a, level, parentPlatform, parentObject, &outIndex)
 {
 	if (gBuildFoundationCount[playerid] >= BUILD_DEMO_MAX_OBJECTS)
 	{
@@ -1175,21 +1339,33 @@ stock bool:RegisterBuildFoundation(playerid, Float:x, Float:y, Float:z, Float:a,
 	gBuildFoundationGridY[playerid][index] = y;
 	gBuildFoundationGridZ[playerid][index] = z;
 	gBuildFoundationGridA[playerid][index] = NormalizeBuildAngle(a);
+	gBuildFoundationLevel[playerid][index] = level;
+	gBuildFoundationParentPlatform[playerid][index] = parentPlatform;
+	gBuildFoundationParentObject[playerid][index] = parentObject;
 	gBuildFoundationTopPiece[playerid][index] = BUILD_DEMO_PIECE_NONE;
 	gBuildFoundationStairsPiece[playerid][index] = BUILD_DEMO_PIECE_NONE;
+	gBuildFoundationFloorStairsPiece[playerid][index] = BUILD_DEMO_PIECE_NONE;
 	for (new slot = 0; slot < 4; slot++)
 	{
 		gBuildFoundationEdgePiece[playerid][index][slot] = BUILD_DEMO_PIECE_NONE;
 		gBuildFoundationEdgeDoor[playerid][index][slot] = false;
 	}
 
-	gBuildHasFoundation[playerid] = true;
-	gBuildFoundationX[playerid] = x;
-	gBuildFoundationY[playerid] = y;
-	gBuildFoundationZ[playerid] = z;
-	gBuildFoundationA[playerid] = NormalizeBuildAngle(a);
+	if (!gBuildHasFoundation[playerid] || level == 0)
+	{
+		gBuildHasFoundation[playerid] = true;
+		gBuildFoundationX[playerid] = x;
+		gBuildFoundationY[playerid] = y;
+		gBuildFoundationZ[playerid] = z;
+		gBuildFoundationA[playerid] = NormalizeBuildAngle(a);
+	}
 	outIndex = index;
 	return true;
+}
+
+stock bool:RegisterBuildFoundation(playerid, Float:x, Float:y, Float:z, Float:a, &outIndex)
+{
+	return RegisterBuildPlatform(playerid, x, y, z, a, 0, -1, -1, outIndex);
 }
 
 stock bool:ComputeAimPoint(playerid, Float:zOffset, &Float:x, &Float:y, &Float:z, &Float:angle)
@@ -1388,6 +1564,44 @@ stock bool:GetNearestFoundationCenterToPoint(playerid, Float:aimX, Float:aimY, &
 	return true;
 }
 
+stock bool:GetNearestFoundationCenterToPointByLevel(playerid, Float:aimX, Float:aimY, requiredLevel, &foundationIndex, &Float:centerX, &Float:centerY, &Float:centerZ, &Float:centerA, &Float:centerDistance)
+{
+	if (gBuildFoundationCount[playerid] <= 0)
+	{
+		return false;
+	}
+
+	new bestIndex = -1;
+	new Float:bestDistance = 999999.0;
+	for (new i = 0; i < BUILD_DEMO_MAX_OBJECTS; i++)
+	{
+		if (!gBuildFoundationActive[playerid][i] || gBuildFoundationLevel[playerid][i] != requiredLevel)
+		{
+			continue;
+		}
+
+		new Float:distance = GetBuildDistance2D(aimX, aimY, gBuildFoundationGridX[playerid][i], gBuildFoundationGridY[playerid][i]);
+		if (distance < bestDistance)
+		{
+			bestDistance = distance;
+			bestIndex = i;
+		}
+	}
+
+	if (bestIndex == -1)
+	{
+		return false;
+	}
+
+	foundationIndex = bestIndex;
+	centerX = gBuildFoundationGridX[playerid][bestIndex];
+	centerY = gBuildFoundationGridY[playerid][bestIndex];
+	centerZ = gBuildFoundationGridZ[playerid][bestIndex];
+	centerA = gBuildFoundationGridA[playerid][bestIndex];
+	centerDistance = bestDistance;
+	return true;
+}
+
 stock bool:GetBuildHorizontalSurfaceHit(partid, Float:objectX, Float:objectY, Float:objectZ, Float:objectRZ, Float:camX, Float:camY, Float:camZ, Float:frontX, Float:frontY, Float:frontZ, &Float:distance)
 {
 	switch (partid)
@@ -1516,6 +1730,10 @@ stock bool:GetNearestFoundationSnapToPoint(playerid, Float:aimX, Float:aimY, &pa
 	for (new i = 0; i < BUILD_DEMO_MAX_OBJECTS; i++)
 	{
 		if (!gBuildFoundationActive[playerid][i])
+		{
+			continue;
+		}
+		if (gBuildFoundationLevel[playerid][i] != 0)
 		{
 			continue;
 		}
@@ -1667,7 +1885,8 @@ stock bool:ComputeBuildPreview(playerid, partid, rotationStep, bool:flipped, &mo
 			new Float:footprintMinGroundZ;
 			new Float:footprintMaxGroundZ;
 			new bool:groundRangeReliable = GetBuildAimGroundRange(playerid, aimZ, aimSurfaceState, footprintMinGroundZ, footprintMaxGroundZ);
-			if (gBuildFoundationCount[playerid] == 0)
+			new groundFoundationCount = GetBuildGroundFoundationCount(playerid);
+			if (groundFoundationCount == 0)
 			{
 				ApplyBuildFirstFoundationAimLock(playerid, aimX, aimY, aimZ, aimSurfaceState, footprintMinGroundZ, footprintMaxGroundZ);
 				if (aimSurfaceState == BUILD_DEMO_AIM_SURFACE_GROUND)
@@ -1683,7 +1902,7 @@ stock bool:ComputeBuildPreview(playerid, partid, rotationStep, bool:flipped, &mo
 			{
 				x = aimX;
 				y = aimY;
-				if (gBuildFoundationCount[playerid] == 0)
+				if (groundFoundationCount == 0)
 				{
 					new Float:blockLift = GetBuildFoundationLiftFromStep(stateRotationStep);
 					new Float:blockMinTopZ = footprintMaxGroundZ + BUILD_DEMO_FOUNDATION_TOP_CLEARANCE;
@@ -1719,7 +1938,7 @@ stock bool:ComputeBuildPreview(playerid, partid, rotationStep, bool:flipped, &mo
 				return true;
 			}
 
-			if (gBuildFoundationCount[playerid] > 0)
+			if (groundFoundationCount > 0)
 			{
 				new parentIndex;
 				new slotIndex;
@@ -1895,6 +2114,29 @@ stock bool:ComputeBuildPreview(playerid, partid, rotationStep, bool:flipped, &mo
 				SetBuildPreviewCandidate(playerid, false, foundationIndex, 0, BUILD_DEMO_SLOT_TOP, "That foundation already has a floor or roof slot occupied.");
 				return true;
 			}
+			if (gBuildFoundationFloorStairsPiece[playerid][foundationIndex] != BUILD_DEMO_PIECE_NONE)
+			{
+				SetBuildPreviewCandidate(playerid, false, foundationIndex, 0, BUILD_DEMO_SLOT_TOP, "That top slot is reserved as a floor stairs opening.");
+				return true;
+			}
+			if (!HasBuildTopSupport(playerid, foundationIndex))
+			{
+				SetBuildPreviewCandidate(playerid, false, foundationIndex, 0, BUILD_DEMO_SLOT_TOP, "Floor/Roof requires at least two wall or door frame supports.");
+				return true;
+			}
+			if (partid == SAMPP_BUILD_PART_FLOOR)
+			{
+				if (gBuildFoundationLevel[playerid][foundationIndex] >= BUILD_DEMO_MAX_LEVELS - 1)
+				{
+					SetBuildPreviewCandidate(playerid, false, foundationIndex, 0, BUILD_DEMO_SLOT_TOP, "Maximum demo floor level reached.");
+					return true;
+				}
+				if (gBuildFoundationCount[playerid] >= BUILD_DEMO_MAX_OBJECTS)
+				{
+					SetBuildPreviewCandidate(playerid, false, foundationIndex, 0, BUILD_DEMO_SLOT_TOP, "No free platform slot for another floor.");
+					return true;
+				}
+			}
 			SetBuildPreviewCandidate(playerid, true, foundationIndex, 0, BUILD_DEMO_SLOT_TOP, "");
 			return true;
 		}
@@ -1903,13 +2145,13 @@ stock bool:ComputeBuildPreview(playerid, partid, rotationStep, bool:flipped, &mo
 			new foundationIndex;
 			new Float:centerA;
 			new Float:centerDistance;
-			if (!GetNearestFoundationCenterToPoint(playerid, aimX, aimY, foundationIndex, x, y, z, centerA, centerDistance))
+			if (!GetNearestFoundationCenterToPointByLevel(playerid, aimX, aimY, 0, foundationIndex, x, y, z, centerA, centerDistance))
 			{
 				x = aimX;
 				y = aimY;
 				z = aimZ - BUILD_DEMO_FOUNDATION_Z_OFFSET;
 				rz = GetBuildGridAngle(playerAngle);
-				SetBuildPreviewCandidate(playerid, false, -1, -1, BUILD_DEMO_SLOT_STAIRS, "Stairs require a foundation.");
+				SetBuildPreviewCandidate(playerid, false, -1, -1, BUILD_DEMO_SLOT_STAIRS, "Foundation stairs require a ground foundation.");
 				return true;
 			}
 
@@ -1933,10 +2175,81 @@ stock bool:ComputeBuildPreview(playerid, partid, rotationStep, bool:flipped, &mo
 			}
 			if (gBuildFoundationStairsPiece[playerid][foundationIndex] != BUILD_DEMO_PIECE_NONE)
 			{
-				SetBuildPreviewCandidate(playerid, false, foundationIndex, 0, BUILD_DEMO_SLOT_STAIRS, "That foundation already has stairs.");
+				SetBuildPreviewCandidate(playerid, false, foundationIndex, 0, BUILD_DEMO_SLOT_STAIRS, "That foundation already has foundation stairs.");
 				return true;
 			}
 			SetBuildPreviewCandidate(playerid, true, foundationIndex, 0, BUILD_DEMO_SLOT_STAIRS, "");
+			return true;
+		}
+		case SAMPP_BUILD_PART_FLOOR_STAIRS:
+		{
+			new foundationIndex;
+			new Float:centerA;
+			new Float:centerDistance;
+			new bool:surfaceHit = GetFoundationTopSurfaceFromAim(playerid, foundationIndex, x, y, z, centerA, centerDistance);
+			if (!surfaceHit && !GetNearestFoundationCenterToPoint(playerid, aimX, aimY, foundationIndex, x, y, z, centerA, centerDistance))
+			{
+				x = aimX;
+				y = aimY;
+				z = aimZ;
+				rz = GetBuildGridAngle(playerAngle);
+				SetBuildPreviewCandidate(playerid, false, -1, -1, BUILD_DEMO_SLOT_FLOOR_STAIRS, "Floor stairs require a lower platform.");
+				return true;
+			}
+
+			if (gBuildFoundationTopPiece[playerid][foundationIndex] != BUILD_DEMO_PIECE_NONE)
+			{
+				rz = NormalizeBuildAngle(centerA);
+				SetBuildPreviewCandidate(playerid, false, foundationIndex, 0, BUILD_DEMO_SLOT_FLOOR_STAIRS, "Floor stairs require an open top slot.");
+				return true;
+			}
+			if (!HasBuildTopSupport(playerid, foundationIndex))
+			{
+				rz = NormalizeBuildAngle(centerA);
+				SetBuildPreviewCandidate(playerid, false, foundationIndex, 0, BUILD_DEMO_SLOT_FLOOR_STAIRS, "Floor stairs require at least two wall or door frame supports.");
+				return true;
+			}
+			if (gBuildFoundationLevel[playerid][foundationIndex] >= BUILD_DEMO_MAX_LEVELS - 1)
+			{
+				rz = NormalizeBuildAngle(centerA);
+				SetBuildPreviewCandidate(playerid, false, foundationIndex, 0, BUILD_DEMO_SLOT_FLOOR_STAIRS, "Maximum demo floor level reached.");
+				return true;
+			}
+			if (gBuildFoundationCount[playerid] >= BUILD_DEMO_MAX_OBJECTS)
+			{
+				rz = NormalizeBuildAngle(centerA);
+				SetBuildPreviewCandidate(playerid, false, foundationIndex, 0, BUILD_DEMO_SLOT_FLOOR_STAIRS, "No free platform slot for floor stairs.");
+				return true;
+			}
+
+			new stairEdgeIndex;
+			new Float:stairEdgeX;
+			new Float:stairEdgeY;
+			new Float:stairEdgeZ;
+			new Float:stairEdgeA;
+			new Float:stairEdgeDistance;
+			if (GetNearestFoundationEdgeOnFoundationToPoint(playerid, foundationIndex, aimX, aimY, stairEdgeIndex, stairEdgeX, stairEdgeY, stairEdgeZ, stairEdgeA, stairEdgeDistance))
+			{
+				z = GetBuildFloorStairsCenterZFromLower(playerid, foundationIndex);
+				rz = NormalizeBuildAngle(stairEdgeA + BUILD_DEMO_STAIRS_YAW_OFFSET);
+			}
+			else
+			{
+				z = GetBuildFloorStairsCenterZFromLower(playerid, foundationIndex);
+				rz = NormalizeBuildAngle(centerA);
+			}
+
+			if (!surfaceHit && centerDistance > BUILD_DEMO_CENTER_SNAP_RADIUS)
+			{
+				SetBuildPreviewCandidate(playerid, false, foundationIndex, 0, BUILD_DEMO_SLOT_FLOOR_STAIRS, "Aim closer to the lower platform center.");
+				return true;
+			}
+			if (gBuildFoundationFloorStairsPiece[playerid][foundationIndex] != BUILD_DEMO_PIECE_NONE)
+			{
+				SetBuildPreviewCandidate(playerid, false, foundationIndex, 0, BUILD_DEMO_SLOT_FLOOR_STAIRS, "That platform already has floor stairs.");
+				return true;
+			}
+			SetBuildPreviewCandidate(playerid, true, foundationIndex, 0, BUILD_DEMO_SLOT_FLOOR_STAIRS, "");
 			return true;
 		}
 		case SAMPP_BUILD_PART_DOOR:
@@ -2052,7 +2365,8 @@ stock OpenBuildDemo(playerid)
 	SAMPP_BuildAddPart(playerid, SAMPP_BUILD_PART_DOORFRAME, BUILD_MODEL_DOORFRAME, "Door Frame", "Structure", "90 wood");
 	SAMPP_BuildAddPart(playerid, SAMPP_BUILD_PART_FLOOR, BUILD_MODEL_FLOOR, "Floor/Ceiling", "Structure", "120 wood");
 	SAMPP_BuildAddPart(playerid, SAMPP_BUILD_PART_ROOF, BUILD_MODEL_ROOF, "Roof", "Structure", "140 wood");
-	SAMPP_BuildAddPart(playerid, SAMPP_BUILD_PART_STAIRS, BUILD_MODEL_STAIRS, "Stairs", "Access", "75 wood");
+	SAMPP_BuildAddPart(playerid, SAMPP_BUILD_PART_STAIRS, BUILD_MODEL_STAIRS, "Foundation Stairs", "Access", "75 wood");
+	SAMPP_BuildAddPart(playerid, SAMPP_BUILD_PART_FLOOR_STAIRS, BUILD_MODEL_FLOOR_STAIRS, "Floor Stairs", "Access", "110 wood");
 	SAMPP_BuildAddPart(playerid, SAMPP_BUILD_PART_DOOR, BUILD_MODEL_DOOR, "Door", "Access", "50 wood");
 	SAMPP_BuildAddPart(playerid, SAMPP_BUILD_PART_REMOVE, 0, "Remove", "Tools", "orange");
 
@@ -2129,6 +2443,18 @@ stock bool:CommitBuildDemoSlot(playerid, partid, &foundationOut, &slotKindOut, &
 			{
 				return false;
 			}
+			if (gBuildFoundationFloorStairsPiece[playerid][parent] != BUILD_DEMO_PIECE_NONE)
+			{
+				return false;
+			}
+			if (!HasBuildTopSupport(playerid, parent))
+			{
+				return false;
+			}
+			if (gBuildFoundationLevel[playerid][parent] >= BUILD_DEMO_MAX_LEVELS - 1 || gBuildFoundationCount[playerid] >= BUILD_DEMO_MAX_OBJECTS)
+			{
+				return false;
+			}
 			gBuildFoundationTopPiece[playerid][parent] = BUILD_DEMO_PIECE_FLOOR;
 			foundationOut = parent;
 			slotKindOut = BUILD_DEMO_SLOT_TOP;
@@ -2142,6 +2468,14 @@ stock bool:CommitBuildDemoSlot(playerid, partid, &foundationOut, &slotKindOut, &
 				return false;
 			}
 			if (gBuildFoundationTopPiece[playerid][parent] != BUILD_DEMO_PIECE_NONE)
+			{
+				return false;
+			}
+			if (gBuildFoundationFloorStairsPiece[playerid][parent] != BUILD_DEMO_PIECE_NONE)
+			{
+				return false;
+			}
+			if (!HasBuildTopSupport(playerid, parent))
 			{
 				return false;
 			}
@@ -2164,6 +2498,34 @@ stock bool:CommitBuildDemoSlot(playerid, partid, &foundationOut, &slotKindOut, &
 			gBuildFoundationStairsPiece[playerid][parent] = BUILD_DEMO_PIECE_STAIRS;
 			foundationOut = parent;
 			slotKindOut = BUILD_DEMO_SLOT_STAIRS;
+			slotOut = 0;
+			return true;
+		}
+		case SAMPP_BUILD_PART_FLOOR_STAIRS:
+		{
+			if (parent < 0 || parent >= BUILD_DEMO_MAX_OBJECTS || !gBuildFoundationActive[playerid][parent])
+			{
+				return false;
+			}
+			if (gBuildFoundationTopPiece[playerid][parent] != BUILD_DEMO_PIECE_NONE)
+			{
+				return false;
+			}
+			if (!HasBuildTopSupport(playerid, parent))
+			{
+				return false;
+			}
+			if (gBuildFoundationLevel[playerid][parent] >= BUILD_DEMO_MAX_LEVELS - 1 || gBuildFoundationCount[playerid] >= BUILD_DEMO_MAX_OBJECTS)
+			{
+				return false;
+			}
+			if (gBuildFoundationFloorStairsPiece[playerid][parent] != BUILD_DEMO_PIECE_NONE)
+			{
+				return false;
+			}
+			gBuildFoundationFloorStairsPiece[playerid][parent] = BUILD_DEMO_PIECE_FLOOR_STAIRS;
+			foundationOut = parent;
+			slotKindOut = BUILD_DEMO_SLOT_FLOOR_STAIRS;
 			slotOut = 0;
 			return true;
 		}
@@ -2302,6 +2664,18 @@ stock bool:FindBuildObjectFromAim(playerid, &objectIndex, &Float:targetDistance)
 			preferCandidate = true;
 		}
 		else if (partid == SAMPP_BUILD_PART_DOORFRAME && IsBuildDoorAndFramePair(playerid, bestIndex, i))
+		{
+			preferCandidate = false;
+		}
+		else if (IsBuildRemoveAccessory(gBuildObjectPart[playerid][bestIndex])
+			&& IsBuildRemoveAccessoryPassThroughTarget(partid)
+			&& surfaceDistance <= bestDistance + BUILD_DEMO_REMOVE_ACCESSORY_PASS_THROUGH)
+		{
+			preferCandidate = true;
+		}
+		else if (IsBuildRemoveAccessory(partid)
+			&& IsBuildRemoveAccessoryPassThroughTarget(gBuildObjectPart[playerid][bestIndex])
+			&& bestDistance <= surfaceDistance + BUILD_DEMO_REMOVE_ACCESSORY_PASS_THROUGH)
 		{
 			preferCandidate = false;
 		}
@@ -2700,7 +3074,8 @@ stock bool:BuildFoundationHasChildren(playerid, foundationIndex)
 	}
 
 	if (gBuildFoundationTopPiece[playerid][foundationIndex] != BUILD_DEMO_PIECE_NONE
-		|| gBuildFoundationStairsPiece[playerid][foundationIndex] != BUILD_DEMO_PIECE_NONE)
+		|| gBuildFoundationStairsPiece[playerid][foundationIndex] != BUILD_DEMO_PIECE_NONE
+		|| gBuildFoundationFloorStairsPiece[playerid][foundationIndex] != BUILD_DEMO_PIECE_NONE)
 	{
 		return true;
 	}
@@ -2709,6 +3084,13 @@ stock bool:BuildFoundationHasChildren(playerid, foundationIndex)
 	{
 		if (gBuildFoundationEdgePiece[playerid][foundationIndex][slot] != BUILD_DEMO_PIECE_NONE
 			|| gBuildFoundationEdgeDoor[playerid][foundationIndex][slot])
+		{
+			return true;
+		}
+	}
+	for (new i = 0; i < BUILD_DEMO_MAX_OBJECTS; i++)
+	{
+		if (gBuildFoundationActive[playerid][i] && gBuildFoundationParentPlatform[playerid][i] == foundationIndex)
 		{
 			return true;
 		}
@@ -2738,6 +3120,20 @@ stock RefreshBuildFoundationSummary(playerid)
 		gBuildFoundationA[playerid] = gBuildFoundationGridA[playerid][i];
 		return 1;
 	}
+	for (new i = 0; i < BUILD_DEMO_MAX_OBJECTS; i++)
+	{
+		if (!gBuildFoundationActive[playerid][i])
+		{
+			continue;
+		}
+
+		gBuildHasFoundation[playerid] = true;
+		gBuildFoundationX[playerid] = gBuildFoundationGridX[playerid][i];
+		gBuildFoundationY[playerid] = gBuildFoundationGridY[playerid][i];
+		gBuildFoundationZ[playerid] = gBuildFoundationGridZ[playerid][i];
+		gBuildFoundationA[playerid] = gBuildFoundationGridA[playerid][i];
+		return 1;
+	}
 	return 1;
 }
 
@@ -2752,10 +3148,36 @@ stock bool:RemoveBuildObjectAtIndex(playerid, objectIndex)
 	new foundation = gBuildObjectFoundation[playerid][objectIndex];
 	new slotKind = gBuildObjectSlotKind[playerid][objectIndex];
 	new slot = gBuildObjectSlotIndex[playerid][objectIndex];
+	new generatedPlatform = -1;
+	if (partid == SAMPP_BUILD_PART_FLOOR || partid == SAMPP_BUILD_PART_FLOOR_STAIRS)
+	{
+		FindBuildPlatformByParentObject(playerid, objectIndex, generatedPlatform);
+	}
 
 	if (partid == SAMPP_BUILD_PART_FOUNDATION && BuildFoundationHasChildren(playerid, foundation))
 	{
 		SAMPP_BuildSendResult(playerid, SAMPP_BUILD_RESULT_ERROR, "Remove child pieces before removing this foundation.");
+		return false;
+	}
+
+	if (partid == SAMPP_BUILD_PART_FLOOR)
+	{
+		if (foundation >= 0 && foundation < BUILD_DEMO_MAX_OBJECTS
+			&& gBuildFoundationFloorStairsPiece[playerid][foundation] != BUILD_DEMO_PIECE_NONE)
+		{
+			SAMPP_BuildSendResult(playerid, SAMPP_BUILD_RESULT_ERROR, "Remove floor stairs before removing this floor.");
+			return false;
+		}
+		if (generatedPlatform != -1 && BuildFoundationHasChildren(playerid, generatedPlatform))
+		{
+			SAMPP_BuildSendResult(playerid, SAMPP_BUILD_RESULT_ERROR, "Remove upper level pieces before removing this floor.");
+			return false;
+		}
+	}
+
+	if (partid == SAMPP_BUILD_PART_FLOOR_STAIRS && generatedPlatform != -1 && BuildFoundationHasChildren(playerid, generatedPlatform))
+	{
+		SAMPP_BuildSendResult(playerid, SAMPP_BUILD_RESULT_ERROR, "Remove upper level pieces before removing these floor stairs.");
 		return false;
 	}
 
@@ -2772,26 +3194,8 @@ stock bool:RemoveBuildObjectAtIndex(playerid, objectIndex)
 	{
 		case SAMPP_BUILD_PART_FOUNDATION:
 		{
-			if (foundation >= 0 && foundation < BUILD_DEMO_MAX_OBJECTS && gBuildFoundationActive[playerid][foundation])
-			{
-				gBuildFoundationActive[playerid][foundation] = false;
-				gBuildFoundationGridX[playerid][foundation] = 0.0;
-				gBuildFoundationGridY[playerid][foundation] = 0.0;
-				gBuildFoundationGridZ[playerid][foundation] = 0.0;
-				gBuildFoundationGridA[playerid][foundation] = 0.0;
-				gBuildFoundationTopPiece[playerid][foundation] = BUILD_DEMO_PIECE_NONE;
-				gBuildFoundationStairsPiece[playerid][foundation] = BUILD_DEMO_PIECE_NONE;
-				for (new edge = 0; edge < 4; edge++)
-				{
-					gBuildFoundationEdgePiece[playerid][foundation][edge] = BUILD_DEMO_PIECE_NONE;
-					gBuildFoundationEdgeDoor[playerid][foundation][edge] = false;
-				}
-				if (gBuildFoundationCount[playerid] > 0)
-				{
-					gBuildFoundationCount[playerid]--;
-				}
-				RefreshBuildFoundationSummary(playerid);
-			}
+			ClearBuildPlatformSlot(playerid, foundation);
+			RefreshBuildFoundationSummary(playerid);
 		}
 		case SAMPP_BUILD_PART_WALL:
 		{
@@ -2814,12 +3218,29 @@ stock bool:RemoveBuildObjectAtIndex(playerid, objectIndex)
 			{
 				gBuildFoundationTopPiece[playerid][foundation] = BUILD_DEMO_PIECE_NONE;
 			}
+			if (partid == SAMPP_BUILD_PART_FLOOR && generatedPlatform != -1)
+			{
+				ClearBuildPlatformSlot(playerid, generatedPlatform);
+				RefreshBuildFoundationSummary(playerid);
+			}
 		}
 		case SAMPP_BUILD_PART_STAIRS:
 		{
 			if (slotKind == BUILD_DEMO_SLOT_STAIRS && foundation >= 0 && foundation < BUILD_DEMO_MAX_OBJECTS)
 			{
 				gBuildFoundationStairsPiece[playerid][foundation] = BUILD_DEMO_PIECE_NONE;
+			}
+		}
+		case SAMPP_BUILD_PART_FLOOR_STAIRS:
+		{
+			if (slotKind == BUILD_DEMO_SLOT_FLOOR_STAIRS && foundation >= 0 && foundation < BUILD_DEMO_MAX_OBJECTS)
+			{
+				gBuildFoundationFloorStairsPiece[playerid][foundation] = BUILD_DEMO_PIECE_NONE;
+			}
+			if (generatedPlatform != -1)
+			{
+				ClearBuildPlatformSlot(playerid, generatedPlatform);
+				RefreshBuildFoundationSummary(playerid);
 			}
 		}
 		case SAMPP_BUILD_PART_DOOR:
@@ -2939,9 +3360,46 @@ stock PlaceBuildDemoPart(playerid, partid, rotationStep, bool:flipped)
 		DestroyObject(objectid);
 		return SAMPP_BuildSendResult(playerid, SAMPP_BUILD_RESULT_ERROR, "Build slot changed before placement. Try again.");
 	}
-	if (!AddBuildDemoObject(playerid, objectid, partid, foundationIndex, slotKind, slotIndex, gBuildPreviewFoundationHeightStep[playerid], gBuildPreviewX[playerid], gBuildPreviewY[playerid], gBuildPreviewZ[playerid], gBuildPreviewRX[playerid], gBuildPreviewRY[playerid], gBuildPreviewRZ[playerid]))
+	new objectIndex;
+	if (!AddBuildDemoObject(playerid, objectid, partid, foundationIndex, slotKind, slotIndex, gBuildPreviewFoundationHeightStep[playerid], gBuildPreviewX[playerid], gBuildPreviewY[playerid], gBuildPreviewZ[playerid], gBuildPreviewRX[playerid], gBuildPreviewRY[playerid], gBuildPreviewRZ[playerid], objectIndex))
 	{
 		return 1;
+	}
+	if (partid == SAMPP_BUILD_PART_FLOOR)
+	{
+		new upperPlatform;
+		if (!RegisterBuildPlatform(
+			playerid,
+			gBuildPreviewX[playerid],
+			gBuildPreviewY[playerid],
+			gBuildPreviewZ[playerid],
+			gBuildPreviewRZ[playerid],
+			gBuildFoundationLevel[playerid][foundationIndex] + 1,
+			foundationIndex,
+			objectIndex,
+			upperPlatform))
+		{
+			RemoveBuildObjectAtIndex(playerid, objectIndex);
+			return SAMPP_BuildSendResult(playerid, SAMPP_BUILD_RESULT_ERROR, "Could not register upper floor platform.");
+		}
+	}
+	else if (partid == SAMPP_BUILD_PART_FLOOR_STAIRS)
+	{
+		new upperPlatform;
+		if (!RegisterBuildPlatform(
+			playerid,
+			gBuildFoundationGridX[playerid][foundationIndex],
+			gBuildFoundationGridY[playerid][foundationIndex],
+			gBuildFoundationGridZ[playerid][foundationIndex] + BUILD_DEMO_ROOF_HEIGHT,
+			gBuildFoundationGridA[playerid][foundationIndex],
+			gBuildFoundationLevel[playerid][foundationIndex] + 1,
+			foundationIndex,
+			objectIndex,
+			upperPlatform))
+		{
+			RemoveBuildObjectAtIndex(playerid, objectIndex);
+			return SAMPP_BuildSendResult(playerid, SAMPP_BUILD_RESULT_ERROR, "Could not register upper floor stairs platform.");
+		}
 	}
 
 	DestroyBuildPreview(playerid);
@@ -2957,6 +3415,8 @@ stock SendBuildDemoHelp(playerid)
 	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] LMB confirms the preview. RMB returns to the menu; RMB again or ESC closes. MMB switches side.");
 	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] Q/E sets only the first foundation top height; snapped foundations keep that same top level.");
 	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] Foundations snap to neighbours; walls/door frames snap to edge surfaces automatically.");
+	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] Floor/Ceiling and Roof require at least two wall or door-frame supports.");
+	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] Floor/Ceiling creates an upper platform; Floor Stairs connects it from the lower platform.");
 	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] Aim a placed door from nearby and use the ALT target prompt to open or close it.");
 	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] Tools > Remove enters orange remove mode. Aim a placed part and press LMB to delete it.");
 	return 1;
@@ -2975,6 +3435,7 @@ stock RegisterBuildDemoModels()
 	new bool:doorFrameRegistered = AddSimpleModel(-1, BUILD_BASE_MODEL_DOORFRAME, BUILD_MODEL_DOORFRAME, BUILD_MODEL_DOORFRAME_DFF, BUILD_MODEL_DOORFRAME_TXD);
 	new bool:doorRegistered = AddSimpleModel(-1, BUILD_BASE_MODEL_DOOR, BUILD_MODEL_DOOR, BUILD_MODEL_DOOR_DFF, BUILD_MODEL_DOOR_TXD);
 	new bool:floorRegistered = AddSimpleModel(-1, BUILD_BASE_MODEL_FLOOR, BUILD_MODEL_FLOOR, BUILD_MODEL_FLOOR_DFF, BUILD_MODEL_FLOOR_TXD);
+	new bool:floorStairsRegistered = AddSimpleModel(-1, BUILD_BASE_MODEL_FLOOR_STAIRS, BUILD_MODEL_FLOOR_STAIRS, BUILD_MODEL_FLOOR_STAIRS_DFF, BUILD_MODEL_FLOOR_STAIRS_TXD);
 	new bool:foundationPreviewOK = AddSimpleModel(-1, BUILD_BASE_MODEL_FOUNDATION, BUILD_MODEL_FOUNDATION_PREVIEW_OK, BUILD_MODEL_FOUNDATION_DFF, BUILD_MODEL_PREVIEW_OK_TXD);
 	new bool:wallPreviewOK = AddSimpleModel(-1, BUILD_BASE_MODEL_WALL, BUILD_MODEL_WALL_PREVIEW_OK, BUILD_MODEL_WALL_DFF, BUILD_MODEL_PREVIEW_OK_TXD);
 	new bool:doorFramePreviewOK = AddSimpleModel(-1, BUILD_BASE_MODEL_DOORFRAME, BUILD_MODEL_DOORFRAME_PREVIEW_OK, BUILD_MODEL_DOORFRAME_DFF, BUILD_MODEL_PREVIEW_OK_TXD);
@@ -2982,6 +3443,7 @@ stock RegisterBuildDemoModels()
 	new bool:floorPreviewOK = AddSimpleModel(-1, BUILD_BASE_MODEL_FLOOR, BUILD_MODEL_FLOOR_PREVIEW_OK, BUILD_MODEL_FLOOR_DFF, BUILD_MODEL_PREVIEW_OK_TXD);
 	new bool:roofPreviewOK = AddSimpleModel(-1, BUILD_BASE_MODEL_FLOOR, BUILD_MODEL_ROOF_PREVIEW_OK, BUILD_MODEL_FLOOR_DFF, BUILD_MODEL_PREVIEW_OK_TXD);
 	new bool:stairsPreviewOK = AddSimpleModel(-1, BUILD_BASE_MODEL_WALL, BUILD_MODEL_STAIRS_PREVIEW_OK, BUILD_MODEL_WALL_DFF, BUILD_MODEL_PREVIEW_OK_TXD);
+	new bool:floorStairsPreviewOK = AddSimpleModel(-1, BUILD_BASE_MODEL_FLOOR_STAIRS, BUILD_MODEL_FLOOR_STAIRS_PREVIEW_OK, BUILD_MODEL_FLOOR_STAIRS_DFF, BUILD_MODEL_PREVIEW_OK_TXD);
 	new bool:foundationPreviewBad = AddSimpleModel(-1, BUILD_BASE_MODEL_FOUNDATION, BUILD_MODEL_FOUNDATION_PREVIEW_BAD, BUILD_MODEL_FOUNDATION_DFF, BUILD_MODEL_PREVIEW_BAD_TXD);
 	new bool:wallPreviewBad = AddSimpleModel(-1, BUILD_BASE_MODEL_WALL, BUILD_MODEL_WALL_PREVIEW_BAD, BUILD_MODEL_WALL_DFF, BUILD_MODEL_PREVIEW_BAD_TXD);
 	new bool:doorFramePreviewBad = AddSimpleModel(-1, BUILD_BASE_MODEL_DOORFRAME, BUILD_MODEL_DOORFRAME_PREVIEW_BAD, BUILD_MODEL_DOORFRAME_DFF, BUILD_MODEL_PREVIEW_BAD_TXD);
@@ -2989,6 +3451,7 @@ stock RegisterBuildDemoModels()
 	new bool:floorPreviewBad = AddSimpleModel(-1, BUILD_BASE_MODEL_FLOOR, BUILD_MODEL_FLOOR_PREVIEW_BAD, BUILD_MODEL_FLOOR_DFF, BUILD_MODEL_PREVIEW_BAD_TXD);
 	new bool:roofPreviewBad = AddSimpleModel(-1, BUILD_BASE_MODEL_FLOOR, BUILD_MODEL_ROOF_PREVIEW_BAD, BUILD_MODEL_FLOOR_DFF, BUILD_MODEL_PREVIEW_BAD_TXD);
 	new bool:stairsPreviewBad = AddSimpleModel(-1, BUILD_BASE_MODEL_WALL, BUILD_MODEL_STAIRS_PREVIEW_BAD, BUILD_MODEL_WALL_DFF, BUILD_MODEL_PREVIEW_BAD_TXD);
+	new bool:floorStairsPreviewBad = AddSimpleModel(-1, BUILD_BASE_MODEL_FLOOR_STAIRS, BUILD_MODEL_FLOOR_STAIRS_PREVIEW_BAD, BUILD_MODEL_FLOOR_STAIRS_DFF, BUILD_MODEL_PREVIEW_BAD_TXD);
 	new bool:foundationHighlight = AddSimpleModel(-1, BUILD_BASE_MODEL_FOUNDATION, BUILD_MODEL_FOUNDATION_HIGHLIGHT, BUILD_MODEL_FOUNDATION_DFF, BUILD_MODEL_REMOVE_HIGHLIGHT_TXD);
 	new bool:wallHighlight = AddSimpleModel(-1, BUILD_BASE_MODEL_WALL, BUILD_MODEL_WALL_HIGHLIGHT, BUILD_MODEL_WALL_DFF, BUILD_MODEL_REMOVE_HIGHLIGHT_TXD);
 	new bool:doorFrameHighlight = AddSimpleModel(-1, BUILD_BASE_MODEL_DOORFRAME, BUILD_MODEL_DOORFRAME_HIGHLIGHT, BUILD_MODEL_DOORFRAME_DFF, BUILD_MODEL_REMOVE_HIGHLIGHT_TXD);
@@ -2996,6 +3459,7 @@ stock RegisterBuildDemoModels()
 	new bool:floorHighlight = AddSimpleModel(-1, BUILD_BASE_MODEL_FLOOR, BUILD_MODEL_FLOOR_HIGHLIGHT, BUILD_MODEL_FLOOR_DFF, BUILD_MODEL_REMOVE_HIGHLIGHT_TXD);
 	new bool:roofHighlight = AddSimpleModel(-1, BUILD_BASE_MODEL_FLOOR, BUILD_MODEL_ROOF_HIGHLIGHT, BUILD_MODEL_FLOOR_DFF, BUILD_MODEL_REMOVE_HIGHLIGHT_TXD);
 	new bool:stairsHighlight = AddSimpleModel(-1, BUILD_BASE_MODEL_WALL, BUILD_MODEL_STAIRS_HIGHLIGHT, BUILD_MODEL_WALL_DFF, BUILD_MODEL_REMOVE_HIGHLIGHT_TXD);
+	new bool:floorStairsHighlight = AddSimpleModel(-1, BUILD_BASE_MODEL_FLOOR_STAIRS, BUILD_MODEL_FLOOR_STAIRS_HIGHLIGHT, BUILD_MODEL_FLOOR_STAIRS_DFF, BUILD_MODEL_REMOVE_HIGHLIGHT_TXD);
 
 	for (new heightStep = 0; heightStep < BUILD_DEMO_FOUNDATION_HEIGHT_STEPS; heightStep++)
 	{
@@ -3052,9 +3516,18 @@ stock RegisterBuildDemoModels()
 		print("[BuildDemo] Could not register custom floor model -2003. Check artwork config and model files.");
 	}
 
-	if (foundationPreviewOK && wallPreviewOK && doorFramePreviewOK && doorPreviewOK && floorPreviewOK && roofPreviewOK && stairsPreviewOK
-		&& foundationPreviewBad && wallPreviewBad && doorFramePreviewBad && doorPreviewBad && floorPreviewBad && roofPreviewBad && stairsPreviewBad
-		&& foundationHighlight && wallHighlight && doorFrameHighlight && doorHighlight && floorHighlight && roofHighlight && stairsHighlight)
+	if (floorStairsRegistered)
+	{
+		print("[BuildDemo] Registered custom floor stairs model -2030 from models/floor_stairs.dff and models/floor_stairs.txd.");
+	}
+	else
+	{
+		print("[BuildDemo] Could not register custom floor stairs model -2030. Check artwork config and model files.");
+	}
+
+	if (foundationPreviewOK && wallPreviewOK && doorFramePreviewOK && doorPreviewOK && floorPreviewOK && roofPreviewOK && stairsPreviewOK && floorStairsPreviewOK
+		&& foundationPreviewBad && wallPreviewBad && doorFramePreviewBad && doorPreviewBad && floorPreviewBad && roofPreviewBad && stairsPreviewBad && floorStairsPreviewBad
+		&& foundationHighlight && wallHighlight && doorFrameHighlight && doorHighlight && floorHighlight && roofHighlight && stairsHighlight && floorStairsHighlight)
 	{
 		print("[BuildDemo] Registered green/red preview build models and orange remove highlight models.");
 	}
@@ -3063,10 +3536,10 @@ stock RegisterBuildDemoModels()
 		print("[BuildDemo] Could not register one or more preview/highlight models. Check green/red/orange preview TXDs.");
 	}
 
-	registered = foundationRegistered && wallRegistered && doorFrameRegistered && doorRegistered && floorRegistered
-		&& foundationPreviewOK && wallPreviewOK && doorFramePreviewOK && doorPreviewOK && floorPreviewOK && roofPreviewOK && stairsPreviewOK
-		&& foundationPreviewBad && wallPreviewBad && doorFramePreviewBad && doorPreviewBad && floorPreviewBad && roofPreviewBad && stairsPreviewBad
-		&& foundationHighlight && wallHighlight && doorFrameHighlight && doorHighlight && floorHighlight && roofHighlight && stairsHighlight;
+	registered = foundationRegistered && wallRegistered && doorFrameRegistered && doorRegistered && floorRegistered && floorStairsRegistered
+		&& foundationPreviewOK && wallPreviewOK && doorFramePreviewOK && doorPreviewOK && floorPreviewOK && roofPreviewOK && stairsPreviewOK && floorStairsPreviewOK
+		&& foundationPreviewBad && wallPreviewBad && doorFramePreviewBad && doorPreviewBad && floorPreviewBad && roofPreviewBad && stairsPreviewBad && floorStairsPreviewBad
+		&& foundationHighlight && wallHighlight && doorFrameHighlight && doorHighlight && floorHighlight && roofHighlight && stairsHighlight && floorStairsHighlight;
 	return registered ? 1 : 0;
 }
 
@@ -3085,7 +3558,7 @@ stock SetBuildDemoSelection(playerid, partid, rotationStep, bool:flipped, bool:f
 	gBuildSelectedPart[playerid] = partid;
 	gBuildRotationStep[playerid] = GetBuildPlacementRotationStep(playerid, partid, rotationStep);
 	gBuildFlipped[playerid] = BuildDemoPartSupportsVariant(partid) ? flipped : false;
-	if (partid != SAMPP_BUILD_PART_FOUNDATION || gBuildFoundationCount[playerid] > 0)
+	if (partid != SAMPP_BUILD_PART_FOUNDATION || GetBuildGroundFoundationCount(playerid) > 0)
 	{
 		ResetBuildFirstFoundationAimLock(playerid);
 	}
