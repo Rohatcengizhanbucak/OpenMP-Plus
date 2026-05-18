@@ -150,6 +150,27 @@ public:
 		return result;
 	}
 
+	template <typename... Args>
+	cell callPublicIfExists(const char* name, DefaultReturnValue defaultReturn, bool& called, Args&&... args)
+	{
+		cell result = defaultReturn == DefaultReturnValue_True ? 1 : 0;
+		for (IPawnScript* script : scripts_)
+		{
+			if (!script || !script->IsLoaded())
+				continue;
+
+			int publicIndex = 0;
+			if (script->FindPublic(name, &publicIndex) != AMX_ERR_NONE)
+				continue;
+
+			called = true;
+			cell current = script->Call(name, defaultReturn, std::forward<Args>(args)...);
+			if (current == 0)
+				result = 0;
+		}
+		return result;
+	}
+
 private:
 	static OMPPlusComponent* instance_;
 

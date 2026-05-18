@@ -15,9 +15,20 @@
 #define BUILD_DEMO_FOUNDATION_OCCUPIED_RADIUS 0.8
 #define BUILD_DEMO_FOUNDATION_Z_OFFSET -0.95
 #define BUILD_DEMO_FOUNDATION_HEIGHT_STEPS 12
-#define BUILD_DEMO_FOUNDATION_DEFAULT_HEIGHT_STEP 12
+#define BUILD_DEMO_FOUNDATION_LIFT_STEPS 10
+#define BUILD_DEMO_FOUNDATION_DEFAULT_LIFT_STEP 0
 #define BUILD_DEMO_FOUNDATION_HEIGHT_STEP 0.25
+#define BUILD_DEMO_FOUNDATION_LIFT_STEP 0.25
 #define BUILD_DEMO_FOUNDATION_MIN_VISUAL_HEIGHT 0.05
+#define BUILD_DEMO_FOUNDATION_GROUND_EMBED 0.50
+#define BUILD_DEMO_FOUNDATION_TOP_CLEARANCE 0.10
+#define BUILD_DEMO_FOUNDATION_SNAP_TERRAIN_EPSILON 0.05
+#define BUILD_DEMO_FOUNDATION_MAX_HEIGHT 3.0
+#define BUILD_DEMO_FIRST_FOUNDATION_LOCK_RADIUS 2.75
+#define BUILD_DEMO_AIM_HIT_TTL_MS 300
+#define BUILD_DEMO_AIM_SURFACE_NONE 0
+#define BUILD_DEMO_AIM_SURFACE_GROUND 1
+#define BUILD_DEMO_AIM_SURFACE_BLOCKED_NON_GROUND 2
 #define BUILD_DEMO_WALL_HEIGHT 1.55
 #define BUILD_DEMO_ROOF_HEIGHT 3.05
 #define BUILD_DEMO_PREVIEW_MS 75
@@ -174,6 +185,24 @@ static gBuildPreviewSlotIndex[MAX_PLAYERS];
 static gBuildPreviewSlotKind[MAX_PLAYERS];
 static gBuildPreviewFoundationHeightStep[MAX_PLAYERS];
 static gBuildPreviewRejectReason[MAX_PLAYERS][BUILD_DEMO_REJECT_REASON_SIZE];
+static bool:gBuildFoundationSnapHeightLocked[MAX_PLAYERS];
+static gBuildFoundationSnapHeightParent[MAX_PLAYERS];
+static gBuildFoundationSnapHeightSlot[MAX_PLAYERS];
+static gBuildFoundationSnapHeightStep[MAX_PLAYERS];
+static bool:gBuildFirstFoundationAimLocked[MAX_PLAYERS];
+static Float:gBuildFirstFoundationAimX[MAX_PLAYERS];
+static Float:gBuildFirstFoundationAimY[MAX_PLAYERS];
+static Float:gBuildFirstFoundationAimZ[MAX_PLAYERS];
+static Float:gBuildFirstFoundationMinGroundZ[MAX_PLAYERS];
+static Float:gBuildFirstFoundationMaxGroundZ[MAX_PLAYERS];
+static bool:gBuildAimHitValid[MAX_PLAYERS];
+static gBuildAimHitUntil[MAX_PLAYERS];
+static Float:gBuildAimHitX[MAX_PLAYERS];
+static Float:gBuildAimHitY[MAX_PLAYERS];
+static Float:gBuildAimHitZ[MAX_PLAYERS];
+static gBuildAimSurfaceState[MAX_PLAYERS];
+static Float:gBuildAimFootprintMinGroundZ[MAX_PLAYERS];
+static Float:gBuildAimFootprintMaxGroundZ[MAX_PLAYERS];
 static gBuildRemoveTargetNextUpdate[MAX_PLAYERS];
 static gBuildRemoveFocusedObject[MAX_PLAYERS];
 static gBuildRemoveHighlightObject[MAX_PLAYERS][2];
@@ -256,18 +285,45 @@ stock GetBuildDefaultRotationStep(partid)
 {
 	if (partid == SAMPP_BUILD_PART_FOUNDATION)
 	{
-		return BUILD_DEMO_FOUNDATION_DEFAULT_HEIGHT_STEP;
+		return BUILD_DEMO_FOUNDATION_DEFAULT_LIFT_STEP;
 	}
 	return 0;
+}
+
+stock ClampBuildFoundationLiftStep(liftStep)
+{
+	if (liftStep < 0)
+	{
+		return 0;
+	}
+	if (liftStep > BUILD_DEMO_FOUNDATION_LIFT_STEPS)
+	{
+		return BUILD_DEMO_FOUNDATION_LIFT_STEPS;
+	}
+	return liftStep;
 }
 
 stock GetBuildRotationStepForPart(partid, rotationStep)
 {
 	if (partid == SAMPP_BUILD_PART_FOUNDATION)
 	{
-		return ClampBuildFoundationHeightStep(rotationStep);
+		return ClampBuildFoundationLiftStep(rotationStep);
 	}
 	return 0;
+}
+
+stock GetBuildPlacementRotationStep(playerid, partid, rotationStep)
+{
+	if (partid == SAMPP_BUILD_PART_FOUNDATION && gBuildFoundationCount[playerid] > 0)
+	{
+		return 0;
+	}
+	return GetBuildRotationStepForPart(partid, rotationStep);
+}
+
+stock Float:GetBuildFoundationLiftFromStep(liftStep)
+{
+	return float(ClampBuildFoundationLiftStep(liftStep)) * BUILD_DEMO_FOUNDATION_LIFT_STEP;
 }
 
 stock Float:GetBuildFoundationHeightFromStep(heightStep)
@@ -278,6 +334,45 @@ stock Float:GetBuildFoundationHeightFromStep(heightStep)
 		return BUILD_DEMO_FOUNDATION_MIN_VISUAL_HEIGHT;
 	}
 	return float(heightStep) * BUILD_DEMO_FOUNDATION_HEIGHT_STEP;
+}
+
+stock bool:TryGetBuildFoundationAutoHeightStep(Float:topZ, Float:groundZ, &heightStep, &Float:requiredHeight)
+{
+	requiredHeight = (topZ - groundZ) + BUILD_DEMO_FOUNDATION_GROUND_EMBED;
+	if (requiredHeight < BUILD_DEMO_FOUNDATION_MIN_VISUAL_HEIGHT)
+	{
+		requiredHeight = BUILD_DEMO_FOUNDATION_MIN_VISUAL_HEIGHT;
+	}
+
+	heightStep = ClampBuildFoundationHeightStep(floatround(requiredHeight / BUILD_DEMO_FOUNDATION_HEIGHT_STEP, floatround_ceil));
+	return requiredHeight <= (BUILD_DEMO_FOUNDATION_MAX_HEIGHT + 0.001);
+}
+
+stock bool:TryGetBuildFoundationAutoHeightStepFromRange(Float:topZ, Float:minGroundZ, Float:maxGroundZ, &heightStep, &Float:requiredHeight)
+{
+	if (minGroundZ > maxGroundZ)
+	{
+		new Float:tmp = minGroundZ;
+		minGroundZ = maxGroundZ;
+		maxGroundZ = tmp;
+	}
+
+	if (topZ < maxGroundZ + BUILD_DEMO_FOUNDATION_TOP_CLEARANCE)
+	{
+		requiredHeight = 0.0;
+		heightStep = 0;
+		return false;
+	}
+
+	return TryGetBuildFoundationAutoHeightStep(topZ, minGroundZ, heightStep, requiredHeight);
+}
+
+stock GetBuildFoundationAutoHeightStep(Float:topZ, Float:groundZ)
+{
+	new heightStep;
+	new Float:requiredHeight;
+	TryGetBuildFoundationAutoHeightStep(topZ, groundZ, heightStep, requiredHeight);
+	return heightStep;
 }
 
 stock Float:GetBuildEdgePieceYaw(partid, Float:edgeA, bool:flipped)
@@ -717,6 +812,85 @@ stock SetBuildPreviewCandidate(playerid, bool:placeable, parentFoundation, slotI
 	return 1;
 }
 
+stock ResetBuildFoundationSnapHeightLock(playerid)
+{
+	gBuildFoundationSnapHeightLocked[playerid] = false;
+	gBuildFoundationSnapHeightParent[playerid] = -1;
+	gBuildFoundationSnapHeightSlot[playerid] = -1;
+	gBuildFoundationSnapHeightStep[playerid] = 0;
+	return 1;
+}
+
+stock ResetBuildFirstFoundationAimLock(playerid)
+{
+	gBuildFirstFoundationAimLocked[playerid] = false;
+	gBuildFirstFoundationAimX[playerid] = 0.0;
+	gBuildFirstFoundationAimY[playerid] = 0.0;
+	gBuildFirstFoundationAimZ[playerid] = 0.0;
+	gBuildFirstFoundationMinGroundZ[playerid] = 0.0;
+	gBuildFirstFoundationMaxGroundZ[playerid] = 0.0;
+	return 1;
+}
+
+stock LockBuildFirstFoundationAim(playerid, Float:aimX, Float:aimY, Float:aimZ, Float:minGroundZ, Float:maxGroundZ)
+{
+	if (minGroundZ > maxGroundZ)
+	{
+		new Float:tmp = minGroundZ;
+		minGroundZ = maxGroundZ;
+		maxGroundZ = tmp;
+	}
+
+	gBuildFirstFoundationAimLocked[playerid] = true;
+	gBuildFirstFoundationAimX[playerid] = aimX;
+	gBuildFirstFoundationAimY[playerid] = aimY;
+	gBuildFirstFoundationAimZ[playerid] = aimZ;
+	gBuildFirstFoundationMinGroundZ[playerid] = minGroundZ;
+	gBuildFirstFoundationMaxGroundZ[playerid] = maxGroundZ;
+	return 1;
+}
+
+stock ApplyBuildFirstFoundationAimLock(playerid, &Float:aimX, &Float:aimY, &Float:aimZ, &aimSurfaceState, &Float:minGroundZ, &Float:maxGroundZ)
+{
+	if (gBuildFoundationCount[playerid] > 0)
+	{
+		ResetBuildFirstFoundationAimLock(playerid);
+		return 1;
+	}
+
+	if (aimSurfaceState == BUILD_DEMO_AIM_SURFACE_BLOCKED_NON_GROUND)
+	{
+		if (gBuildFirstFoundationAimLocked[playerid]
+			&& GetBuildDistance2D(aimX, aimY, gBuildFirstFoundationAimX[playerid], gBuildFirstFoundationAimY[playerid]) <= BUILD_DEMO_FIRST_FOUNDATION_LOCK_RADIUS)
+		{
+			aimX = gBuildFirstFoundationAimX[playerid];
+			aimY = gBuildFirstFoundationAimY[playerid];
+			aimZ = gBuildFirstFoundationAimZ[playerid];
+			minGroundZ = gBuildFirstFoundationMinGroundZ[playerid];
+			maxGroundZ = gBuildFirstFoundationMaxGroundZ[playerid];
+			aimSurfaceState = BUILD_DEMO_AIM_SURFACE_GROUND;
+		}
+		return 1;
+	}
+
+	if (!gBuildFirstFoundationAimLocked[playerid])
+	{
+		return LockBuildFirstFoundationAim(playerid, aimX, aimY, aimZ, minGroundZ, maxGroundZ);
+	}
+
+	if (GetBuildDistance2D(aimX, aimY, gBuildFirstFoundationAimX[playerid], gBuildFirstFoundationAimY[playerid]) > BUILD_DEMO_FIRST_FOUNDATION_LOCK_RADIUS)
+	{
+		return LockBuildFirstFoundationAim(playerid, aimX, aimY, aimZ, minGroundZ, maxGroundZ);
+	}
+
+	aimX = gBuildFirstFoundationAimX[playerid];
+	aimY = gBuildFirstFoundationAimY[playerid];
+	aimZ = gBuildFirstFoundationAimZ[playerid];
+	minGroundZ = gBuildFirstFoundationMinGroundZ[playerid];
+	maxGroundZ = gBuildFirstFoundationMaxGroundZ[playerid];
+	return 1;
+}
+
 stock ResetBuildPreviewState(playerid)
 {
 	gBuildSelectedPart[playerid] = 0;
@@ -731,7 +905,10 @@ stock ResetBuildPreviewState(playerid)
 	gBuildPreviewRX[playerid] = 0.0;
 	gBuildPreviewRY[playerid] = 0.0;
 	gBuildPreviewRZ[playerid] = 0.0;
-	gBuildPreviewFoundationHeightStep[playerid] = BUILD_DEMO_FOUNDATION_DEFAULT_HEIGHT_STEP;
+	gBuildPreviewFoundationHeightStep[playerid] = 0;
+	ResetBuildFoundationSnapHeightLock(playerid);
+	ResetBuildFirstFoundationAimLock(playerid);
+	SetBuildAimHit(playerid, false, 0.0, 0.0, 0.0);
 	gBuildRemoveTargetNextUpdate[playerid] = 0;
 	gBuildRemoveFocusedObject[playerid] = -1;
 	SetBuildPreviewCandidate(playerid, false, -1, -1, BUILD_DEMO_SLOT_NONE, "");
@@ -1010,6 +1187,127 @@ stock bool:ComputeAimPoint(playerid, Float:zOffset, &Float:x, &Float:y, &Float:z
 	return true;
 }
 
+stock SetBuildAimGroundHit(playerid, bool:hasAimHit, Float:aimX, Float:aimY, Float:aimZ, aimSurfaceState, Float:footprintMinGroundZ, Float:footprintMaxGroundZ)
+{
+	if (!hasAimHit)
+	{
+		gBuildAimHitValid[playerid] = false;
+		gBuildAimHitUntil[playerid] = 0;
+		gBuildAimHitX[playerid] = 0.0;
+		gBuildAimHitY[playerid] = 0.0;
+		gBuildAimHitZ[playerid] = 0.0;
+		gBuildAimSurfaceState[playerid] = BUILD_DEMO_AIM_SURFACE_NONE;
+		gBuildAimFootprintMinGroundZ[playerid] = 0.0;
+		gBuildAimFootprintMaxGroundZ[playerid] = 0.0;
+		return 1;
+	}
+
+	if (aimSurfaceState < BUILD_DEMO_AIM_SURFACE_NONE || aimSurfaceState > BUILD_DEMO_AIM_SURFACE_BLOCKED_NON_GROUND)
+	{
+		aimSurfaceState = BUILD_DEMO_AIM_SURFACE_GROUND;
+	}
+	if (footprintMinGroundZ > footprintMaxGroundZ)
+	{
+		new Float:tmp = footprintMinGroundZ;
+		footprintMinGroundZ = footprintMaxGroundZ;
+		footprintMaxGroundZ = tmp;
+	}
+
+	gBuildAimHitValid[playerid] = true;
+	gBuildAimHitUntil[playerid] = GetTickCount() + BUILD_DEMO_AIM_HIT_TTL_MS;
+	gBuildAimHitX[playerid] = aimX;
+	gBuildAimHitY[playerid] = aimY;
+	gBuildAimHitZ[playerid] = aimZ;
+	gBuildAimSurfaceState[playerid] = aimSurfaceState;
+	gBuildAimFootprintMinGroundZ[playerid] = footprintMinGroundZ;
+	gBuildAimFootprintMaxGroundZ[playerid] = footprintMaxGroundZ;
+	return 1;
+}
+
+stock SetBuildAimHit(playerid, bool:hasAimHit, Float:aimX, Float:aimY, Float:aimZ)
+{
+	return SetBuildAimGroundHit(playerid, hasAimHit, aimX, aimY, aimZ, hasAimHit ? BUILD_DEMO_AIM_SURFACE_GROUND : BUILD_DEMO_AIM_SURFACE_NONE, aimZ, aimZ);
+}
+
+stock bool:IsBuildAimHitFresh(playerid)
+{
+	if (!gBuildAimHitValid[playerid])
+	{
+		return false;
+	}
+
+	if (GetTickCount() > gBuildAimHitUntil[playerid])
+	{
+		gBuildAimHitValid[playerid] = false;
+		gBuildAimSurfaceState[playerid] = BUILD_DEMO_AIM_SURFACE_NONE;
+		return false;
+	}
+
+	return true;
+}
+
+stock bool:GetBuildAimHit(playerid, &Float:x, &Float:y, &Float:z)
+{
+	if (!IsBuildAimHitFresh(playerid))
+	{
+		return false;
+	}
+
+	x = gBuildAimHitX[playerid];
+	y = gBuildAimHitY[playerid];
+	z = gBuildAimHitZ[playerid];
+	return true;
+}
+
+stock bool:GetBuildAimGroundRange(playerid, Float:fallbackGroundZ, &aimSurfaceState, &Float:minGroundZ, &Float:maxGroundZ)
+{
+	if (!IsBuildAimHitFresh(playerid))
+	{
+		aimSurfaceState = BUILD_DEMO_AIM_SURFACE_NONE;
+		minGroundZ = fallbackGroundZ;
+		maxGroundZ = fallbackGroundZ;
+		return false;
+	}
+
+	aimSurfaceState = gBuildAimSurfaceState[playerid];
+	minGroundZ = gBuildAimFootprintMinGroundZ[playerid];
+	maxGroundZ = gBuildAimFootprintMaxGroundZ[playerid];
+	if (minGroundZ > maxGroundZ)
+	{
+		new Float:tmp = minGroundZ;
+		minGroundZ = maxGroundZ;
+		maxGroundZ = tmp;
+	}
+	return true;
+}
+
+stock bool:ResolveBuildAimPoint(playerid, Float:zOffset, &Float:x, &Float:y, &Float:z, &Float:angle)
+{
+	new Float:fallbackX;
+	new Float:fallbackY;
+	new Float:fallbackZ;
+	new bool:fallbackReady = ComputeAimPoint(playerid, zOffset, fallbackX, fallbackY, fallbackZ, angle);
+
+	if (GetBuildAimHit(playerid, x, y, z))
+	{
+		if (!fallbackReady)
+		{
+			GetPlayerFacingAngle(playerid, angle);
+		}
+		return true;
+	}
+
+	if (!fallbackReady)
+	{
+		return false;
+	}
+
+	x = fallbackX;
+	y = fallbackY;
+	z = fallbackZ;
+	return true;
+}
+
 stock bool:GetNearestFoundationCenterToPoint(playerid, Float:aimX, Float:aimY, &foundationIndex, &Float:centerX, &Float:centerY, &Float:centerZ, &Float:centerA, &Float:centerDistance)
 {
 	if (gBuildFoundationCount[playerid] <= 0)
@@ -1181,21 +1479,25 @@ stock bool:GetNearestFoundationEdgeOnFoundationToPoint(playerid, foundationIndex
 stock bool:ComputeBuildPreview(playerid, partid, rotationStep, bool:flipped, &modelid, &Float:x, &Float:y, &Float:z, &Float:rx, &Float:ry, &Float:rz)
 {
 	new stateRotationStep = GetBuildRotationStepForPart(partid, rotationStep);
-	modelid = GetBuildPartModelForState(partid, stateRotationStep);
+	modelid = GetBuildPartModel(partid);
 	if (modelid == 0)
 	{
 		SetBuildPreviewCandidate(playerid, false, -1, -1, BUILD_DEMO_SLOT_NONE, "Unknown build part.");
 		return false;
 	}
 
-	gBuildPreviewFoundationHeightStep[playerid] = partid == SAMPP_BUILD_PART_FOUNDATION ? stateRotationStep : 0;
+	gBuildPreviewFoundationHeightStep[playerid] = 0;
 	rx = 0.0;
 	ry = 0.0;
 	rz = 0.0;
 	SetBuildPreviewCandidate(playerid, false, -1, -1, BUILD_DEMO_SLOT_NONE, "");
+	if (partid != SAMPP_BUILD_PART_FOUNDATION)
+	{
+		ResetBuildFoundationSnapHeightLock(playerid);
+	}
 
 	new Float:aimX, Float:aimY, Float:aimZ, Float:playerAngle;
-	if (!ComputeAimPoint(playerid, BUILD_DEMO_FOUNDATION_Z_OFFSET, aimX, aimY, aimZ, playerAngle))
+	if (!ResolveBuildAimPoint(playerid, BUILD_DEMO_FOUNDATION_Z_OFFSET, aimX, aimY, aimZ, playerAngle))
 	{
 		SetBuildPreviewCandidate(playerid, false, -1, -1, BUILD_DEMO_SLOT_NONE, "Could not compute camera aim point.");
 		return false;
@@ -1205,6 +1507,31 @@ stock bool:ComputeBuildPreview(playerid, partid, rotationStep, bool:flipped, &mo
 	{
 		case SAMPP_BUILD_PART_FOUNDATION:
 		{
+			new aimSurfaceState;
+			new Float:footprintMinGroundZ;
+			new Float:footprintMaxGroundZ;
+			new bool:groundRangeReliable = GetBuildAimGroundRange(playerid, aimZ, aimSurfaceState, footprintMinGroundZ, footprintMaxGroundZ);
+			if (gBuildFoundationCount[playerid] == 0)
+			{
+				ApplyBuildFirstFoundationAimLock(playerid, aimX, aimY, aimZ, aimSurfaceState, footprintMinGroundZ, footprintMaxGroundZ);
+			}
+			else
+			{
+				ResetBuildFirstFoundationAimLock(playerid);
+			}
+			if (aimSurfaceState == BUILD_DEMO_AIM_SURFACE_BLOCKED_NON_GROUND)
+			{
+				x = aimX;
+				y = aimY;
+				z = footprintMaxGroundZ + BUILD_DEMO_FOUNDATION_TOP_CLEARANCE;
+				rz = GetBuildGridAngle(playerAngle);
+				new Float:blockedRequiredHeight;
+				TryGetBuildFoundationAutoHeightStepFromRange(z, footprintMinGroundZ, footprintMaxGroundZ, gBuildPreviewFoundationHeightStep[playerid], blockedRequiredHeight);
+				modelid = GetBuildFoundationModel(gBuildPreviewFoundationHeightStep[playerid]);
+				SetBuildPreviewCandidate(playerid, false, -1, -1, BUILD_DEMO_SLOT_NONE, "Aim at terrain ground, not a wall or object.");
+				return true;
+			}
+
 			if (gBuildFoundationCount[playerid] > 0)
 			{
 				new parentIndex;
@@ -1217,28 +1544,95 @@ stock bool:ComputeBuildPreview(playerid, partid, rotationStep, bool:flipped, &mo
 					rz = NormalizeBuildAngle(snapA);
 					if (occupied)
 					{
+						ResetBuildFoundationSnapHeightLock(playerid);
+						modelid = GetBuildFoundationModel(gBuildPreviewFoundationHeightStep[playerid]);
 						SetBuildPreviewCandidate(playerid, false, parentIndex, slotIndex, BUILD_DEMO_SLOT_NONE, "That foundation neighbour slot is already occupied.");
+						return true;
+					}
+
+					if (gBuildFoundationSnapHeightLocked[playerid]
+						&& gBuildFoundationSnapHeightParent[playerid] == parentIndex
+						&& gBuildFoundationSnapHeightSlot[playerid] == slotIndex)
+					{
+						gBuildPreviewFoundationHeightStep[playerid] = gBuildFoundationSnapHeightStep[playerid];
+						modelid = GetBuildFoundationModel(gBuildPreviewFoundationHeightStep[playerid]);
+						SetBuildPreviewCandidate(playerid, true, parentIndex, slotIndex, BUILD_DEMO_SLOT_NONE, "");
+						return true;
+					}
+
+					new Float:requiredHeight;
+					new Float:snapMinGroundZ = footprintMinGroundZ;
+					new Float:snapMaxGroundZ = footprintMaxGroundZ;
+					new bool:terrainIntersects = groundRangeReliable && snapMaxGroundZ > z + BUILD_DEMO_FOUNDATION_TOP_CLEARANCE + BUILD_DEMO_FOUNDATION_SNAP_TERRAIN_EPSILON;
+					if (!terrainIntersects && snapMaxGroundZ > z - BUILD_DEMO_FOUNDATION_TOP_CLEARANCE)
+					{
+						snapMaxGroundZ = z - BUILD_DEMO_FOUNDATION_TOP_CLEARANCE;
+					}
+					if (snapMinGroundZ > snapMaxGroundZ)
+					{
+						snapMinGroundZ = snapMaxGroundZ;
+					}
+					if ((z - snapMinGroundZ) + BUILD_DEMO_FOUNDATION_GROUND_EMBED > BUILD_DEMO_FOUNDATION_MAX_HEIGHT + 0.001)
+					{
+						snapMinGroundZ = aimZ;
+					}
+					new bool:heightOk = !terrainIntersects && TryGetBuildFoundationAutoHeightStepFromRange(z, snapMinGroundZ, snapMaxGroundZ, gBuildPreviewFoundationHeightStep[playerid], requiredHeight);
+					modelid = GetBuildFoundationModel(gBuildPreviewFoundationHeightStep[playerid]);
+					if (terrainIntersects)
+					{
+						ResetBuildFoundationSnapHeightLock(playerid);
+						SetBuildPreviewCandidate(playerid, false, parentIndex, slotIndex, BUILD_DEMO_SLOT_NONE, "Foundation level intersects terrain here.");
+					}
+					else if (!heightOk)
+					{
+						ResetBuildFoundationSnapHeightLock(playerid);
+						SetBuildPreviewCandidate(playerid, false, parentIndex, slotIndex, BUILD_DEMO_SLOT_NONE, "Ground is too far below this foundation level.");
 					}
 					else
 					{
+						gBuildFoundationSnapHeightLocked[playerid] = true;
+						gBuildFoundationSnapHeightParent[playerid] = parentIndex;
+						gBuildFoundationSnapHeightSlot[playerid] = slotIndex;
+						gBuildFoundationSnapHeightStep[playerid] = gBuildPreviewFoundationHeightStep[playerid];
 						SetBuildPreviewCandidate(playerid, true, parentIndex, slotIndex, BUILD_DEMO_SLOT_NONE, "");
 					}
 					return true;
 				}
 
+				ResetBuildFoundationSnapHeightLock(playerid);
 				x = aimX;
 				y = aimY;
-				z = aimZ;
+				z = gBuildFoundationZ[playerid];
 				rz = GetBuildGridAngle(playerAngle);
+				new Float:requiredHeight;
+				TryGetBuildFoundationAutoHeightStepFromRange(z, footprintMinGroundZ, footprintMaxGroundZ, gBuildPreviewFoundationHeightStep[playerid], requiredHeight);
+				modelid = GetBuildFoundationModel(gBuildPreviewFoundationHeightStep[playerid]);
 				SetBuildPreviewCandidate(playerid, false, -1, -1, BUILD_DEMO_SLOT_NONE, "Aim near an empty foundation neighbour slot.");
 				return true;
 			}
 
+			ResetBuildFoundationSnapHeightLock(playerid);
+			new Float:lift = GetBuildFoundationLiftFromStep(stateRotationStep);
 			x = aimX;
 			y = aimY;
-			z = aimZ;
+			z = aimZ + lift;
+			new Float:minTopZ = footprintMaxGroundZ + BUILD_DEMO_FOUNDATION_TOP_CLEARANCE;
+			if (z < minTopZ)
+			{
+				z = minTopZ;
+			}
 			rz = GetBuildGridAngle(playerAngle);
-			SetBuildPreviewCandidate(playerid, true, -1, -1, BUILD_DEMO_SLOT_NONE, "");
+			new Float:requiredHeight;
+			new bool:heightOk = TryGetBuildFoundationAutoHeightStepFromRange(z, footprintMinGroundZ, footprintMaxGroundZ, gBuildPreviewFoundationHeightStep[playerid], requiredHeight);
+			modelid = GetBuildFoundationModel(gBuildPreviewFoundationHeightStep[playerid]);
+			if (!heightOk)
+			{
+				SetBuildPreviewCandidate(playerid, false, -1, -1, BUILD_DEMO_SLOT_NONE, "Ground is too far below this foundation level.");
+			}
+			else
+			{
+				SetBuildPreviewCandidate(playerid, true, -1, -1, BUILD_DEMO_SLOT_NONE, "");
+			}
 			return true;
 		}
 		case SAMPP_BUILD_PART_WALL, SAMPP_BUILD_PART_DOORFRAME:
@@ -1403,7 +1797,7 @@ stock RefreshBuildPreview(playerid, bool:force = false)
 		return 0;
 	}
 
-	new previewModelId = GetBuildPreviewPartModelForState(gBuildSelectedPart[playerid], gBuildPreviewPlaceable[playerid], gBuildRotationStep[playerid]);
+	new previewModelId = GetBuildPreviewPartModelForState(gBuildSelectedPart[playerid], gBuildPreviewPlaceable[playerid], gBuildPreviewFoundationHeightStep[playerid]);
 	if (gBuildPreviewObject[playerid] == INVALID_OBJECT_ID || gBuildPreviewModel[playerid] != previewModelId)
 	{
 		DestroyBuildPreview(playerid);
@@ -2322,7 +2716,7 @@ stock PlaceBuildDemoPart(playerid, partid, rotationStep, bool:flipped)
 	}
 
 	gBuildSelectedPart[playerid] = partid;
-	gBuildRotationStep[playerid] = GetBuildRotationStepForPart(partid, rotationStep);
+	gBuildRotationStep[playerid] = GetBuildPlacementRotationStep(playerid, partid, rotationStep);
 	gBuildFlipped[playerid] = BuildDemoPartSupportsVariant(partid) ? flipped : false;
 
 	if (!RefreshBuildPreview(playerid, true))
@@ -2343,7 +2737,7 @@ stock PlaceBuildDemoPart(playerid, partid, rotationStep, bool:flipped)
 		return SAMPP_BuildSendResult(playerid, SAMPP_BUILD_RESULT_ERROR, message);
 	}
 
-	new modelid = GetBuildPartModelForState(partid, gBuildRotationStep[playerid]);
+	new modelid = GetBuildPartModelForState(partid, gBuildPreviewFoundationHeightStep[playerid]);
 	new objectid = CreateObject(
 		modelid,
 		gBuildPreviewX[playerid],
@@ -2372,6 +2766,7 @@ stock PlaceBuildDemoPart(playerid, partid, rotationStep, bool:flipped)
 	}
 
 	DestroyBuildPreview(playerid);
+	ResetBuildFoundationSnapHeightLock(playerid);
 	RefreshBuildPreview(playerid, true);
 	return SAMPP_BuildSendResult(playerid, SAMPP_BUILD_RESULT_SUCCESS, "Part placed from preview.");
 }
@@ -2381,7 +2776,7 @@ stock SendBuildDemoHelp(playerid)
 	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] /builddemo opens a server-authoritative build menu.");
 	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] Select a part first; a temporary player-object preview follows your camera aim.");
 	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] LMB confirms the preview. RMB returns to the menu; RMB again or ESC closes. MMB switches side.");
-	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] Foundation height can be adjusted with Q/E before placement.");
+	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] Q/E sets only the first foundation top height; snapped foundations keep that same top level.");
 	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] Foundations snap to neighbours; walls/door frames snap to edge surfaces automatically.");
 	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] Aim a placed door from nearby and use the ALT target prompt to open or close it.");
 	SendClientMessage(playerid, BUILD_DEMO_COLOUR, "[BuildDemo] Tools > Remove enters orange remove mode. Aim a placed part and press LMB to delete it.");
@@ -2509,8 +2904,12 @@ stock GetBuildDemoSession(playerid)
 stock SetBuildDemoSelection(playerid, partid, rotationStep, bool:flipped, bool:forceRefresh = true)
 {
 	gBuildSelectedPart[playerid] = partid;
-	gBuildRotationStep[playerid] = GetBuildRotationStepForPart(partid, rotationStep);
+	gBuildRotationStep[playerid] = GetBuildPlacementRotationStep(playerid, partid, rotationStep);
 	gBuildFlipped[playerid] = BuildDemoPartSupportsVariant(partid) ? flipped : false;
+	if (partid != SAMPP_BUILD_PART_FOUNDATION || gBuildFoundationCount[playerid] > 0)
+	{
+		ResetBuildFirstFoundationAimLock(playerid);
+	}
 	if (partid == SAMPP_BUILD_PART_REMOVE)
 	{
 		DestroyBuildPreview(playerid);
@@ -2632,7 +3031,21 @@ public OnPlayerOMPPlusBuildSelect(playerid, sessionid, partid)
 		return 1;
 	}
 
-	SetBuildDemoSelection(playerid, partid, GetBuildDefaultRotationStep(partid), false, true);
+	if (partid == SAMPP_BUILD_PART_FOUNDATION)
+	{
+		gBuildSelectedPart[playerid] = partid;
+		gBuildRotationStep[playerid] = GetBuildDefaultRotationStep(partid);
+		gBuildFlipped[playerid] = false;
+		ResetBuildFoundationSnapHeightLock(playerid);
+		ResetBuildFirstFoundationAimLock(playerid);
+		SetBuildAimHit(playerid, false, 0.0, 0.0, 0.0);
+		SendBuildRemoveFocus(playerid, false);
+		DestroyBuildPreview(playerid);
+	}
+	else
+	{
+		SetBuildDemoSelection(playerid, partid, GetBuildDefaultRotationStep(partid), false, true);
+	}
 
 	new message[96];
 	if (partid == SAMPP_BUILD_PART_REMOVE)
@@ -2664,6 +3077,31 @@ public OnPlayerOMPPlusBuildPreview(playerid, sessionid, partid, rotation_step, b
 		return 1;
 	}
 
+	SetBuildAimHit(playerid, false, 0.0, 0.0, 0.0);
+	SetBuildDemoSelection(playerid, partid, rotation_step, flipped, true);
+	return 1;
+}
+
+public OnPlayerOMPPlusBuildPreviewEx(playerid, sessionid, partid, rotation_step, bool:flipped, bool:has_aim_hit, Float:aim_x, Float:aim_y, Float:aim_z)
+{
+	if (sessionid != GetBuildDemoSession(playerid))
+	{
+		return 1;
+	}
+
+	SetBuildAimHit(playerid, has_aim_hit, aim_x, aim_y, aim_z);
+	SetBuildDemoSelection(playerid, partid, rotation_step, flipped, true);
+	return 1;
+}
+
+public OnPlayerOMPPlusBuildPreviewGroundEx(playerid, sessionid, partid, rotation_step, bool:flipped, bool:has_aim_hit, Float:aim_x, Float:aim_y, Float:aim_z, aim_surface_state, Float:footprint_min_ground_z, Float:footprint_max_ground_z)
+{
+	if (sessionid != GetBuildDemoSession(playerid))
+	{
+		return 1;
+	}
+
+	SetBuildAimGroundHit(playerid, has_aim_hit, aim_x, aim_y, aim_z, aim_surface_state, footprint_min_ground_z, footprint_max_ground_z);
 	SetBuildDemoSelection(playerid, partid, rotation_step, flipped, true);
 	return 1;
 }
@@ -2675,6 +3113,29 @@ public OnPlayerOMPPlusBuildPlace(playerid, sessionid, partid, rotation_step, boo
 		return 1;
 	}
 
+	SetBuildAimHit(playerid, false, 0.0, 0.0, 0.0);
+	return PlaceBuildDemoPart(playerid, partid, rotation_step, flipped);
+}
+
+public OnPlayerOMPPlusBuildPlaceEx(playerid, sessionid, partid, rotation_step, bool:flipped, bool:has_aim_hit, Float:aim_x, Float:aim_y, Float:aim_z)
+{
+	if (sessionid != GetBuildDemoSession(playerid))
+	{
+		return 1;
+	}
+
+	SetBuildAimHit(playerid, has_aim_hit, aim_x, aim_y, aim_z);
+	return PlaceBuildDemoPart(playerid, partid, rotation_step, flipped);
+}
+
+public OnPlayerOMPPlusBuildPlaceGroundEx(playerid, sessionid, partid, rotation_step, bool:flipped, bool:has_aim_hit, Float:aim_x, Float:aim_y, Float:aim_z, aim_surface_state, Float:footprint_min_ground_z, Float:footprint_max_ground_z)
+{
+	if (sessionid != GetBuildDemoSession(playerid))
+	{
+		return 1;
+	}
+
+	SetBuildAimGroundHit(playerid, has_aim_hit, aim_x, aim_y, aim_z, aim_surface_state, footprint_min_ground_z, footprint_max_ground_z);
 	return PlaceBuildDemoPart(playerid, partid, rotation_step, flipped);
 }
 

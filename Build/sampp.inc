@@ -145,6 +145,10 @@
 #define SAMPP_BUILD_RESULT_PREVIEW_VALID 3
 #define SAMPP_BUILD_RESULT_PREVIEW_INVALID 4
 
+#define SAMPP_BUILD_AIM_SURFACE_NONE 0
+#define SAMPP_BUILD_AIM_SURFACE_GROUND 1
+#define SAMPP_BUILD_AIM_SURFACE_BLOCKED_NON_GROUND 2
+
 #define SAMPP_BUILD_PART_NONE 0
 #define SAMPP_BUILD_PART_FOUNDATION 1
 #define SAMPP_BUILD_PART_WALL 2
@@ -452,12 +456,20 @@ forward OnPlayerOMPPlusTargetMode(playerid, targetid, bool:opened);
 forward OnPlayerOMPPlusTargetSelect(playerid, targetid, optionid);
 forward OnPlayerSAMPPBuildSelect(playerid, sessionid, partid);
 forward OnPlayerSAMPPBuildPlace(playerid, sessionid, partid, rotation_step, bool:flipped);
+forward OnPlayerSAMPPBuildPlaceEx(playerid, sessionid, partid, rotation_step, bool:flipped, bool:has_aim_hit, Float:aim_x, Float:aim_y, Float:aim_z);
+forward OnPlayerSAMPPBuildPlaceGroundEx(playerid, sessionid, partid, rotation_step, bool:flipped, bool:has_aim_hit, Float:aim_x, Float:aim_y, Float:aim_z, aim_surface_state, Float:footprint_min_ground_z, Float:footprint_max_ground_z);
 forward OnPlayerSAMPPBuildCancel(playerid, sessionid);
 forward OnPlayerSAMPPBuildPreview(playerid, sessionid, partid, rotation_step, bool:flipped);
+forward OnPlayerSAMPPBuildPreviewEx(playerid, sessionid, partid, rotation_step, bool:flipped, bool:has_aim_hit, Float:aim_x, Float:aim_y, Float:aim_z);
+forward OnPlayerSAMPPBuildPreviewGroundEx(playerid, sessionid, partid, rotation_step, bool:flipped, bool:has_aim_hit, Float:aim_x, Float:aim_y, Float:aim_z, aim_surface_state, Float:footprint_min_ground_z, Float:footprint_max_ground_z);
 forward OnPlayerOMPPlusBuildSelect(playerid, sessionid, partid);
 forward OnPlayerOMPPlusBuildPlace(playerid, sessionid, partid, rotation_step, bool:flipped);
+forward OnPlayerOMPPlusBuildPlaceEx(playerid, sessionid, partid, rotation_step, bool:flipped, bool:has_aim_hit, Float:aim_x, Float:aim_y, Float:aim_z);
+forward OnPlayerOMPPlusBuildPlaceGroundEx(playerid, sessionid, partid, rotation_step, bool:flipped, bool:has_aim_hit, Float:aim_x, Float:aim_y, Float:aim_z, aim_surface_state, Float:footprint_min_ground_z, Float:footprint_max_ground_z);
 forward OnPlayerOMPPlusBuildCancel(playerid, sessionid);
 forward OnPlayerOMPPlusBuildPreview(playerid, sessionid, partid, rotation_step, bool:flipped);
+forward OnPlayerOMPPlusBuildPreviewEx(playerid, sessionid, partid, rotation_step, bool:flipped, bool:has_aim_hit, Float:aim_x, Float:aim_y, Float:aim_z);
+forward OnPlayerOMPPlusBuildPreviewGroundEx(playerid, sessionid, partid, rotation_step, bool:flipped, bool:has_aim_hit, Float:aim_x, Float:aim_y, Float:aim_z, aim_surface_state, Float:footprint_min_ground_z, Float:footprint_max_ground_z);
 
 public OnPlayerConnect(playerid)
 {

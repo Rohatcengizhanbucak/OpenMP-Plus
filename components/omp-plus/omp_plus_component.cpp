@@ -59,6 +59,58 @@ namespace
 			|| rowType == OMPPlusProtocol::TargetRowToggle
 			|| rowType == OMPPlusProtocol::TargetRowDanger;
 	}
+
+	struct BuildAimPayload
+	{
+		bool hasAimHit = false;
+		float aimX = 0.0f;
+		float aimY = 0.0f;
+		float aimZ = 0.0f;
+		uint8_t aimSurfaceState = 0;
+		float footprintMinGroundZ = 0.0f;
+		float footprintMaxGroundZ = 0.0f;
+	};
+
+	void ReadBuildAimPayload(NetworkBitStream& stream, BuildAimPayload& payload)
+	{
+		payload = {};
+
+		bool payloadHasHit = false;
+		float payloadX = 0.0f;
+		float payloadY = 0.0f;
+		float payloadZ = 0.0f;
+		if (!stream.Read(payloadHasHit))
+			return;
+		if (!stream.Read(payloadX) || !stream.Read(payloadY) || !stream.Read(payloadZ))
+			return;
+
+		payload.hasAimHit = payloadHasHit;
+		payload.aimX = payloadX;
+		payload.aimY = payloadY;
+		payload.aimZ = payloadZ;
+		payload.aimSurfaceState = payloadHasHit ? 1 : 0;
+		payload.footprintMinGroundZ = payloadZ;
+		payload.footprintMaxGroundZ = payloadZ;
+
+		uint8_t surfaceState = payload.aimSurfaceState;
+		float footprintMinGroundZ = payload.footprintMinGroundZ;
+		float footprintMaxGroundZ = payload.footprintMaxGroundZ;
+		if (!stream.Read(surfaceState) || !stream.Read(footprintMinGroundZ) || !stream.Read(footprintMaxGroundZ))
+			return;
+
+		if (surfaceState > 2)
+			surfaceState = payloadHasHit ? 1 : 0;
+		if (footprintMinGroundZ > footprintMaxGroundZ)
+		{
+			const float tmp = footprintMinGroundZ;
+			footprintMinGroundZ = footprintMaxGroundZ;
+			footprintMaxGroundZ = tmp;
+		}
+
+		payload.aimSurfaceState = surfaceState;
+		payload.footprintMinGroundZ = footprintMinGroundZ;
+		payload.footprintMaxGroundZ = footprintMaxGroundZ;
+	}
 }
 
 OMPPlusComponent* OMPPlusComponent::getInstance()
@@ -944,6 +996,8 @@ void OMPPlusComponent::processBuildPlace(IPlayer& player, NetworkBitStream& stre
 	bool flipped = false;
 	if (!stream.Read(sessionid) || !stream.Read(partid) || !stream.Read(rotationStep) || !stream.Read(flipped))
 		return;
+	BuildAimPayload aim;
+	ReadBuildAimPayload(stream, aim);
 
 	if (playerid < 0 || playerid >= PLAYER_POOL_SIZE)
 		return;
@@ -964,8 +1018,20 @@ void OMPPlusComponent::processBuildPlace(IPlayer& player, NetworkBitStream& stre
 		return;
 
 	context.lastPlaceAt = now;
-	callPublic("OnPlayerSAMPPBuildPlace", DefaultReturnValue_True, playerid, static_cast<int>(sessionid), static_cast<int>(partid), static_cast<int>(rotationStep), flipped ? 1 : 0);
-	callPublic("OnPlayerOMPPlusBuildPlace", DefaultReturnValue_True, playerid, static_cast<int>(sessionid), static_cast<int>(partid), static_cast<int>(rotationStep), flipped ? 1 : 0);
+	bool calledGroundEx = false;
+	callPublicIfExists("OnPlayerSAMPPBuildPlaceGroundEx", DefaultReturnValue_True, calledGroundEx, playerid, static_cast<int>(sessionid), static_cast<int>(partid), static_cast<int>(rotationStep), flipped ? 1 : 0, aim.hasAimHit ? 1 : 0, aim.aimX, aim.aimY, aim.aimZ, static_cast<int>(aim.aimSurfaceState), aim.footprintMinGroundZ, aim.footprintMaxGroundZ);
+	callPublicIfExists("OnPlayerOMPPlusBuildPlaceGroundEx", DefaultReturnValue_True, calledGroundEx, playerid, static_cast<int>(sessionid), static_cast<int>(partid), static_cast<int>(rotationStep), flipped ? 1 : 0, aim.hasAimHit ? 1 : 0, aim.aimX, aim.aimY, aim.aimZ, static_cast<int>(aim.aimSurfaceState), aim.footprintMinGroundZ, aim.footprintMaxGroundZ);
+	bool calledEx = calledGroundEx;
+	if (!calledGroundEx)
+	{
+		callPublicIfExists("OnPlayerSAMPPBuildPlaceEx", DefaultReturnValue_True, calledEx, playerid, static_cast<int>(sessionid), static_cast<int>(partid), static_cast<int>(rotationStep), flipped ? 1 : 0, aim.hasAimHit ? 1 : 0, aim.aimX, aim.aimY, aim.aimZ);
+		callPublicIfExists("OnPlayerOMPPlusBuildPlaceEx", DefaultReturnValue_True, calledEx, playerid, static_cast<int>(sessionid), static_cast<int>(partid), static_cast<int>(rotationStep), flipped ? 1 : 0, aim.hasAimHit ? 1 : 0, aim.aimX, aim.aimY, aim.aimZ);
+	}
+	if (!calledEx)
+	{
+		callPublic("OnPlayerSAMPPBuildPlace", DefaultReturnValue_True, playerid, static_cast<int>(sessionid), static_cast<int>(partid), static_cast<int>(rotationStep), flipped ? 1 : 0);
+		callPublic("OnPlayerOMPPlusBuildPlace", DefaultReturnValue_True, playerid, static_cast<int>(sessionid), static_cast<int>(partid), static_cast<int>(rotationStep), flipped ? 1 : 0);
+	}
 }
 
 void OMPPlusComponent::processBuildCancel(IPlayer& player, NetworkBitStream& stream)
@@ -996,6 +1062,8 @@ void OMPPlusComponent::processBuildPreview(IPlayer& player, NetworkBitStream& st
 	bool flipped = false;
 	if (!stream.Read(sessionid) || !stream.Read(partid) || !stream.Read(rotationStep) || !stream.Read(flipped))
 		return;
+	BuildAimPayload aim;
+	ReadBuildAimPayload(stream, aim);
 
 	if (playerid < 0 || playerid >= PLAYER_POOL_SIZE)
 		return;
@@ -1006,8 +1074,20 @@ void OMPPlusComponent::processBuildPreview(IPlayer& player, NetworkBitStream& st
 
 	if (partid == 0)
 	{
-		callPublic("OnPlayerSAMPPBuildPreview", DefaultReturnValue_True, playerid, static_cast<int>(sessionid), 0, 0, 0);
-		callPublic("OnPlayerOMPPlusBuildPreview", DefaultReturnValue_True, playerid, static_cast<int>(sessionid), 0, 0, 0);
+		bool calledGroundEx = false;
+		callPublicIfExists("OnPlayerSAMPPBuildPreviewGroundEx", DefaultReturnValue_True, calledGroundEx, playerid, static_cast<int>(sessionid), 0, 0, 0, 0, 0.0f, 0.0f, 0.0f, 0, 0.0f, 0.0f);
+		callPublicIfExists("OnPlayerOMPPlusBuildPreviewGroundEx", DefaultReturnValue_True, calledGroundEx, playerid, static_cast<int>(sessionid), 0, 0, 0, 0, 0.0f, 0.0f, 0.0f, 0, 0.0f, 0.0f);
+		bool calledEx = calledGroundEx;
+		if (!calledGroundEx)
+		{
+			callPublicIfExists("OnPlayerSAMPPBuildPreviewEx", DefaultReturnValue_True, calledEx, playerid, static_cast<int>(sessionid), 0, 0, 0, 0, 0.0f, 0.0f, 0.0f);
+			callPublicIfExists("OnPlayerOMPPlusBuildPreviewEx", DefaultReturnValue_True, calledEx, playerid, static_cast<int>(sessionid), 0, 0, 0, 0, 0.0f, 0.0f, 0.0f);
+		}
+		if (!calledEx)
+		{
+			callPublic("OnPlayerSAMPPBuildPreview", DefaultReturnValue_True, playerid, static_cast<int>(sessionid), 0, 0, 0);
+			callPublic("OnPlayerOMPPlusBuildPreview", DefaultReturnValue_True, playerid, static_cast<int>(sessionid), 0, 0, 0);
+		}
 		return;
 	}
 
@@ -1018,8 +1098,20 @@ void OMPPlusComponent::processBuildPreview(IPlayer& player, NetworkBitStream& st
 	if (partIt == context.parts.end())
 		return;
 
-	callPublic("OnPlayerSAMPPBuildPreview", DefaultReturnValue_True, playerid, static_cast<int>(sessionid), static_cast<int>(partid), static_cast<int>(rotationStep), flipped ? 1 : 0);
-	callPublic("OnPlayerOMPPlusBuildPreview", DefaultReturnValue_True, playerid, static_cast<int>(sessionid), static_cast<int>(partid), static_cast<int>(rotationStep), flipped ? 1 : 0);
+	bool calledGroundEx = false;
+	callPublicIfExists("OnPlayerSAMPPBuildPreviewGroundEx", DefaultReturnValue_True, calledGroundEx, playerid, static_cast<int>(sessionid), static_cast<int>(partid), static_cast<int>(rotationStep), flipped ? 1 : 0, aim.hasAimHit ? 1 : 0, aim.aimX, aim.aimY, aim.aimZ, static_cast<int>(aim.aimSurfaceState), aim.footprintMinGroundZ, aim.footprintMaxGroundZ);
+	callPublicIfExists("OnPlayerOMPPlusBuildPreviewGroundEx", DefaultReturnValue_True, calledGroundEx, playerid, static_cast<int>(sessionid), static_cast<int>(partid), static_cast<int>(rotationStep), flipped ? 1 : 0, aim.hasAimHit ? 1 : 0, aim.aimX, aim.aimY, aim.aimZ, static_cast<int>(aim.aimSurfaceState), aim.footprintMinGroundZ, aim.footprintMaxGroundZ);
+	bool calledEx = calledGroundEx;
+	if (!calledGroundEx)
+	{
+		callPublicIfExists("OnPlayerSAMPPBuildPreviewEx", DefaultReturnValue_True, calledEx, playerid, static_cast<int>(sessionid), static_cast<int>(partid), static_cast<int>(rotationStep), flipped ? 1 : 0, aim.hasAimHit ? 1 : 0, aim.aimX, aim.aimY, aim.aimZ);
+		callPublicIfExists("OnPlayerOMPPlusBuildPreviewEx", DefaultReturnValue_True, calledEx, playerid, static_cast<int>(sessionid), static_cast<int>(partid), static_cast<int>(rotationStep), flipped ? 1 : 0, aim.hasAimHit ? 1 : 0, aim.aimX, aim.aimY, aim.aimZ);
+	}
+	if (!calledEx)
+	{
+		callPublic("OnPlayerSAMPPBuildPreview", DefaultReturnValue_True, playerid, static_cast<int>(sessionid), static_cast<int>(partid), static_cast<int>(rotationStep), flipped ? 1 : 0);
+		callPublic("OnPlayerOMPPlusBuildPreview", DefaultReturnValue_True, playerid, static_cast<int>(sessionid), static_cast<int>(partid), static_cast<int>(rotationStep), flipped ? 1 : 0);
+	}
 }
 
 void OMPPlusComponent::sendHelloAck(IPlayer& player)

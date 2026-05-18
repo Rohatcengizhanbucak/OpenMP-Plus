@@ -15,6 +15,7 @@
 #include <cmath>
 #include <cstring>
 #include <cstdio>
+#include <cstdint>
 
 bool CBuildManager::m_active = false;
 bool CBuildManager::m_menuOpen = false;
@@ -35,6 +36,7 @@ unsigned int CBuildManager::m_selectedPartId = 0;
 float CBuildManager::m_maxDistance = 8.0f;
 int CBuildManager::m_rotationStep = 0;
 bool CBuildManager::m_flipped = false;
+unsigned long CBuildManager::m_nextPreviewSendAt = 0;
 unsigned long CBuildManager::m_statusUntil = 0;
 bool CBuildManager::m_statusSuccess = true;
 unsigned long CBuildManager::m_inputGuardUntil = 0;
@@ -133,7 +135,67 @@ namespace
 	const float RemoveBadgeMaxWidth = 302.0f;
 	const float RemoveBadgeHeight = 46.0f;
 	const float BuildUiScreenPadding = 12.0f;
-	const int BuildFoundationHeightSteps = 12;
+	const int BuildFoundationLiftSteps = 10;
+	const float BuildFoundationFootprintHalf = 1.5f;
+	const unsigned long BuildPreviewSendIntervalMs = 75;
+	const uintptr_t GtaCameraBase = 0x00B6F028;
+	const uintptr_t GtaCameraActiveCamOffset = 0x59;
+	const uintptr_t GtaCameraCamsOffset = 0x174;
+	const uintptr_t GtaCamSize = 0x238;
+	const uintptr_t GtaCamFrontOffset = 0x190;
+	const uintptr_t GtaCamSourceOffset = 0x19C;
+	const uintptr_t GtaProcessLineOfSightAddress = 0x56BA00;
+	const uintptr_t GtaFindGroundZForCoordAddress = 0x569660;
+	const float BuildAimGroundNormalMinZ = 0.45f;
+	const float BuildAimHighSurfaceThreshold = 1.0f;
+	const float BuildFoundationFootprintProbeInset = 0.15f;
+	const float BuildFoundationAimLockRadius = 1.75f;
+	const float BuildFoundationAimLockZTolerance = 0.35f;
+
+	struct sGtaVector
+	{
+		float x;
+		float y;
+		float z;
+	};
+
+	struct sGtaColPoint
+	{
+		sGtaVector point;
+		float depth;
+		sGtaVector normal;
+		unsigned char data[0x10];
+	};
+
+	enum eBuildAimSurfaceState : unsigned char
+	{
+		BuildAimSurfaceNone = 0,
+		BuildAimSurfaceGround = 1,
+		BuildAimSurfaceBlockedNonGround = 2
+	};
+
+	struct sBuildAimHit
+	{
+		bool hasHit;
+		float x;
+		float y;
+		float z;
+		eBuildAimSurfaceState surfaceState;
+		float footprintMinGroundZ;
+		float footprintMaxGroundZ;
+	};
+
+	struct sBuildFoundationAimLock
+	{
+		bool valid;
+		float x;
+		float y;
+		float z;
+		float footprintMinGroundZ;
+		float footprintMaxGroundZ;
+	};
+
+	sBuildFoundationAimLock gFoundationAimLock = {};
 
 	bool IsPhysicalKeyDown(int virtualKey)
 	{
@@ -143,6 +205,402 @@ namespace
 	float ClampFloat(float value, float minValue, float maxValue)
 	{
 		return (std::max)(minValue, (std::min)(value, maxValue));
+	}
+
+	void ResetBuildFoundationAimLock()
+	{
+		gFoundationAimLock = {};
+	}
+
+	bool IsFiniteVector(const sGtaVector& vector)
+	{
+		return std::isfinite(vector.x) && std::isfinite(vector.y) && std::isfinite(vector.z);
+	}
+
+	bool TryReadMemory(uintptr_t address, void* output, size_t size)
+	{
+		if (!address || !output || !size)
+			return false;
+
+		MEMORY_BASIC_INFORMATION mbi = {};
+		void* memory = reinterpret_cast<void*>(address);
+		if (!VirtualQuery(memory, &mbi, sizeof(mbi)))
+			return false;
+		if (mbi.State != MEM_COMMIT || (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD)))
+			return false;
+
+		const uintptr_t regionEnd = reinterpret_cast<uintptr_t>(mbi.BaseAddress) + mbi.RegionSize;
+		if (address + size > regionEnd)
+			return false;
+
+		__try
+		{
+			std::memcpy(output, memory, size);
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER)
+		{
+			return false;
+		}
+		return true;
+	}
+
+	bool TryReadGtaVector(uintptr_t address, sGtaVector& vector)
+	{
+		if (!TryReadMemory(address, &vector, sizeof(vector)))
+			return false;
+		return IsFiniteVector(vector);
+	}
+
+	bool NormalizeVector(sGtaVector& vector)
+	{
+		const float length = std::sqrt((vector.x * vector.x) + (vector.y * vector.y) + (vector.z * vector.z));
+		if (length <= 0.0001f || !std::isfinite(length))
+			return false;
+
+		vector.x /= length;
+		vector.y /= length;
+		vector.z /= length;
+		return true;
+	}
+
+	bool TryFindTerrainGroundZ(float x, float y, float& z)
+	{
+		typedef float(__cdecl* FindGroundZForCoord_t)(float, float);
+
+		float result = 0.0f;
+		__try
+		{
+			FindGroundZForCoord_t findGroundZ = reinterpret_cast<FindGroundZForCoord_t>(GtaFindGroundZForCoordAddress);
+			result = findGroundZ(x, y);
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER)
+		{
+			return false;
+		}
+
+		if (!std::isfinite(result) || result < -200.0f || result > 2000.0f)
+			return false;
+
+		z = result;
+		return true;
+	}
+
+	bool TryComputeFoundationFootprintGroundRange(const sGtaVector& center, float& minGroundZ, float& maxGroundZ)
+	{
+		const float half = (std::max)(0.25f, BuildFoundationFootprintHalf - BuildFoundationFootprintProbeInset);
+		const float sampleOffsets[][2] =
+		{
+			{ 0.0f, 0.0f },
+			{ -half, -half },
+			{ -half, half },
+			{ half, -half },
+			{ half, half },
+			{ -half, 0.0f },
+			{ half, 0.0f },
+			{ 0.0f, -half },
+			{ 0.0f, half }
+		};
+
+		bool found = false;
+		for (const auto& offset : sampleOffsets)
+		{
+			float sampleZ = 0.0f;
+			if (!TryFindTerrainGroundZ(center.x + offset[0], center.y + offset[1], sampleZ))
+				continue;
+
+			if (!found)
+			{
+				minGroundZ = sampleZ;
+				maxGroundZ = sampleZ;
+				found = true;
+				continue;
+			}
+
+			minGroundZ = (std::min)(minGroundZ, sampleZ);
+			maxGroundZ = (std::max)(maxGroundZ, sampleZ);
+		}
+
+		return found;
+	}
+
+	bool IsLikelyBuildFoundationSelfHit(const sBuildAimHit& hit)
+	{
+		if (!hit.hasHit || !gFoundationAimLock.valid)
+			return false;
+
+		const float dx = hit.x - gFoundationAimLock.x;
+		const float dy = hit.y - gFoundationAimLock.y;
+		const float radiusSq = BuildFoundationAimLockRadius * BuildFoundationAimLockRadius;
+		if (((dx * dx) + (dy * dy)) > radiusSq)
+			return false;
+
+		return hit.z > gFoundationAimLock.z + BuildFoundationAimLockZTolerance
+			|| hit.footprintMinGroundZ > gFoundationAimLock.footprintMaxGroundZ + BuildFoundationAimLockZTolerance
+			|| hit.footprintMaxGroundZ > gFoundationAimLock.footprintMaxGroundZ + BuildFoundationAimLockZTolerance;
+	}
+
+	bool TryProjectFoundationAimToTerrain(const sBuildAimHit& source, sBuildAimHit& hit)
+	{
+		if (!source.hasHit)
+			return false;
+
+		float groundZ = 0.0f;
+		if (!TryFindTerrainGroundZ(source.x, source.y, groundZ))
+			return false;
+
+		hit.hasHit = true;
+		hit.x = source.x;
+		hit.y = source.y;
+		hit.z = groundZ;
+		hit.surfaceState = BuildAimSurfaceGround;
+		hit.footprintMinGroundZ = groundZ;
+		hit.footprintMaxGroundZ = groundZ;
+
+		float minGroundZ = groundZ;
+		float maxGroundZ = groundZ;
+		sGtaVector center = { hit.x, hit.y, hit.z };
+		if (TryComputeFoundationFootprintGroundRange(center, minGroundZ, maxGroundZ))
+		{
+			hit.footprintMinGroundZ = minGroundZ;
+			hit.footprintMaxGroundZ = maxGroundZ;
+		}
+
+		return true;
+	}
+
+	void ApplyBuildFoundationAimLock(sBuildAimHit& hit)
+	{
+		if (!hit.hasHit)
+		{
+			ResetBuildFoundationAimLock();
+			return;
+		}
+
+		if (hit.footprintMinGroundZ > hit.footprintMaxGroundZ)
+			std::swap(hit.footprintMinGroundZ, hit.footprintMaxGroundZ);
+
+		if (gFoundationAimLock.valid)
+		{
+			const float dx = hit.x - gFoundationAimLock.x;
+			const float dy = hit.y - gFoundationAimLock.y;
+			const float radiusSq = BuildFoundationAimLockRadius * BuildFoundationAimLockRadius;
+			if (((dx * dx) + (dy * dy)) <= radiusSq && IsLikelyBuildFoundationSelfHit(hit))
+			{
+				hit.hasHit = true;
+				hit.x = gFoundationAimLock.x;
+				hit.y = gFoundationAimLock.y;
+				hit.z = gFoundationAimLock.z;
+				hit.surfaceState = BuildAimSurfaceGround;
+				hit.footprintMinGroundZ = gFoundationAimLock.footprintMinGroundZ;
+				hit.footprintMaxGroundZ = gFoundationAimLock.footprintMaxGroundZ;
+				return;
+			}
+		}
+
+		if (hit.surfaceState != BuildAimSurfaceGround)
+		{
+			ResetBuildFoundationAimLock();
+			return;
+		}
+
+		gFoundationAimLock.valid = true;
+		gFoundationAimLock.x = hit.x;
+		gFoundationAimLock.y = hit.y;
+		gFoundationAimLock.z = hit.z;
+		gFoundationAimLock.footprintMinGroundZ = hit.footprintMinGroundZ;
+		gFoundationAimLock.footprintMaxGroundZ = hit.footprintMaxGroundZ;
+	}
+
+	bool TryProcessBuildAimLine(const sGtaVector& origin, const sGtaVector& direction, float distance, sBuildAimHit& hit, unsigned int selectedPartId)
+	{
+		typedef bool(__cdecl* ProcessLineOfSight_t)(
+			const sGtaVector&,
+			const sGtaVector&,
+			sGtaColPoint&,
+			void*&,
+			bool,
+			bool,
+			bool,
+			bool,
+			bool,
+			bool,
+			bool,
+			bool);
+
+		sGtaVector target =
+		{
+			origin.x + (direction.x * distance),
+			origin.y + (direction.y * distance),
+			origin.z + (direction.z * distance)
+		};
+		if (!IsFiniteVector(target))
+			return false;
+
+		sGtaColPoint colPoint = {};
+		void* entity = nullptr;
+		bool lineHit = false;
+
+		__try
+		{
+			ProcessLineOfSight_t processLineOfSight = reinterpret_cast<ProcessLineOfSight_t>(GtaProcessLineOfSightAddress);
+			lineHit = processLineOfSight(
+				origin,
+				target,
+				colPoint,
+				entity,
+				true,
+				false,
+				false,
+				false,
+				false,
+				false,
+				false,
+				false);
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER)
+		{
+			return false;
+		}
+
+		if (!lineHit || !IsFiniteVector(colPoint.point))
+			return false;
+
+		hit.hasHit = true;
+		hit.x = colPoint.point.x;
+		hit.y = colPoint.point.y;
+		hit.z = colPoint.point.z;
+		hit.surfaceState = BuildAimSurfaceGround;
+		hit.footprintMinGroundZ = colPoint.point.z;
+		hit.footprintMaxGroundZ = colPoint.point.z;
+
+		const bool hasNormal = IsFiniteVector(colPoint.normal);
+		const bool groundLikeNormal = hasNormal && colPoint.normal.z >= BuildAimGroundNormalMinZ;
+		float centerGroundZ = colPoint.point.z;
+		const bool hasCenterGround = TryFindTerrainGroundZ(colPoint.point.x, colPoint.point.y, centerGroundZ);
+		const bool highAboveGround = hasCenterGround && colPoint.point.z > centerGroundZ + BuildAimHighSurfaceThreshold;
+		float minGroundZ = colPoint.point.z;
+		float maxGroundZ = colPoint.point.z;
+		if (TryComputeFoundationFootprintGroundRange(colPoint.point, minGroundZ, maxGroundZ))
+		{
+			hit.footprintMinGroundZ = minGroundZ;
+			hit.footprintMaxGroundZ = maxGroundZ;
+		}
+		else if (hasCenterGround)
+		{
+			hit.footprintMinGroundZ = centerGroundZ;
+			hit.footprintMaxGroundZ = centerGroundZ;
+		}
+
+		if (!groundLikeNormal)
+		{
+			hit.surfaceState = BuildAimSurfaceBlockedNonGround;
+		}
+		else if (selectedPartId == BuildPartFoundation && highAboveGround)
+		{
+			hit.z = centerGroundZ;
+		}
+		else if (highAboveGround)
+		{
+			hit.surfaceState = BuildAimSurfaceBlockedNonGround;
+		}
+
+		return true;
+	}
+
+	bool TryComputeBuildAimHit(float maxDistance, sBuildAimHit& hit, unsigned int selectedPartId)
+	{
+		hit = {};
+
+		unsigned char activeCam = 0;
+		if (!TryReadMemory(GtaCameraBase + GtaCameraActiveCamOffset, &activeCam, sizeof(activeCam)) || activeCam >= 3)
+			return false;
+
+		const uintptr_t camBase = GtaCameraBase + GtaCameraCamsOffset + (static_cast<uintptr_t>(activeCam) * GtaCamSize);
+		sGtaVector origin = {};
+		sGtaVector direction = {};
+		if (!TryReadGtaVector(camBase + GtaCamSourceOffset, origin) || !TryReadGtaVector(camBase + GtaCamFrontOffset, direction))
+			return false;
+		if (!NormalizeVector(direction))
+			return false;
+
+		sGtaVector reverse = { -direction.x, -direction.y, -direction.z };
+		const float rayDistance = ClampFloat(maxDistance + 20.0f, 20.0f, 60.0f);
+		const bool reverseFirst = reverse.z < direction.z;
+
+		if (selectedPartId == BuildPartFoundation)
+		{
+			sBuildAimHit losHit = {};
+			bool hasLosHit = false;
+			if (reverseFirst)
+			{
+				hasLosHit = TryProcessBuildAimLine(origin, reverse, rayDistance, losHit, selectedPartId);
+				if (!hasLosHit)
+					hasLosHit = TryProcessBuildAimLine(origin, direction, rayDistance, losHit, selectedPartId);
+			}
+			else
+			{
+				hasLosHit = TryProcessBuildAimLine(origin, direction, rayDistance, losHit, selectedPartId);
+				if (!hasLosHit)
+					hasLosHit = TryProcessBuildAimLine(origin, reverse, rayDistance, losHit, selectedPartId);
+			}
+
+			if (hasLosHit && IsLikelyBuildFoundationSelfHit(losHit))
+			{
+				hit = losHit;
+				return true;
+			}
+
+			if (hasLosHit && losHit.surfaceState == BuildAimSurfaceBlockedNonGround)
+			{
+				hit = losHit;
+				return true;
+			}
+
+			if (hasLosHit && TryProjectFoundationAimToTerrain(losHit, hit))
+			{
+				return true;
+			}
+
+			if (hasLosHit)
+			{
+				hit = losHit;
+				return true;
+			}
+			return false;
+		}
+
+		if (reverseFirst)
+		{
+			if (TryProcessBuildAimLine(origin, reverse, rayDistance, hit, selectedPartId))
+				return true;
+			return TryProcessBuildAimLine(origin, direction, rayDistance, hit, selectedPartId);
+		}
+
+		if (TryProcessBuildAimLine(origin, direction, rayDistance, hit, selectedPartId))
+			return true;
+		return TryProcessBuildAimLine(origin, reverse, rayDistance, hit, selectedPartId);
+	}
+
+	void WriteBuildAimPayload(RakNet::BitStream& bitStream, float maxDistance, unsigned int selectedPartId)
+	{
+		sBuildAimHit hit = {};
+		const bool hasHit = TryComputeBuildAimHit(maxDistance, hit, selectedPartId);
+		if (selectedPartId == BuildPartFoundation)
+		{
+			ApplyBuildFoundationAimLock(hit);
+		}
+		else
+		{
+			ResetBuildFoundationAimLock();
+		}
+
+		bitStream.Write(hasHit);
+		bitStream.Write(hasHit ? hit.x : 0.0f);
+		bitStream.Write(hasHit ? hit.y : 0.0f);
+		bitStream.Write(hasHit ? hit.z : 0.0f);
+		bitStream.Write(hasHit ? static_cast<unsigned char>(hit.surfaceState) : static_cast<unsigned char>(BuildAimSurfaceNone));
+		bitStream.Write(hasHit ? hit.footprintMinGroundZ : 0.0f);
+		bitStream.Write(hasHit ? hit.footprintMaxGroundZ : 0.0f);
 	}
 
 	float GetBuildMenuWidth(float displayWidth)
@@ -273,12 +731,12 @@ namespace
 
 	int ClampFoundationHeightStep(int step)
 	{
-		return (std::max)(0, (std::min)(step, BuildFoundationHeightSteps));
+		return (std::max)(0, (std::min)(step, BuildFoundationLiftSteps));
 	}
 
 	int DefaultBuildRotationStep(unsigned int partId)
 	{
-		return SupportsFoundationHeight(partId) ? BuildFoundationHeightSteps : 0;
+		return SupportsFoundationHeight(partId) ? 0 : 0;
 	}
 
 	bool IsRemoveTool(unsigned int partId)
@@ -318,7 +776,7 @@ namespace
 		case BuildPartRemove:
 			return "Remove mode  |  Aim placed part  |  LMB remove  RMB menu";
 		case BuildPartFoundation:
-			return "Q/E height  |  LMB place  RMB menu";
+			return "Q/E first foundation height  |  LMB place  RMB menu";
 		case BuildPartWall:
 		case BuildPartDoorFrame:
 			return flipped
@@ -358,6 +816,7 @@ void CBuildManager::HandleOpen(RakNet::BitStream& bitStream)
 	m_selectedPartId = 0;
 	m_rotationStep = 0;
 	m_flipped = false;
+	m_nextPreviewSendAt = 0;
 	m_removeTarget = sBuildRemoveTarget();
 	m_status.clear();
 	m_statusUntil = 0;
@@ -460,6 +919,7 @@ void CBuildManager::ClearUnlocked(bool restoreCursor)
 	m_maxDistance = 8.0f;
 	m_rotationStep = 0;
 	m_flipped = false;
+	m_nextPreviewSendAt = 0;
 	m_inputGuardUntil = 0;
 	m_status.clear();
 	m_statusUntil = 0;
@@ -495,7 +955,8 @@ void CBuildManager::Process()
 	const bool middleDown = m_mouseButtons[2] || IsPhysicalKeyDown(VK_MBUTTON);
 	const bool qDown = IsPhysicalKeyDown('Q');
 	const bool eDown = IsPhysicalKeyDown('E');
-	const bool inputGuardActive = static_cast<long>(GetTickCount() - m_inputGuardUntil) < 0;
+	const unsigned long now = GetTickCount();
+	const bool inputGuardActive = static_cast<long>(now - m_inputGuardUntil) < 0;
 
 	if (!inputGuardActive && escapeDown && !m_lastEscapeDown)
 	{
@@ -543,6 +1004,9 @@ void CBuildManager::Process()
 		m_flipped = !m_flipped;
 		SendPreviewState();
 	}
+
+	if (m_selectedPartId != 0 && !IsRemoveTool(m_selectedPartId) && static_cast<long>(now - m_nextPreviewSendAt) >= 0)
+		SendPreviewState();
 
 	if (leftDown && !m_lastLeftDown && m_selectedPartId != 0 && !IsMouseOverMenu())
 		SendPlace();
@@ -634,6 +1098,7 @@ void CBuildManager::RenderImGui()
 					m_selectedPartId = part.partId;
 					m_rotationStep = DefaultBuildRotationStep(part.partId);
 					m_flipped = false;
+					m_nextPreviewSendAt = 0;
 					m_removeTarget = sBuildRemoveTarget();
 					m_menuOpen = false;
 					if (m_cursorOwned)
@@ -978,6 +1443,7 @@ void CBuildManager::ReturnToMenu()
 	m_selectedPartId = 0;
 	m_rotationStep = 0;
 	m_flipped = false;
+	m_nextPreviewSendAt = 0;
 	m_status.clear();
 	m_statusUntil = 0;
 	m_inputGuardUntil = GetTickCount() + 350;
@@ -1008,6 +1474,9 @@ void CBuildManager::SendSelect(unsigned int partId)
 	if (!Network::IsConnected() || !m_active || m_sessionId == 0 || partId == 0)
 		return;
 
+	if (partId == BuildPartFoundation)
+		ResetBuildFoundationAimLock();
+
 	RakNet::BitStream bitStream;
 	bitStream.Write(m_sessionId);
 	bitStream.Write(partId);
@@ -1024,6 +1493,7 @@ void CBuildManager::SendClearPreview()
 	bitStream.Write(0u);
 	bitStream.Write(static_cast<short>(0));
 	bitStream.Write(false);
+	WriteBuildAimPayload(bitStream, m_maxDistance, 0);
 	Network::SendRPC(eRPC::ON_BUILD_PREVIEW, &bitStream);
 }
 
@@ -1037,7 +1507,9 @@ void CBuildManager::SendPreviewState()
 	bitStream.Write(m_selectedPartId);
 	bitStream.Write(static_cast<short>(m_rotationStep));
 	bitStream.Write(m_flipped);
+	WriteBuildAimPayload(bitStream, m_maxDistance, m_selectedPartId);
 	Network::SendRPC(eRPC::ON_BUILD_PREVIEW, &bitStream);
+	m_nextPreviewSendAt = GetTickCount() + BuildPreviewSendIntervalMs;
 }
 
 void CBuildManager::SendPlace()
@@ -1050,6 +1522,7 @@ void CBuildManager::SendPlace()
 	bitStream.Write(m_selectedPartId);
 	bitStream.Write(static_cast<short>(m_rotationStep));
 	bitStream.Write(m_flipped);
+	WriteBuildAimPayload(bitStream, m_maxDistance, m_selectedPartId);
 	Network::SendRPC(eRPC::ON_BUILD_PLACE, &bitStream);
 }
 
