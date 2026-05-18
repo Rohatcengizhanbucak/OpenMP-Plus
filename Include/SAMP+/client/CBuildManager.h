@@ -46,6 +46,7 @@ public:
 	static bool ShouldSuppressKeyboard();
 	static bool ShouldNeutralizeKeyboard();
 	static bool ShouldBlockGameControls();
+	static bool ShouldBlockWeaponCycleControls();
 	static bool ShouldConsumeDirectInputEvent(DWORD offset, DWORD data);
 	static void FilterKeyboardState(DWORD size, LPVOID state);
 	static void FilterMouseState(DWORD size, LPVOID state);

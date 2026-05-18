@@ -367,6 +367,28 @@ stock bool:TryGetBuildFoundationAutoHeightStepFromRange(Float:topZ, Float:minGro
 	return TryGetBuildFoundationAutoHeightStep(topZ, minGroundZ, heightStep, requiredHeight);
 }
 
+stock bool:ClampBuildFoundationTopToSupportRange(&Float:topZ, Float:minGroundZ, Float:maxGroundZ)
+{
+	if (minGroundZ > maxGroundZ)
+	{
+		new Float:tmp = minGroundZ;
+		minGroundZ = maxGroundZ;
+		maxGroundZ = tmp;
+	}
+
+	new Float:minTopZ = maxGroundZ + BUILD_DEMO_FOUNDATION_TOP_CLEARANCE;
+	new Float:maxTopZ = minGroundZ + BUILD_DEMO_FOUNDATION_MAX_HEIGHT - BUILD_DEMO_FOUNDATION_GROUND_EMBED;
+	if (topZ < minTopZ)
+	{
+		topZ = minTopZ;
+	}
+	if (topZ > maxTopZ)
+	{
+		topZ = maxTopZ;
+	}
+	return maxTopZ >= minTopZ;
+}
+
 stock GetBuildFoundationAutoHeightStep(Float:topZ, Float:groundZ)
 {
 	new heightStep;
@@ -611,16 +633,38 @@ stock GetBuildRemovePriority(partid)
 {
 	switch (partid)
 	{
-		case SAMPP_BUILD_PART_WALL, SAMPP_BUILD_PART_DOORFRAME, SAMPP_BUILD_PART_DOOR:
+		case SAMPP_BUILD_PART_DOOR:
 		{
 			return 0;
 		}
-		case SAMPP_BUILD_PART_FOUNDATION, SAMPP_BUILD_PART_FLOOR, SAMPP_BUILD_PART_ROOF:
+		case SAMPP_BUILD_PART_WALL, SAMPP_BUILD_PART_DOORFRAME:
 		{
 			return 1;
 		}
+		case SAMPP_BUILD_PART_FOUNDATION, SAMPP_BUILD_PART_FLOOR, SAMPP_BUILD_PART_ROOF:
+		{
+			return 2;
+		}
 	}
-	return 2;
+	return 3;
+}
+
+stock bool:IsBuildDoorAndFramePair(playerid, doorIndex, frameIndex)
+{
+	if (doorIndex < 0 || doorIndex >= BUILD_DEMO_MAX_OBJECTS || frameIndex < 0 || frameIndex >= BUILD_DEMO_MAX_OBJECTS)
+	{
+		return false;
+	}
+	if (gBuildObjects[playerid][doorIndex] == INVALID_OBJECT_ID || gBuildObjects[playerid][frameIndex] == INVALID_OBJECT_ID)
+	{
+		return false;
+	}
+	if (gBuildObjectPart[playerid][doorIndex] != SAMPP_BUILD_PART_DOOR || gBuildObjectPart[playerid][frameIndex] != SAMPP_BUILD_PART_DOORFRAME)
+	{
+		return false;
+	}
+	return gBuildObjectFoundation[playerid][doorIndex] == gBuildObjectFoundation[playerid][frameIndex]
+		&& gBuildObjectSlotIndex[playerid][doorIndex] == gBuildObjectSlotIndex[playerid][frameIndex];
 }
 
 stock Float:GetBuildObjectCurrentRZ(playerid, objectIndex)
@@ -1344,6 +1388,115 @@ stock bool:GetNearestFoundationCenterToPoint(playerid, Float:aimX, Float:aimY, &
 	return true;
 }
 
+stock bool:GetBuildHorizontalSurfaceHit(partid, Float:objectX, Float:objectY, Float:objectZ, Float:objectRZ, Float:camX, Float:camY, Float:camZ, Float:frontX, Float:frontY, Float:frontZ, &Float:distance)
+{
+	switch (partid)
+	{
+		case SAMPP_BUILD_PART_FOUNDATION, SAMPP_BUILD_PART_FLOOR, SAMPP_BUILD_PART_ROOF:
+		{
+			if (floatabs(frontZ) <= 0.01)
+			{
+				return false;
+			}
+
+			new Float:t = (objectZ - camZ) / frontZ;
+			if (t < 0.35 || t > BUILD_DEMO_REMOVE_MAX_RAY_DISTANCE)
+			{
+				return false;
+			}
+
+			new Float:hitX = camX + (frontX * t);
+			new Float:hitY = camY + (frontY * t);
+			new Float:dx = hitX - objectX;
+			new Float:dy = hitY - objectY;
+			new Float:axisX = floatsin(-objectRZ, degrees);
+			new Float:axisY = floatcos(-objectRZ, degrees);
+			new Float:rightX = floatcos(-objectRZ, degrees);
+			new Float:rightY = -floatsin(-objectRZ, degrees);
+			new Float:localA = (dx * axisX) + (dy * axisY);
+			new Float:localB = (dx * rightX) + (dy * rightY);
+			new Float:half = BUILD_DEMO_FOUNDATION_HALF + 0.22;
+
+			if (floatabs(localA) > half || floatabs(localB) > half)
+			{
+				return false;
+			}
+
+			distance = t;
+			return true;
+		}
+	}
+	return false;
+}
+
+stock bool:GetFoundationTopSurfaceFromAim(playerid, &foundationIndex, &Float:centerX, &Float:centerY, &Float:centerZ, &Float:centerA, &Float:surfaceDistance)
+{
+	if (gBuildFoundationCount[playerid] <= 0)
+	{
+		return false;
+	}
+
+	new Float:px, Float:py, Float:pz;
+	new Float:camX, Float:camY, Float:camZ;
+	new Float:frontX, Float:frontY, Float:frontZ;
+	if (!GetPlayerPos(playerid, px, py, pz)
+		|| !GetPlayerCameraPos(playerid, camX, camY, camZ)
+		|| !GetPlayerCameraFrontVector(playerid, frontX, frontY, frontZ))
+	{
+		return false;
+	}
+
+	new Float:frontLen = floatsqroot((frontX * frontX) + (frontY * frontY) + (frontZ * frontZ));
+	if (frontLen <= 0.001)
+	{
+		return false;
+	}
+
+	frontX /= frontLen;
+	frontY /= frontLen;
+	frontZ /= frontLen;
+
+	new bestIndex = -1;
+	new Float:bestDistance = 999999.0;
+	for (new i = 0; i < BUILD_DEMO_MAX_OBJECTS; i++)
+	{
+		if (!gBuildFoundationActive[playerid][i])
+		{
+			continue;
+		}
+
+		if (GetBuildDistance2D(px, py, gBuildFoundationGridX[playerid][i], gBuildFoundationGridY[playerid][i]) > BUILD_DEMO_MAX_DISTANCE + BUILD_DEMO_FOUNDATION_SIZE)
+		{
+			continue;
+		}
+
+		new Float:testDistance;
+		if (!GetBuildHorizontalSurfaceHit(SAMPP_BUILD_PART_FOUNDATION, gBuildFoundationGridX[playerid][i], gBuildFoundationGridY[playerid][i], gBuildFoundationGridZ[playerid][i], gBuildFoundationGridA[playerid][i], camX, camY, camZ, frontX, frontY, frontZ, testDistance))
+		{
+			continue;
+		}
+
+		if (testDistance < bestDistance)
+		{
+			bestDistance = testDistance;
+			bestIndex = i;
+		}
+	}
+
+	if (bestIndex == -1)
+	{
+		return false;
+	}
+
+	foundationIndex = bestIndex;
+	centerX = gBuildFoundationGridX[playerid][bestIndex];
+	centerY = gBuildFoundationGridY[playerid][bestIndex];
+	centerZ = gBuildFoundationGridZ[playerid][bestIndex];
+	centerA = gBuildFoundationGridA[playerid][bestIndex];
+	surfaceDistance = bestDistance;
+	return true;
+}
+
 stock bool:GetNearestFoundationSnapToPoint(playerid, Float:aimX, Float:aimY, &parentIndex, &slotIndex, &occupied, &Float:snapX, &Float:snapY, &Float:snapZ, &Float:snapA, &Float:snapDistance)
 {
 	if (gBuildFoundationCount[playerid] <= 0)
@@ -1533,20 +1686,27 @@ stock bool:ComputeBuildPreview(playerid, partid, rotationStep, bool:flipped, &mo
 				if (gBuildFoundationCount[playerid] == 0)
 				{
 					new Float:blockLift = GetBuildFoundationLiftFromStep(stateRotationStep);
-					z = aimZ + blockLift;
 					new Float:blockMinTopZ = footprintMaxGroundZ + BUILD_DEMO_FOUNDATION_TOP_CLEARANCE;
-					if (z < blockMinTopZ)
+					z = blockMinTopZ + blockLift;
+					if (!ClampBuildFoundationTopToSupportRange(z, footprintMinGroundZ, footprintMaxGroundZ))
 					{
-						z = blockMinTopZ;
+						gBuildPreviewFoundationHeightStep[playerid] = BUILD_DEMO_FOUNDATION_HEIGHT_STEPS;
 					}
 				}
 				else
 				{
 					z = footprintMaxGroundZ + BUILD_DEMO_FOUNDATION_TOP_CLEARANCE;
+					if (!ClampBuildFoundationTopToSupportRange(z, footprintMinGroundZ, footprintMaxGroundZ))
+					{
+						gBuildPreviewFoundationHeightStep[playerid] = BUILD_DEMO_FOUNDATION_HEIGHT_STEPS;
+					}
 				}
 				rz = GetBuildGridAngle(playerAngle);
 				new Float:blockedRequiredHeight;
-				TryGetBuildFoundationAutoHeightStepFromRange(z, footprintMinGroundZ, footprintMaxGroundZ, gBuildPreviewFoundationHeightStep[playerid], blockedRequiredHeight);
+				if (gBuildPreviewFoundationHeightStep[playerid] != BUILD_DEMO_FOUNDATION_HEIGHT_STEPS)
+				{
+					TryGetBuildFoundationAutoHeightStepFromRange(z, footprintMinGroundZ, footprintMaxGroundZ, gBuildPreviewFoundationHeightStep[playerid], blockedRequiredHeight);
+				}
 				modelid = GetBuildFoundationModel(gBuildPreviewFoundationHeightStep[playerid]);
 				if (aimSurfaceState == BUILD_DEMO_AIM_SURFACE_BLOCKED_NON_GROUND)
 				{
@@ -1599,6 +1759,18 @@ stock bool:ComputeBuildPreview(playerid, partid, rotationStep, bool:flipped, &mo
 					else if (!heightOk)
 					{
 						ResetBuildFoundationSnapHeightLock(playerid);
+						new Float:visualZ = z;
+						if (ClampBuildFoundationTopToSupportRange(visualZ, snapMinGroundZ, snapMaxGroundZ))
+						{
+							z = visualZ;
+							TryGetBuildFoundationAutoHeightStepFromRange(z, snapMinGroundZ, snapMaxGroundZ, gBuildPreviewFoundationHeightStep[playerid], requiredHeight);
+						}
+						else
+						{
+							z = visualZ;
+							gBuildPreviewFoundationHeightStep[playerid] = BUILD_DEMO_FOUNDATION_HEIGHT_STEPS;
+						}
+						modelid = GetBuildFoundationModel(gBuildPreviewFoundationHeightStep[playerid]);
 						SetBuildPreviewCandidate(playerid, false, parentIndex, slotIndex, BUILD_DEMO_SLOT_NONE, "Ground is too far below this foundation level.");
 					}
 					else
@@ -1616,9 +1788,16 @@ stock bool:ComputeBuildPreview(playerid, partid, rotationStep, bool:flipped, &mo
 				x = aimX;
 				y = aimY;
 				z = gBuildFoundationZ[playerid];
+				if (!ClampBuildFoundationTopToSupportRange(z, footprintMinGroundZ, footprintMaxGroundZ))
+				{
+					gBuildPreviewFoundationHeightStep[playerid] = BUILD_DEMO_FOUNDATION_HEIGHT_STEPS;
+				}
 				rz = GetBuildGridAngle(playerAngle);
 				new Float:requiredHeight;
-				TryGetBuildFoundationAutoHeightStepFromRange(z, footprintMinGroundZ, footprintMaxGroundZ, gBuildPreviewFoundationHeightStep[playerid], requiredHeight);
+				if (gBuildPreviewFoundationHeightStep[playerid] != BUILD_DEMO_FOUNDATION_HEIGHT_STEPS)
+				{
+					TryGetBuildFoundationAutoHeightStepFromRange(z, footprintMinGroundZ, footprintMaxGroundZ, gBuildPreviewFoundationHeightStep[playerid], requiredHeight);
+				}
 				modelid = GetBuildFoundationModel(gBuildPreviewFoundationHeightStep[playerid]);
 				SetBuildPreviewCandidate(playerid, false, -1, -1, BUILD_DEMO_SLOT_NONE, "Aim near an empty foundation neighbour slot.");
 				return true;
@@ -1628,17 +1807,26 @@ stock bool:ComputeBuildPreview(playerid, partid, rotationStep, bool:flipped, &mo
 			new Float:lift = GetBuildFoundationLiftFromStep(stateRotationStep);
 			x = aimX;
 			y = aimY;
-			z = aimZ + lift;
 			new Float:minTopZ = footprintMaxGroundZ + BUILD_DEMO_FOUNDATION_TOP_CLEARANCE;
-			if (z < minTopZ)
-			{
-				z = minTopZ;
-			}
+			z = minTopZ + lift;
+			new bool:supportRangeOk = ClampBuildFoundationTopToSupportRange(z, footprintMinGroundZ, footprintMaxGroundZ);
 			rz = GetBuildGridAngle(playerAngle);
 			new Float:requiredHeight;
-			new bool:heightOk = TryGetBuildFoundationAutoHeightStepFromRange(z, footprintMinGroundZ, footprintMaxGroundZ, gBuildPreviewFoundationHeightStep[playerid], requiredHeight);
+			new bool:heightOk = false;
+			if (supportRangeOk)
+			{
+				heightOk = TryGetBuildFoundationAutoHeightStepFromRange(z, footprintMinGroundZ, footprintMaxGroundZ, gBuildPreviewFoundationHeightStep[playerid], requiredHeight);
+			}
+			else
+			{
+				gBuildPreviewFoundationHeightStep[playerid] = BUILD_DEMO_FOUNDATION_HEIGHT_STEPS;
+			}
 			modelid = GetBuildFoundationModel(gBuildPreviewFoundationHeightStep[playerid]);
-			if (!heightOk)
+			if (!supportRangeOk)
+			{
+				SetBuildPreviewCandidate(playerid, false, -1, -1, BUILD_DEMO_SLOT_NONE, "Terrain height difference exceeds foundation support.");
+			}
+			else if (!heightOk)
 			{
 				SetBuildPreviewCandidate(playerid, false, -1, -1, BUILD_DEMO_SLOT_NONE, "Ground is too far below this foundation level.");
 			}
@@ -1684,7 +1872,8 @@ stock bool:ComputeBuildPreview(playerid, partid, rotationStep, bool:flipped, &mo
 			new foundationIndex;
 			new Float:centerA;
 			new Float:centerDistance;
-			if (!GetNearestFoundationCenterToPoint(playerid, aimX, aimY, foundationIndex, x, y, z, centerA, centerDistance))
+			new bool:surfaceHit = GetFoundationTopSurfaceFromAim(playerid, foundationIndex, x, y, z, centerA, centerDistance);
+			if (!surfaceHit && !GetNearestFoundationCenterToPoint(playerid, aimX, aimY, foundationIndex, x, y, z, centerA, centerDistance))
 			{
 				x = aimX;
 				y = aimY;
@@ -1696,7 +1885,7 @@ stock bool:ComputeBuildPreview(playerid, partid, rotationStep, bool:flipped, &mo
 
 			z += BUILD_DEMO_ROOF_HEIGHT;
 			rz = NormalizeBuildAngle(centerA);
-			if (centerDistance > BUILD_DEMO_CENTER_SNAP_RADIUS)
+			if (!surfaceHit && centerDistance > BUILD_DEMO_CENTER_SNAP_RADIUS)
 			{
 				SetBuildPreviewCandidate(playerid, false, foundationIndex, 0, BUILD_DEMO_SLOT_TOP, "Aim closer to the foundation center.");
 				return true;
@@ -1999,47 +2188,6 @@ stock bool:CommitBuildDemoSlot(playerid, partid, &foundationOut, &slotKindOut, &
 	return false;
 }
 
-stock bool:GetBuildHorizontalSurfaceHit(partid, Float:objectX, Float:objectY, Float:objectZ, Float:objectRZ, Float:camX, Float:camY, Float:camZ, Float:frontX, Float:frontY, Float:frontZ, &Float:distance)
-{
-	switch (partid)
-	{
-		case SAMPP_BUILD_PART_FOUNDATION, SAMPP_BUILD_PART_FLOOR, SAMPP_BUILD_PART_ROOF:
-		{
-			if (floatabs(frontZ) <= 0.01)
-			{
-				return false;
-			}
-
-			new Float:t = (objectZ - camZ) / frontZ;
-			if (t < 0.35 || t > BUILD_DEMO_REMOVE_MAX_RAY_DISTANCE)
-			{
-				return false;
-			}
-
-			new Float:hitX = camX + (frontX * t);
-			new Float:hitY = camY + (frontY * t);
-			new Float:dx = hitX - objectX;
-			new Float:dy = hitY - objectY;
-			new Float:axisX = floatsin(-objectRZ, degrees);
-			new Float:axisY = floatcos(-objectRZ, degrees);
-			new Float:rightX = floatcos(-objectRZ, degrees);
-			new Float:rightY = -floatsin(-objectRZ, degrees);
-			new Float:localA = (dx * axisX) + (dy * axisY);
-			new Float:localB = (dx * rightX) + (dy * rightY);
-			new Float:half = BUILD_DEMO_FOUNDATION_HALF + 0.22;
-
-			if (floatabs(localA) > half || floatabs(localB) > half)
-			{
-				return false;
-			}
-
-			distance = t;
-			return true;
-		}
-	}
-	return false;
-}
-
 stock bool:GetBuildVerticalSurfaceHit(partid, Float:objectX, Float:objectY, Float:objectZ, Float:objectRZ, Float:camX, Float:camY, Float:camZ, Float:frontX, Float:frontY, Float:frontZ, &Float:distance)
 {
 	switch (partid)
@@ -2144,8 +2292,26 @@ stock bool:FindBuildObjectFromAim(playerid, &objectIndex, &Float:targetDistance)
 		}
 
 		new priority = GetBuildRemovePriority(partid);
-		if (surfaceDistance + BUILD_DEMO_REMOVE_PRIORITY_EPSILON < bestDistance
+		new bool:preferCandidate = false;
+		if (bestIndex == -1)
+		{
+			preferCandidate = true;
+		}
+		else if (partid == SAMPP_BUILD_PART_DOOR && IsBuildDoorAndFramePair(playerid, i, bestIndex))
+		{
+			preferCandidate = true;
+		}
+		else if (partid == SAMPP_BUILD_PART_DOORFRAME && IsBuildDoorAndFramePair(playerid, bestIndex, i))
+		{
+			preferCandidate = false;
+		}
+		else if (surfaceDistance + BUILD_DEMO_REMOVE_PRIORITY_EPSILON < bestDistance
 			|| (floatabs(surfaceDistance - bestDistance) <= BUILD_DEMO_REMOVE_PRIORITY_EPSILON && priority < bestPriority))
+		{
+			preferCandidate = true;
+		}
+
+		if (preferCandidate)
 		{
 			bestPriority = priority;
 			bestIndex = i;

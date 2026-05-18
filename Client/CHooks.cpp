@@ -45,6 +45,11 @@ namespace
 		return CTargetManager::ShouldBlockGameControls() || CBuildManager::ShouldBlockGameControls();
 	}
 
+	bool ShouldNeutralizeWeaponCycleControls()
+	{
+		return ShouldNeutralizePadControls() || CBuildManager::ShouldBlockWeaponCycleControls();
+	}
+
 	short __fastcall HOOK_GetSteeringLeftRight(void* pad, void*) { return ShouldNeutralizePadControls() ? 0 : g_pfnGetSteeringLeftRight(pad); }
 	short __fastcall HOOK_GetSteeringUpDown(void* pad, void*) { return ShouldNeutralizePadControls() ? 0 : g_pfnGetSteeringUpDown(pad); }
 	short __fastcall HOOK_GetPedWalkLeftRight(void* pad, void*) { return ShouldNeutralizePadControls() ? 0 : g_pfnGetPedWalkLeftRight(pad); }
@@ -59,8 +64,8 @@ namespace
 	unsigned char __fastcall HOOK_GetMeleeAttack(void* pad, void*) { return ShouldNeutralizePadControls() ? 0 : g_pfnGetMeleeAttack(pad); }
 	unsigned char __fastcall HOOK_MeleeAttackJustDown(void* pad, void*) { return ShouldNeutralizePadControls() ? 0 : g_pfnMeleeAttackJustDown(pad); }
 	bool __fastcall HOOK_GetAccelerateJustDown(void* pad, void*) { return ShouldNeutralizePadControls() ? false : g_pfnGetAccelerateJustDown(pad); }
-	bool __fastcall HOOK_CycleWeaponLeftJustDown(void* pad, void*) { return ShouldNeutralizePadControls() ? false : g_pfnCycleWeaponLeftJustDown(pad); }
-	bool __fastcall HOOK_CycleWeaponRightJustDown(void* pad, void*) { return ShouldNeutralizePadControls() ? false : g_pfnCycleWeaponRightJustDown(pad); }
+	bool __fastcall HOOK_CycleWeaponLeftJustDown(void* pad, void*) { return ShouldNeutralizeWeaponCycleControls() ? false : g_pfnCycleWeaponLeftJustDown(pad); }
+	bool __fastcall HOOK_CycleWeaponRightJustDown(void* pad, void*) { return ShouldNeutralizeWeaponCycleControls() ? false : g_pfnCycleWeaponRightJustDown(pad); }
 	bool __fastcall HOOK_GetTarget(void* pad, void*) { return ShouldNeutralizePadControls() ? false : g_pfnGetTarget(pad); }
 	bool __fastcall HOOK_GetDuck(void* pad, void*) { return ShouldNeutralizePadControls() ? false : g_pfnGetDuck(pad); }
 	bool __fastcall HOOK_DuckJustDown(void* pad, void*) { return ShouldNeutralizePadControls() ? false : g_pfnDuckJustDown(pad); }

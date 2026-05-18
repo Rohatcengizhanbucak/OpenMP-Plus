@@ -1186,6 +1186,11 @@ bool CBuildManager::ShouldBlockGameControls()
 	return m_active && m_menuOpen;
 }
 
+bool CBuildManager::ShouldBlockWeaponCycleControls()
+{
+	return m_active && !m_menuOpen && SupportsFoundationHeight(m_selectedPartId);
+}
+
 bool CBuildManager::ShouldConsumeDirectInputEvent(DWORD offset, DWORD)
 {
 	if (!m_active)
