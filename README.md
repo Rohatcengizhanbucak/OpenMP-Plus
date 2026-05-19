@@ -29,6 +29,8 @@ Prebuilt Windows binaries may need to be rebuilt from this source tree before th
 - Keybind callbacks are suppressed while SA-MP chat input is active.
 - Server-driven target UI and experimental build UI demos through the native
   RPC bridge.
+- RmlUi-oriented panel bridge for larger Pawn-driven interfaces such as
+  inventory, storage, crafting, phone/tablet, and base management.
 - `OnPlayerSAMPPKey(playerid, keyid, keystate, action[])`
 
 Previous smoke tests confirmed the safe feature subset:
@@ -55,6 +57,7 @@ git submodule update --init --recursive
 
 Detailed setup notes are also available in [docs/INSTALL.md](docs/INSTALL.md).
 The experimental build UI demo is documented in [docs/BUILD_DEMO.md](docs/BUILD_DEMO.md).
+The large panel UI bridge is documented in [docs/RMLUI.md](docs/RMLUI.md).
 
 ### Server
 
@@ -168,7 +171,11 @@ examples/filterscripts/sampp_targetdemo.pwn
 examples/filterscripts/sampp_targetdemo.amx
 examples/filterscripts/sampp_builddemo.pwn
 examples/filterscripts/sampp_builddemo.amx
+examples/filterscripts/sampp_inventorydemo.pwn
 ```
+
+`sampp_inventorydemo.pwn` is source-only until you compile it with your Pawn
+compiler.
 
 Copy the `.amx` files you want to test to your open.mp server `filterscripts` directory, then add them to your open.mp config:
 
@@ -184,6 +191,9 @@ Copy the `.amx` files you want to test to your open.mp server `filterscripts` di
     ]
 }
 ```
+
+After compiling `sampp_inventorydemo.pwn`, add
+`"filterscripts/sampp_inventorydemo"` to the same list.
 
 Smoke-test commands:
 

@@ -133,6 +133,12 @@ public:
 	bool addBuildPart(int playerid, uint32_t partid, int32_t modelid, const std::string& name, const std::string& category, const std::string& cost);
 	bool sendBuildResult(int playerid, uint8_t result, const std::string& message);
 	bool sendBuildRemoveTarget(int playerid, bool active, uint32_t partid, const std::string& label, float distance);
+	bool openUi(int playerid, const std::string& documentid, uint8_t templateid, uint32_t flags, uint16_t capacity, const std::string& title, const std::string& body);
+	bool closeUi(int playerid, const std::string& documentid);
+	bool closeAllUi(int playerid);
+	bool setUiData(int playerid, const std::string& documentid, const std::string& key, const std::string& value);
+	bool clearInventory(int playerid, const std::string& documentid);
+	bool setInventorySlot(int playerid, const std::string& documentid, uint16_t slot, uint32_t itemid, uint16_t amount, const std::string& label, const std::string& description, const std::string& icon);
 
 	template <typename... Args>
 	cell callPublic(const char* name, DefaultReturnValue defaultReturn, Args&&... args)
@@ -193,6 +199,7 @@ private:
 	void processBuildPlace(IPlayer& player, NetworkBitStream& stream);
 	void processBuildCancel(IPlayer& player, NetworkBitStream& stream);
 	void processBuildPreview(IPlayer& player, NetworkBitStream& stream);
+	void processUiEvent(IPlayer& player, NetworkBitStream& stream);
 	uint32_t deriveLegacyFeatures(uint32_t capabilities) const;
 	void sendHelloAck(IPlayer& player);
 	void sendError(IPlayer& player, uint16_t code);

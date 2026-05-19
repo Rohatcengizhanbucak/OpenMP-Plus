@@ -564,6 +564,70 @@ namespace
 		const float distance = ParamCount(params) >= 5 ? amx_ctof(params[5]) : 0.0f;
 		return Component()->sendBuildRemoveTarget(playerid, active, partid, label, distance) ? 1 : 0;
 	}
+
+	cell AMX_NATIVE_CALL UiOpenProc(AMX* amx, cell* params)
+	{
+		const int playerid = static_cast<int>(params[1]);
+		const std::string documentid = Component()->getPawnString(amx, params[2], 31);
+		const uint8_t templateid = static_cast<uint8_t>(std::max<cell>(0, std::min<cell>(255, params[3])));
+		const std::string title = Component()->getPawnString(amx, params[4], 64);
+		const std::string body = ParamCount(params) >= 5 ? Component()->getPawnString(amx, params[5], 255) : std::string();
+		const uint32_t flags = ParamCount(params) >= 6 ? static_cast<uint32_t>(params[6]) : (UiFlagModal | UiFlagCaptureMouse | UiFlagCaptureKeyboard | UiFlagCloseOnEscape);
+		const uint16_t capacity = ParamCount(params) >= 7 ? static_cast<uint16_t>(std::max<cell>(0, std::min<cell>(120, params[7]))) : 0;
+		return Component()->openUi(playerid, documentid, templateid, flags, capacity, title, body) ? 1 : 0;
+	}
+
+	cell AMX_NATIVE_CALL UiCloseProc(AMX* amx, cell* params)
+	{
+		const int playerid = static_cast<int>(params[1]);
+		const std::string documentid = Component()->getPawnString(amx, params[2], 31);
+		return Component()->closeUi(playerid, documentid) ? 1 : 0;
+	}
+
+	cell AMX_NATIVE_CALL UiCloseAllProc(AMX*, cell* params)
+	{
+		return Component()->closeAllUi(static_cast<int>(params[1])) ? 1 : 0;
+	}
+
+	cell AMX_NATIVE_CALL UiSetDataProc(AMX* amx, cell* params)
+	{
+		const int playerid = static_cast<int>(params[1]);
+		const std::string documentid = Component()->getPawnString(amx, params[2], 31);
+		const std::string key = Component()->getPawnString(amx, params[3], 31);
+		const std::string value = Component()->getPawnString(amx, params[4], 255);
+		return Component()->setUiData(playerid, documentid, key, value) ? 1 : 0;
+	}
+
+	cell AMX_NATIVE_CALL InventoryOpenProc(AMX* amx, cell* params)
+	{
+		const int playerid = static_cast<int>(params[1]);
+		const std::string documentid = Component()->getPawnString(amx, params[2], 31);
+		const std::string title = Component()->getPawnString(amx, params[3], 64);
+		const uint16_t slots = ParamCount(params) >= 4 ? static_cast<uint16_t>(std::max<cell>(1, std::min<cell>(120, params[4]))) : 30;
+		const std::string body = ParamCount(params) >= 5 ? Component()->getPawnString(amx, params[5], 255) : std::string("Server-driven inventory UI.");
+		const uint32_t flags = ParamCount(params) >= 6 ? static_cast<uint32_t>(params[6]) : (UiFlagModal | UiFlagCaptureMouse | UiFlagCaptureKeyboard | UiFlagCloseOnEscape);
+		return Component()->openUi(playerid, documentid, UiTemplateInventory, flags, slots, title, body) ? 1 : 0;
+	}
+
+	cell AMX_NATIVE_CALL InventoryClearProc(AMX* amx, cell* params)
+	{
+		const int playerid = static_cast<int>(params[1]);
+		const std::string documentid = Component()->getPawnString(amx, params[2], 31);
+		return Component()->clearInventory(playerid, documentid) ? 1 : 0;
+	}
+
+	cell AMX_NATIVE_CALL InventorySetSlotProc(AMX* amx, cell* params)
+	{
+		const int playerid = static_cast<int>(params[1]);
+		const std::string documentid = Component()->getPawnString(amx, params[2], 31);
+		const uint16_t slot = static_cast<uint16_t>(std::max<cell>(0, std::min<cell>(119, params[3])));
+		const uint32_t itemid = static_cast<uint32_t>(std::max<cell>(0, params[4]));
+		const uint16_t amount = static_cast<uint16_t>(std::max<cell>(0, std::min<cell>(65535, params[5])));
+		const std::string label = Component()->getPawnString(amx, params[6], 48);
+		const std::string description = ParamCount(params) >= 7 ? Component()->getPawnString(amx, params[7], 96) : std::string();
+		const std::string icon = ParamCount(params) >= 8 ? Component()->getPawnString(amx, params[8], 48) : std::string();
+		return Component()->setInventorySlot(playerid, documentid, slot, itemid, amount, label, description, icon) ? 1 : 0;
+	}
 }
 
 AMX_NATIVE_INFO OMPPlusNatives[] =
@@ -631,5 +695,12 @@ AMX_NATIVE_INFO OMPPlusNatives[] =
 	{ "SAMPP_BuildAddPart", BuildAddPartProc },
 	{ "SAMPP_BuildSendResult", BuildSendResultProc },
 	{ "SAMPP_BuildSetRemoveTarget", BuildSetRemoveTargetProc },
+	{ "SAMPP_UIOpen", UiOpenProc },
+	{ "SAMPP_UIClose", UiCloseProc },
+	{ "SAMPP_UICloseAll", UiCloseAllProc },
+	{ "SAMPP_UISetData", UiSetDataProc },
+	{ "SAMPP_InventoryOpen", InventoryOpenProc },
+	{ "SAMPP_InventoryClear", InventoryClearProc },
+	{ "SAMPP_InventorySetSlot", InventorySetSlotProc },
 	{ nullptr, nullptr }
 };

@@ -3,6 +3,7 @@
 #include <SAMP+/client/CBuildManager.h>
 #include <SAMP+/client/CKeyBinds.h>
 #include <SAMP+/client/CGameRakClient.h>
+#include <SAMP+/client/CRmlUiManager.h>
 #include <SAMP+/client/CTargetManager.h>
 #include <SAMP+/client/Network.h>
 #include <SAMP+/client/CHUD.h>
@@ -180,6 +181,36 @@ namespace Network
 				CBuildManager::HandleRemoveTarget(bitStream);
 				break;
 			}
+			case eRPC::UI_OPEN:
+			{
+				CRmlUiManager::HandleOpen(bitStream);
+				break;
+			}
+			case eRPC::UI_CLOSE:
+			{
+				CRmlUiManager::HandleClose(bitStream);
+				break;
+			}
+			case eRPC::UI_CLOSE_ALL:
+			{
+				CRmlUiManager::HandleCloseAll();
+				break;
+			}
+			case eRPC::UI_SET_DATA:
+			{
+				CRmlUiManager::HandleSetData(bitStream);
+				break;
+			}
+			case eRPC::UI_INVENTORY_CLEAR:
+			{
+				CRmlUiManager::HandleInventoryClear(bitStream);
+				break;
+			}
+			case eRPC::UI_INVENTORY_SET_SLOT:
+			{
+				CRmlUiManager::HandleInventorySetSlot(bitStream);
+				break;
+			}
 			default:
 				CLog::Write("Safe RPC ignored: %u", usRpcId);
 				break;
@@ -333,6 +364,7 @@ namespace Network
 					CKeyBinds::Clear();
 					CTargetManager::ClearContext();
 					CBuildManager::Clear();
+					CRmlUiManager::Clear();
 
 					break;
 				}
@@ -343,6 +375,7 @@ namespace Network
 					CKeyBinds::Clear();
 					CTargetManager::ClearContext();
 					CBuildManager::Clear();
+					CRmlUiManager::Clear();
 
 					if (ServerHasPlugin())
 						Connect();
@@ -488,6 +521,7 @@ namespace Network
 		CKeyBinds::Clear();
 		CTargetManager::ClearContext();
 		CBuildManager::Clear();
+		CRmlUiManager::Clear();
 
 		if (transportMode == TRANSPORT_NATIVE_RAKCLIENT)
 			CGameRakClient::Shutdown();

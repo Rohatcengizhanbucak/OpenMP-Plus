@@ -1,0 +1,16 @@
+{
+	"InstallScripts" : 
+	[
+		"C:/Users/Elect/OneDrive/Belgeler/GitHub/OpenMP-Plus/Build/codex-native-win32/cmake_install.cmake",
+		"C:/Users/Elect/OneDrive/Belgeler/GitHub/OpenMP-Plus/Build/codex-native-win32/Common/cmake_install.cmake",
+		"C:/Users/Elect/OneDrive/Belgeler/GitHub/OpenMP-Plus/Build/codex-native-win32/ThirdParty/openmp-sdk/cmake_install.cmake",
+		"C:/Users/Elect/OneDrive/Belgeler/GitHub/OpenMP-Plus/Build/codex-native-win32/ThirdParty/openmp-sdk/lib/glm/cmake_install.cmake",
+		"C:/Users/Elect/OneDrive/Belgeler/GitHub/OpenMP-Plus/Build/codex-native-win32/ThirdParty/openmp-sdk/lib/glm/glm/cmake_install.cmake",
+		"C:/Users/Elect/OneDrive/Belgeler/GitHub/OpenMP-Plus/Build/codex-native-win32/ThirdParty/openmp-sdk/lib/robin-hood-hashing/cmake_install.cmake",
+		"C:/Users/Elect/OneDrive/Belgeler/GitHub/OpenMP-Plus/Build/codex-native-win32/ThirdParty/openmp-sdk/lib/span-lite/cmake_install.cmake",
+		"C:/Users/Elect/OneDrive/Belgeler/GitHub/OpenMP-Plus/Build/codex-native-win32/ThirdParty/openmp-sdk/lib/string-view-lite/cmake_install.cmake",
+		"C:/Users/Elect/OneDrive/Belgeler/GitHub/OpenMP-Plus/Build/codex-native-win32/ThirdParty/openmp-network/cmake_install.cmake",
+		"C:/Users/Elect/OneDrive/Belgeler/GitHub/OpenMP-Plus/Build/codex-native-win32/components/omp-plus/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

@@ -1,0 +1,20 @@
+<rml>
+<head>
+	<title>Inventory</title>
+	<link type="text/rcss" href="../theme.rcss"/>
+	<link type="text/rcss" href="inventory.rcss"/>
+</head>
+<body>
+	<div id="inventory-root">
+		<div class="panel-header">
+			<h1 id="inventory-title">Inventory</h1>
+			<p id="inventory-body">Server-driven inventory UI.</p>
+		</div>
+		<div id="inventory-grid"></div>
+		<div id="inventory-details">
+			<h2 id="item-title">Inventory</h2>
+			<p id="item-description">Hover a slot to inspect it.</p>
+		</div>
+	</div>
+</body>
+</rml>

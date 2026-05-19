@@ -1,0 +1,30 @@
+#inventory-root {
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	width: 780px;
+	height: 548px;
+	margin-left: -390px;
+	margin-top: -274px;
+	background-color: #030405e8;
+	border: 1px #d7dadaaa;
+}
+
+#inventory-grid {
+	position: absolute;
+	left: 20px;
+	top: 104px;
+	width: 420px;
+	height: 342px;
+}
+
+#inventory-details {
+	position: absolute;
+	left: 458px;
+	top: 104px;
+	width: 300px;
+	height: 344px;
+	padding: 16px;
+	background-color: #090b0dc0;
+	border: 1px #a0a4a45a;
+}

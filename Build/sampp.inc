@@ -98,6 +98,25 @@
 #define SAMPP_CAPABILITY_TARGET_UI 4
 #define SAMPP_CAPABILITY_TARGET_UI_V2 8
 #define SAMPP_CAPABILITY_BUILD_UI 16
+#define SAMPP_CAPABILITY_RMLUI 32
+
+#define SAMPP_UI_TEMPLATE_PANEL 0
+#define SAMPP_UI_TEMPLATE_INVENTORY 1
+#define SAMPP_UI_TEMPLATE_STORAGE 2
+#define SAMPP_UI_TEMPLATE_CRAFTING 3
+#define SAMPP_UI_TEMPLATE_PHONE 4
+#define SAMPP_UI_TEMPLATE_TABLET 5
+
+#define SAMPP_UI_FLAG_MODAL 1
+#define SAMPP_UI_FLAG_CAPTURE_MOUSE 2
+#define SAMPP_UI_FLAG_CAPTURE_KEYBOARD 4
+#define SAMPP_UI_FLAG_CLOSE_ON_ESCAPE 8
+#define SAMPP_UI_DEFAULT_FLAGS (SAMPP_UI_FLAG_MODAL | SAMPP_UI_FLAG_CAPTURE_MOUSE | SAMPP_UI_FLAG_CAPTURE_KEYBOARD | SAMPP_UI_FLAG_CLOSE_ON_ESCAPE)
+
+#define SAMPP_UI_EVENT_CLICK 1
+#define SAMPP_UI_EVENT_SECONDARY_CLICK 2
+#define SAMPP_UI_EVENT_CLOSE 3
+#define SAMPP_UI_EVENT_SUBMIT 4
 
 #define SAMPP_CAPTURE_CONSUME_GAME_INPUT 1
 #define SAMPP_CAPTURE_BLOCK_SWITCH_WEAPON 2
@@ -308,6 +327,13 @@ native SAMPP_BuildClearParts(playerid);
 native SAMPP_BuildAddPart(playerid, partid, modelid, const name[], const category[] = "", const cost[] = "");
 native SAMPP_BuildSendResult(playerid, result, const message[]);
 native SAMPP_BuildSetRemoveTarget(playerid, bool:active, partid = SAMPP_BUILD_PART_NONE, const label[] = "", Float:distance = 0.0);
+native SAMPP_UIOpen(playerid, const documentid[], templateid, const title[], const body[] = "", flags = SAMPP_UI_DEFAULT_FLAGS, capacity = 0);
+native SAMPP_UIClose(playerid, const documentid[]);
+native SAMPP_UICloseAll(playerid);
+native SAMPP_UISetData(playerid, const documentid[], const key[], const value[]);
+native SAMPP_InventoryOpen(playerid, const documentid[], const title[], slots = 30, const body[] = "Server-driven inventory UI.", flags = SAMPP_UI_DEFAULT_FLAGS);
+native SAMPP_InventoryClear(playerid, const documentid[]);
+native SAMPP_InventorySetSlot(playerid, const documentid[], slot, itemid, amount, const label[], const description[] = "", const icon[] = "");
 native SAMPP_ExecuteCallback(type, {Float,_}:...);
 
 stock bool:SAMPP_TargetAddAction(playerid, targetid, optionid, const label[], const icon[] = "")
@@ -416,6 +442,11 @@ stock bool:SAMPP_BuildHasUI(playerid)
 	return IsUsingSAMPP(playerid) && SAMPP_HasFeature(playerid, SAMPP_FEATURE_BUILD);
 }
 
+stock bool:SAMPP_HasRmlUi(playerid)
+{
+	return IsUsingSAMPP(playerid) && ((SAMPP_GetClientCapabilities(playerid) & SAMPP_CAPABILITY_RMLUI) != 0);
+}
+
 stock bool:SAMPP_TargetBeginNearPoint(playerid, targetid, Float:x, Float:y, Float:z, Float:radius, const title[], ttl_ms = 500, flags = 0)
 {
 	if (!SAMPP_TargetHasUI(playerid))
@@ -471,6 +502,10 @@ forward OnPlayerOMPPlusBuildCancel(playerid, sessionid);
 forward OnPlayerOMPPlusBuildPreview(playerid, sessionid, partid, rotation_step, bool:flipped);
 forward OnPlayerOMPPlusBuildPreviewEx(playerid, sessionid, partid, rotation_step, bool:flipped, bool:has_aim_hit, Float:aim_x, Float:aim_y, Float:aim_z);
 forward OnPlayerOMPPlusBuildPreviewGroundEx(playerid, sessionid, partid, rotation_step, bool:flipped, bool:has_aim_hit, Float:aim_x, Float:aim_y, Float:aim_z, aim_surface_state, Float:footprint_min_ground_z, Float:footprint_max_ground_z);
+forward OnPlayerSAMPPUIEvent(playerid, documentid[], event_type, slot, element[], payload[]);
+forward OnPlayerOMPPlusUIEvent(playerid, documentid[], event_type, slot, element[], payload[]);
+forward OnPlayerSAMPPInventoryClick(playerid, documentid[], slot, event_type, payload[]);
+forward OnPlayerOMPPlusInventoryClick(playerid, documentid[], slot, event_type, payload[]);
 
 public OnPlayerConnect(playerid)
 {

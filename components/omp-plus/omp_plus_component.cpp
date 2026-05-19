@@ -19,6 +19,15 @@ namespace
 	constexpr size_t MaxBuildCostLength = 48;
 	constexpr size_t MaxBuildMessageLength = 96;
 	constexpr size_t MaxBuildRemoveLabelLength = 48;
+	constexpr size_t MaxUiDocumentIdLength = 31;
+	constexpr size_t MaxUiTitleLength = 64;
+	constexpr size_t MaxUiBodyLength = 255;
+	constexpr size_t MaxUiKeyLength = 31;
+	constexpr size_t MaxUiValueLength = 255;
+	constexpr size_t MaxInventoryLabelLength = 48;
+	constexpr size_t MaxInventoryDescriptionLength = 96;
+	constexpr size_t MaxInventoryIconLength = 48;
+	constexpr uint16_t MaxInventorySlots = 120;
 	constexpr uint16_t DefaultTargetTtlMs = 500;
 	constexpr uint16_t MaxTargetTtlMs = 5000;
 	constexpr float DefaultBuildMaxDistance = 8.0f;
@@ -36,6 +45,25 @@ namespace
 		stream.Write(static_cast<uint8_t>(bounded.length()));
 		if (!bounded.empty())
 			stream.Write(bounded.c_str(), static_cast<int>(bounded.length()));
+	}
+
+	bool ReadBoundString(NetworkBitStream& stream, std::string& value, size_t maxLength)
+	{
+		uint8_t length = 0;
+		if (!stream.Read(length) || length > maxLength)
+			return false;
+
+		char buffer[256] = {};
+		if (length && !stream.Read(buffer, length))
+			return false;
+
+		value.assign(buffer, length);
+		return true;
+	}
+
+	bool IsValidUiTemplate(uint8_t templateid)
+	{
+		return templateid <= OMPPlusProtocol::UiTemplateTablet;
 	}
 
 	bool IsValidTargetType(uint8_t targetType)
@@ -608,6 +636,86 @@ bool OMPPlusComponent::sendBuildRemoveTarget(int playerid, bool active, uint32_t
 	return sendLegacyRPC(playerid, OMPPlusProtocol::BUILD_REMOVE_TARGET, &stream);
 }
 
+bool OMPPlusComponent::openUi(int playerid, const std::string& documentid, uint8_t templateid, uint32_t flags, uint16_t capacity, const std::string& title, const std::string& body)
+{
+	if (playerid < 0 || playerid >= PLAYER_POOL_SIZE || !isUsingOMPPlus(playerid) || documentid.empty())
+		return false;
+
+	OMPPlusPlayerState* state = getPlayerState(playerid);
+	if (!state || !(state->capabilities & OMPPlusProtocol::CapabilityRmlUi))
+		return false;
+
+	if (!IsValidUiTemplate(templateid))
+		templateid = OMPPlusProtocol::UiTemplatePanel;
+
+	capacity = std::min<uint16_t>(capacity, MaxInventorySlots);
+
+	NetworkBitStream stream;
+	stream.Write(templateid);
+	stream.Write(flags);
+	stream.Write(capacity);
+	WriteBoundString(stream, documentid, MaxUiDocumentIdLength);
+	WriteBoundString(stream, title, MaxUiTitleLength);
+	WriteBoundString(stream, body, MaxUiBodyLength);
+	return sendLegacyRPC(playerid, OMPPlusProtocol::UI_OPEN, &stream);
+}
+
+bool OMPPlusComponent::closeUi(int playerid, const std::string& documentid)
+{
+	if (playerid < 0 || playerid >= PLAYER_POOL_SIZE || !isUsingOMPPlus(playerid) || documentid.empty())
+		return false;
+
+	NetworkBitStream stream;
+	WriteBoundString(stream, documentid, MaxUiDocumentIdLength);
+	return sendLegacyRPC(playerid, OMPPlusProtocol::UI_CLOSE, &stream);
+}
+
+bool OMPPlusComponent::closeAllUi(int playerid)
+{
+	if (playerid < 0 || playerid >= PLAYER_POOL_SIZE || !isUsingOMPPlus(playerid))
+		return false;
+
+	return sendLegacyRPC(playerid, OMPPlusProtocol::UI_CLOSE_ALL) != 0;
+}
+
+bool OMPPlusComponent::setUiData(int playerid, const std::string& documentid, const std::string& key, const std::string& value)
+{
+	if (playerid < 0 || playerid >= PLAYER_POOL_SIZE || !isUsingOMPPlus(playerid) || documentid.empty() || key.empty())
+		return false;
+
+	NetworkBitStream stream;
+	WriteBoundString(stream, documentid, MaxUiDocumentIdLength);
+	WriteBoundString(stream, key, MaxUiKeyLength);
+	WriteBoundString(stream, value, MaxUiValueLength);
+	return sendLegacyRPC(playerid, OMPPlusProtocol::UI_SET_DATA, &stream);
+}
+
+bool OMPPlusComponent::clearInventory(int playerid, const std::string& documentid)
+{
+	if (playerid < 0 || playerid >= PLAYER_POOL_SIZE || !isUsingOMPPlus(playerid) || documentid.empty())
+		return false;
+
+	NetworkBitStream stream;
+	WriteBoundString(stream, documentid, MaxUiDocumentIdLength);
+	return sendLegacyRPC(playerid, OMPPlusProtocol::UI_INVENTORY_CLEAR, &stream);
+}
+
+bool OMPPlusComponent::setInventorySlot(int playerid, const std::string& documentid, uint16_t slot, uint32_t itemid, uint16_t amount, const std::string& label, const std::string& description, const std::string& icon)
+{
+	if (playerid < 0 || playerid >= PLAYER_POOL_SIZE || !isUsingOMPPlus(playerid) || documentid.empty() || slot >= MaxInventorySlots)
+		return false;
+
+	NetworkBitStream stream;
+	WriteBoundString(stream, documentid, MaxUiDocumentIdLength);
+	stream.Write(slot);
+	stream.Write(itemid);
+	stream.Write(amount);
+	WriteBoundString(stream, label, MaxInventoryLabelLength);
+	WriteBoundString(stream, description, MaxInventoryDescriptionLength);
+	WriteBoundString(stream, icon, MaxInventoryIconLength);
+	return sendLegacyRPC(playerid, OMPPlusProtocol::UI_INVENTORY_SET_SLOT, &stream);
+}
+
 void OMPPlusComponent::resetPlayer(int playerid)
 {
 	if (playerid >= 0 && playerid < PLAYER_POOL_SIZE)
@@ -779,6 +887,8 @@ uint32_t OMPPlusComponent::deriveLegacyFeatures(uint32_t capabilities) const
 		features |= OMPPlusProtocol::FeatureTarget | OMPPlusProtocol::FeatureUI;
 	if (capabilities & OMPPlusProtocol::CapabilityBuildUI)
 		features |= OMPPlusProtocol::FeatureBuild | OMPPlusProtocol::FeatureUI;
+	if (capabilities & OMPPlusProtocol::CapabilityRmlUi)
+		features |= OMPPlusProtocol::FeatureUI;
 	return features;
 }
 
@@ -919,6 +1029,9 @@ void OMPPlusComponent::processClientRPC(IPlayer& player, uint16_t rpc, NetworkBi
 		break;
 	case OMPPlusProtocol::ON_BUILD_PREVIEW:
 		processBuildPreview(player, stream);
+		break;
+	case OMPPlusProtocol::ON_UI_EVENT:
+		processUiEvent(player, stream);
 		break;
 	default:
 		break;
@@ -1114,11 +1227,39 @@ void OMPPlusComponent::processBuildPreview(IPlayer& player, NetworkBitStream& st
 	}
 }
 
+void OMPPlusComponent::processUiEvent(IPlayer& player, NetworkBitStream& stream)
+{
+	const int playerid = player.getID();
+	std::string documentid;
+	uint8_t eventType = 0;
+	uint16_t slot = 0;
+	std::string element;
+	std::string payload;
+
+	if (!ReadBoundString(stream, documentid, MaxUiDocumentIdLength)
+		|| !stream.Read(eventType)
+		|| !stream.Read(slot)
+		|| !ReadBoundString(stream, element, MaxUiKeyLength)
+		|| !ReadBoundString(stream, payload, MaxUiValueLength))
+	{
+		return;
+	}
+
+	callPublic("OnPlayerSAMPPUIEvent", DefaultReturnValue_True, playerid, StringView(documentid.c_str(), documentid.length()), static_cast<int>(eventType), static_cast<int>(slot), StringView(element.c_str(), element.length()), StringView(payload.c_str(), payload.length()));
+	callPublic("OnPlayerOMPPlusUIEvent", DefaultReturnValue_True, playerid, StringView(documentid.c_str(), documentid.length()), static_cast<int>(eventType), static_cast<int>(slot), StringView(element.c_str(), element.length()), StringView(payload.c_str(), payload.length()));
+
+	if (eventType == OMPPlusProtocol::UiEventClick || eventType == OMPPlusProtocol::UiEventSecondaryClick)
+	{
+		callPublic("OnPlayerSAMPPInventoryClick", DefaultReturnValue_True, playerid, StringView(documentid.c_str(), documentid.length()), static_cast<int>(slot), static_cast<int>(eventType), StringView(payload.c_str(), payload.length()));
+		callPublic("OnPlayerOMPPlusInventoryClick", DefaultReturnValue_True, playerid, StringView(documentid.c_str(), documentid.length()), static_cast<int>(slot), static_cast<int>(eventType), StringView(payload.c_str(), payload.length()));
+	}
+}
+
 void OMPPlusComponent::sendHelloAck(IPlayer& player)
 {
 	NetworkBitStream stream;
 	writeHeader(stream, OMPPlusProtocol::Message::HelloAck);
-	stream.Write(OMPPlusProtocol::DefaultCapabilities | OMPPlusProtocol::CapabilityTargetUI | OMPPlusProtocol::CapabilityTargetUIV2 | OMPPlusProtocol::CapabilityBuildUI);
+	stream.Write(OMPPlusProtocol::DefaultCapabilities | OMPPlusProtocol::CapabilityTargetUI | OMPPlusProtocol::CapabilityTargetUIV2 | OMPPlusProtocol::CapabilityBuildUI | OMPPlusProtocol::CapabilityRmlUi);
 	player.sendRPC(OMPPlusProtocol::RpcID, Span<uint8_t>(stream.GetData(), stream.GetNumberOfBitsUsed()), OMPPlusProtocol::Channel);
 }
 

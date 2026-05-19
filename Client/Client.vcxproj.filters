@@ -8,6 +8,7 @@
     <ClCompile Include="CGraphics.cpp" />
     <ClCompile Include="CHUD.cpp" />
     <ClCompile Include="CKeyBinds.cpp" />
+    <ClCompile Include="CRmlUiManager.cpp" />
     <ClCompile Include="COverlayRenderer.cpp" />
     <ClCompile Include="CSampClient.cpp" />
     <ClCompile Include="CLocalPlayer.cpp" />
@@ -432,6 +433,7 @@
     </ClInclude>
     <ClInclude Include="..\Include\SAMP+\client\CGameRakClient.h" />
     <ClInclude Include="..\Include\SAMP+\client\COverlayRenderer.h" />
+    <ClInclude Include="..\Include\SAMP+\client\CRmlUiManager.h" />
     <ClInclude Include="..\Include\SAMP+\client\CSampClient.h" />
     <ClInclude Include="..\Include\SAMP+\client\CBuildManager.h" />
     <ClInclude Include="..\Include\SAMP+\client\CTargetManager.h" />
@@ -444,6 +446,11 @@
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="Client.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="ui\theme.rcss" />
+    <None Include="ui\inventory\inventory.rml" />
+    <None Include="ui\inventory\inventory.rcss" />
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="shader.fx">

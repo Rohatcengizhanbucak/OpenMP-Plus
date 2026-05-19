@@ -13,11 +13,12 @@ namespace OMPPlusProtocol
 	static const uint32_t CapabilityTargetUI = 0x00000004;
 	static const uint32_t CapabilityTargetUIV2 = 0x00000008;
 	static const uint32_t CapabilityBuildUI = 0x00000010;
+	static const uint32_t CapabilityRmlUi = 0x00000020;
 	static const uint32_t DefaultCapabilities = CapabilityNativeTransport | CapabilityKeyCapture;
 	static const uint8_t ClientInfoVersion = 1;
 	static const uint16_t ClientVersionMajor = 0;
 	static const uint16_t ClientVersionMinor = 1;
-	static const uint16_t ClientVersionPatch = 27;
+	static const uint16_t ClientVersionPatch = 28;
 	static const uint8_t MaxClientHashLength = 64;
 	static const int MaxPayloadBytes = 4096;
 	static const int MaxMessagesPerSecond = 60;
@@ -87,6 +88,32 @@ namespace OMPPlusProtocol
 		TargetRowDanger = 7
 	};
 
+	enum UiTemplate : uint8_t
+	{
+		UiTemplatePanel = 0,
+		UiTemplateInventory = 1,
+		UiTemplateStorage = 2,
+		UiTemplateCrafting = 3,
+		UiTemplatePhone = 4,
+		UiTemplateTablet = 5
+	};
+
+	enum UiFlags : uint32_t
+	{
+		UiFlagModal = 1 << 0,
+		UiFlagCaptureMouse = 1 << 1,
+		UiFlagCaptureKeyboard = 1 << 2,
+		UiFlagCloseOnEscape = 1 << 3
+	};
+
+	enum UiEventType : uint8_t
+	{
+		UiEventClick = 1,
+		UiEventSecondaryClick = 2,
+		UiEventClose = 3,
+		UiEventSubmit = 4
+	};
+
 	enum class Message : uint8_t
 	{
 		Hello = 1,
@@ -152,7 +179,14 @@ namespace OMPPlusProtocol
 	X(ON_BUILD_PLACE) \
 	X(ON_BUILD_CANCEL) \
 	X(ON_BUILD_PREVIEW) \
-	X(BUILD_REMOVE_TARGET)
+	X(BUILD_REMOVE_TARGET) \
+	X(UI_OPEN) \
+	X(UI_CLOSE) \
+	X(UI_CLOSE_ALL) \
+	X(UI_SET_DATA) \
+	X(UI_INVENTORY_CLEAR) \
+	X(UI_INVENTORY_SET_SLOT) \
+	X(ON_UI_EVENT)
 
 	enum LegacyRPC : uint16_t
 	{

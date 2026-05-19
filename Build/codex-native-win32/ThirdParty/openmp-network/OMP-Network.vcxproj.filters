@@ -1,0 +1,42 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="18.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\ThirdParty\openmp-network\Encoding\huffman_tree.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\ThirdParty\openmp-network\Encoding\str_compress.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\ThirdParty\openmp-network\bitstream.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\ThirdParty\openmp-network\Encoding\huffman_tree.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\ThirdParty\openmp-network\Encoding\huffman_tree_node.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\ThirdParty\openmp-network\Encoding\str_compress.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\ThirdParty\openmp-network\bitstream.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\ThirdParty\openmp-network\packet.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\Elect\OneDrive\Belgeler\GitHub\OpenMP-Plus\ThirdParty\openmp-network\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{F247A8C6-5FA7-3E70-B643-ADC97BA39972}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{66A7151A-A975-3437-8784-19BA60996AEA}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>
