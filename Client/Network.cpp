@@ -211,6 +211,11 @@ namespace Network
 				CRmlUiManager::HandleInventorySetSlot(bitStream);
 				break;
 			}
+			case eRPC::UI_INVENTORY_SET_SLOT_ACTIONS:
+			{
+				CRmlUiManager::HandleInventorySetSlotActions(bitStream);
+				break;
+			}
 			default:
 				CLog::Write("Safe RPC ignored: %u", usRpcId);
 				break;

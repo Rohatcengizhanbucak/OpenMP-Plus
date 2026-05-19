@@ -117,6 +117,10 @@
 #define SAMPP_UI_EVENT_SECONDARY_CLICK 2
 #define SAMPP_UI_EVENT_CLOSE 3
 #define SAMPP_UI_EVENT_SUBMIT 4
+#define SAMPP_UI_EVENT_SLOT_DROP 5
+#define SAMPP_UI_EVENT_WORLD_DROP 6
+#define SAMPP_UI_EVENT_INVENTORY_ACTION 7
+#define SAMPP_UI_EVENT_INVENTORY_SPLIT 8
 
 #define SAMPP_CAPTURE_CONSUME_GAME_INPUT 1
 #define SAMPP_CAPTURE_BLOCK_SWITCH_WEAPON 2
@@ -334,6 +338,7 @@ native SAMPP_UISetData(playerid, const documentid[], const key[], const value[])
 native SAMPP_InventoryOpen(playerid, const documentid[], const title[], slots = 30, const body[] = "Server-driven inventory UI.", flags = SAMPP_UI_DEFAULT_FLAGS);
 native SAMPP_InventoryClear(playerid, const documentid[]);
 native SAMPP_InventorySetSlot(playerid, const documentid[], slot, itemid, amount, const label[], const description[] = "", const icon[] = "");
+native SAMPP_InventorySetSlotActions(playerid, const documentid[], slot, const actions[]);
 native SAMPP_ExecuteCallback(type, {Float,_}:...);
 
 stock bool:SAMPP_TargetAddAction(playerid, targetid, optionid, const label[], const icon[] = "")
@@ -506,6 +511,12 @@ forward OnPlayerSAMPPUIEvent(playerid, documentid[], event_type, slot, element[]
 forward OnPlayerOMPPlusUIEvent(playerid, documentid[], event_type, slot, element[], payload[]);
 forward OnPlayerSAMPPInventoryClick(playerid, documentid[], slot, event_type, payload[]);
 forward OnPlayerOMPPlusInventoryClick(playerid, documentid[], slot, event_type, payload[]);
+forward OnPlayerSAMPPInventoryDrop(playerid, documentid[], from_slot, to_slot, payload[]);
+forward OnPlayerOMPPlusInventoryDrop(playerid, documentid[], from_slot, to_slot, payload[]);
+forward OnPlayerSAMPPInventoryAction(playerid, documentid[], slot, action[], payload[]);
+forward OnPlayerOMPPlusInventoryAction(playerid, documentid[], slot, action[], payload[]);
+forward OnPlayerSAMPPInventorySplit(playerid, documentid[], slot, amount, payload[]);
+forward OnPlayerOMPPlusInventorySplit(playerid, documentid[], slot, amount, payload[]);
 
 public OnPlayerConnect(playerid)
 {

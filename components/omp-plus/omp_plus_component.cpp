@@ -27,6 +27,7 @@ namespace
 	constexpr size_t MaxInventoryLabelLength = 48;
 	constexpr size_t MaxInventoryDescriptionLength = 96;
 	constexpr size_t MaxInventoryIconLength = 48;
+	constexpr size_t MaxInventoryActionsLength = 255;
 	constexpr uint16_t MaxInventorySlots = 120;
 	constexpr uint16_t DefaultTargetTtlMs = 500;
 	constexpr uint16_t MaxTargetTtlMs = 5000;
@@ -37,6 +38,33 @@ namespace
 	std::string BoundString(const std::string& value, size_t maxLength)
 	{
 		return value.length() > maxLength ? value.substr(0, maxLength) : value;
+	}
+
+	int ParseFirstSignedInt(const std::string& value, int fallback)
+	{
+		if (value.empty())
+			return fallback;
+
+		size_t i = 0;
+		int sign = 1;
+		if (value[i] == '-')
+		{
+			sign = -1;
+			++i;
+		}
+
+		bool hasDigit = false;
+		int result = 0;
+		for (; i < value.length(); ++i)
+		{
+			const char c = value[i];
+			if (c < '0' || c > '9')
+				break;
+			hasDigit = true;
+			result = result * 10 + (c - '0');
+		}
+
+		return hasDigit ? result * sign : fallback;
 	}
 
 	void WriteBoundString(NetworkBitStream& stream, const std::string& value, size_t maxLength)
@@ -716,6 +744,18 @@ bool OMPPlusComponent::setInventorySlot(int playerid, const std::string& documen
 	return sendLegacyRPC(playerid, OMPPlusProtocol::UI_INVENTORY_SET_SLOT, &stream);
 }
 
+bool OMPPlusComponent::setInventorySlotActions(int playerid, const std::string& documentid, uint16_t slot, const std::string& actions)
+{
+	if (playerid < 0 || playerid >= PLAYER_POOL_SIZE || !isUsingOMPPlus(playerid) || documentid.empty() || slot >= MaxInventorySlots)
+		return false;
+
+	NetworkBitStream stream;
+	WriteBoundString(stream, documentid, MaxUiDocumentIdLength);
+	stream.Write(slot);
+	WriteBoundString(stream, actions, MaxInventoryActionsLength);
+	return sendLegacyRPC(playerid, OMPPlusProtocol::UI_INVENTORY_SET_SLOT_ACTIONS, &stream);
+}
+
 void OMPPlusComponent::resetPlayer(int playerid)
 {
 	if (playerid >= 0 && playerid < PLAYER_POOL_SIZE)
@@ -1245,13 +1285,35 @@ void OMPPlusComponent::processUiEvent(IPlayer& player, NetworkBitStream& stream)
 		return;
 	}
 
-	callPublic("OnPlayerSAMPPUIEvent", DefaultReturnValue_True, playerid, StringView(documentid.c_str(), documentid.length()), static_cast<int>(eventType), static_cast<int>(slot), StringView(element.c_str(), element.length()), StringView(payload.c_str(), payload.length()));
-	callPublic("OnPlayerOMPPlusUIEvent", DefaultReturnValue_True, playerid, StringView(documentid.c_str(), documentid.length()), static_cast<int>(eventType), static_cast<int>(slot), StringView(element.c_str(), element.length()), StringView(payload.c_str(), payload.length()));
+	bool calledUiEvent = false;
+	callPublicIfExists("OnPlayerSAMPPUIEvent", DefaultReturnValue_True, calledUiEvent, playerid, StringView(documentid.c_str(), documentid.length()), static_cast<int>(eventType), static_cast<int>(slot), StringView(element.c_str(), element.length()), StringView(payload.c_str(), payload.length()));
+	callPublicIfExists("OnPlayerOMPPlusUIEvent", DefaultReturnValue_True, calledUiEvent, playerid, StringView(documentid.c_str(), documentid.length()), static_cast<int>(eventType), static_cast<int>(slot), StringView(element.c_str(), element.length()), StringView(payload.c_str(), payload.length()));
 
 	if (eventType == OMPPlusProtocol::UiEventClick || eventType == OMPPlusProtocol::UiEventSecondaryClick)
 	{
-		callPublic("OnPlayerSAMPPInventoryClick", DefaultReturnValue_True, playerid, StringView(documentid.c_str(), documentid.length()), static_cast<int>(slot), static_cast<int>(eventType), StringView(payload.c_str(), payload.length()));
-		callPublic("OnPlayerOMPPlusInventoryClick", DefaultReturnValue_True, playerid, StringView(documentid.c_str(), documentid.length()), static_cast<int>(slot), static_cast<int>(eventType), StringView(payload.c_str(), payload.length()));
+		bool calledInventoryClick = false;
+		callPublicIfExists("OnPlayerSAMPPInventoryClick", DefaultReturnValue_True, calledInventoryClick, playerid, StringView(documentid.c_str(), documentid.length()), static_cast<int>(slot), static_cast<int>(eventType), StringView(payload.c_str(), payload.length()));
+		callPublicIfExists("OnPlayerOMPPlusInventoryClick", DefaultReturnValue_True, calledInventoryClick, playerid, StringView(documentid.c_str(), documentid.length()), static_cast<int>(slot), static_cast<int>(eventType), StringView(payload.c_str(), payload.length()));
+	}
+	else if (eventType == OMPPlusProtocol::UiEventSlotDrop || eventType == OMPPlusProtocol::UiEventWorldDrop)
+	{
+		const int targetSlot = eventType == OMPPlusProtocol::UiEventWorldDrop ? -1 : ParseFirstSignedInt(payload, -1);
+		bool called = false;
+		callPublicIfExists("OnPlayerSAMPPInventoryDrop", DefaultReturnValue_True, called, playerid, StringView(documentid.c_str(), documentid.length()), static_cast<int>(slot), targetSlot, StringView(payload.c_str(), payload.length()));
+		callPublicIfExists("OnPlayerOMPPlusInventoryDrop", DefaultReturnValue_True, called, playerid, StringView(documentid.c_str(), documentid.length()), static_cast<int>(slot), targetSlot, StringView(payload.c_str(), payload.length()));
+	}
+	else if (eventType == OMPPlusProtocol::UiEventInventoryAction)
+	{
+		bool called = false;
+		callPublicIfExists("OnPlayerSAMPPInventoryAction", DefaultReturnValue_True, called, playerid, StringView(documentid.c_str(), documentid.length()), static_cast<int>(slot), StringView(element.c_str(), element.length()), StringView(payload.c_str(), payload.length()));
+		callPublicIfExists("OnPlayerOMPPlusInventoryAction", DefaultReturnValue_True, called, playerid, StringView(documentid.c_str(), documentid.length()), static_cast<int>(slot), StringView(element.c_str(), element.length()), StringView(payload.c_str(), payload.length()));
+	}
+	else if (eventType == OMPPlusProtocol::UiEventInventorySplit)
+	{
+		const int amount = ParseFirstSignedInt(payload, 0);
+		bool called = false;
+		callPublicIfExists("OnPlayerSAMPPInventorySplit", DefaultReturnValue_True, called, playerid, StringView(documentid.c_str(), documentid.length()), static_cast<int>(slot), amount, StringView(payload.c_str(), payload.length()));
+		callPublicIfExists("OnPlayerOMPPlusInventorySplit", DefaultReturnValue_True, called, playerid, StringView(documentid.c_str(), documentid.length()), static_cast<int>(slot), amount, StringView(payload.c_str(), payload.length()));
 	}
 }
 

@@ -29,4 +29,5 @@ public:
 	static void HandleSetData(RakNet::BitStream& stream);
 	static void HandleInventoryClear(RakNet::BitStream& stream);
 	static void HandleInventorySetSlot(RakNet::BitStream& stream);
+	static void HandleInventorySetSlotActions(RakNet::BitStream& stream);
 };

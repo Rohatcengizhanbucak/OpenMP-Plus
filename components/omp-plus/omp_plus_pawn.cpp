@@ -628,6 +628,15 @@ namespace
 		const std::string icon = ParamCount(params) >= 8 ? Component()->getPawnString(amx, params[8], 48) : std::string();
 		return Component()->setInventorySlot(playerid, documentid, slot, itemid, amount, label, description, icon) ? 1 : 0;
 	}
+
+	cell AMX_NATIVE_CALL InventorySetSlotActionsProc(AMX* amx, cell* params)
+	{
+		const int playerid = static_cast<int>(params[1]);
+		const std::string documentid = Component()->getPawnString(amx, params[2], 31);
+		const uint16_t slot = static_cast<uint16_t>(std::max<cell>(0, std::min<cell>(119, params[3])));
+		const std::string actions = Component()->getPawnString(amx, params[4], 255);
+		return Component()->setInventorySlotActions(playerid, documentid, slot, actions) ? 1 : 0;
+	}
 }
 
 AMX_NATIVE_INFO OMPPlusNatives[] =
@@ -702,5 +711,6 @@ AMX_NATIVE_INFO OMPPlusNatives[] =
 	{ "SAMPP_InventoryOpen", InventoryOpenProc },
 	{ "SAMPP_InventoryClear", InventoryClearProc },
 	{ "SAMPP_InventorySetSlot", InventorySetSlotProc },
+	{ "SAMPP_InventorySetSlotActions", InventorySetSlotActionsProc },
 	{ nullptr, nullptr }
 };

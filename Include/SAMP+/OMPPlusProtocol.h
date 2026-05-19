@@ -18,7 +18,7 @@ namespace OMPPlusProtocol
 	static const uint8_t ClientInfoVersion = 1;
 	static const uint16_t ClientVersionMajor = 0;
 	static const uint16_t ClientVersionMinor = 1;
-	static const uint16_t ClientVersionPatch = 28;
+	static const uint16_t ClientVersionPatch = 30;
 	static const uint8_t MaxClientHashLength = 64;
 	static const int MaxPayloadBytes = 4096;
 	static const int MaxMessagesPerSecond = 60;
@@ -111,7 +111,11 @@ namespace OMPPlusProtocol
 		UiEventClick = 1,
 		UiEventSecondaryClick = 2,
 		UiEventClose = 3,
-		UiEventSubmit = 4
+		UiEventSubmit = 4,
+		UiEventSlotDrop = 5,
+		UiEventWorldDrop = 6,
+		UiEventInventoryAction = 7,
+		UiEventInventorySplit = 8
 	};
 
 	enum class Message : uint8_t
@@ -186,6 +190,7 @@ namespace OMPPlusProtocol
 	X(UI_SET_DATA) \
 	X(UI_INVENTORY_CLEAR) \
 	X(UI_INVENTORY_SET_SLOT) \
+	X(UI_INVENTORY_SET_SLOT_ACTIONS) \
 	X(ON_UI_EVENT)
 
 	enum LegacyRPC : uint16_t

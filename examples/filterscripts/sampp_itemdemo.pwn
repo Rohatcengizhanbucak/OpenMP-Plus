@@ -23,6 +23,8 @@ static gItemInterior[ITEM_DEMO_MAX_ITEMS];
 static bool:gItemCaptureActive[MAX_PLAYERS];
 static gItemNextCaptureRefresh[MAX_PLAYERS];
 
+forward SAMPP_ItemDemoSpawnWaterBottleForPlayer(playerid);
+
 stock ResetItemSlot(slot)
 {
 	gItemActive[slot] = false;
@@ -108,20 +110,13 @@ stock PrepareItemKey(playerid)
 	return 1;
 }
 
-stock AddWaterBottleItem(playerid)
+stock CreateWaterBottleItem(playerid, Float:x, Float:y, Float:z, bool:announce = true)
 {
 	new slot = FindFreeItemSlot();
 	if (slot == -1)
 	{
 		SendClientMessage(playerid, ITEM_DEMO_WARN_COLOUR, "[ItemDemo] Item pool is full. Use /itemclear first.");
-		return 1;
-	}
-
-	new Float:x, Float:y, Float:z;
-	if (!GetPlayerPos(playerid, x, y, z))
-	{
-		SendClientMessage(playerid, ITEM_DEMO_WARN_COLOUR, "[ItemDemo] Could not read your position.");
-		return 1;
+		return 0;
 	}
 
 	gItemX[slot] = x;
@@ -135,7 +130,7 @@ stock AddWaterBottleItem(playerid)
 	{
 		ResetItemSlot(slot);
 		SendClientMessage(playerid, ITEM_DEMO_WARN_COLOUR, "[ItemDemo] Could not create the item object.");
-		return 1;
+		return 0;
 	}
 
 	gItemLabel[slot] = Create3DTextLabel("{74D9FF}Water Bottle\n{FFFFFF}Press E to pick up", ITEM_DEMO_COLOUR, x, y, z + 0.25, ITEM_DEMO_LABEL_DRAW_DISTANCE, gItemWorld[slot], false);
@@ -144,16 +139,48 @@ stock AddWaterBottleItem(playerid)
 		DestroyObject(gItemObject[slot]);
 		ResetItemSlot(slot);
 		SendClientMessage(playerid, ITEM_DEMO_WARN_COLOUR, "[ItemDemo] Could not create the item label.");
-		return 1;
+		return 0;
 	}
 
 	gItemActive[slot] = true;
 
-	new message[128];
-	format(message, sizeof message, "[ItemDemo] Water Bottle item #%d added. Press E near it to test the ASI keybind.", slot);
-	SendClientMessage(playerid, ITEM_DEMO_COLOUR, message);
+	if (announce)
+	{
+		new message[128];
+		format(message, sizeof message, "[ItemDemo] Water Bottle item #%d added. Press E near it to test the ASI keybind.", slot);
+		SendClientMessage(playerid, ITEM_DEMO_COLOUR, message);
+	}
 	PrepareItemKey(playerid);
+	return slot + 1;
+}
+
+stock AddWaterBottleItem(playerid)
+{
+	new Float:x, Float:y, Float:z;
+	if (!GetPlayerPos(playerid, x, y, z))
+	{
+		SendClientMessage(playerid, ITEM_DEMO_WARN_COLOUR, "[ItemDemo] Could not read your position.");
+		return 1;
+	}
+
+	CreateWaterBottleItem(playerid, x, y, z, true);
 	return 1;
+}
+
+public SAMPP_ItemDemoSpawnWaterBottleForPlayer(playerid)
+{
+	new Float:x, Float:y, Float:z;
+	if (!GetPlayerPos(playerid, x, y, z))
+	{
+		return 0;
+	}
+
+	new Float:angle;
+	GetPlayerFacingAngle(playerid, angle);
+	x += floatsin(-angle, degrees) * 1.15;
+	y += floatcos(-angle, degrees) * 1.15;
+
+	return CreateWaterBottleItem(playerid, x, y, z, false);
 }
 
 stock FindNearestItemForPlayer(playerid)
@@ -196,11 +223,28 @@ stock PickupNearestItem(playerid)
 		return 1;
 	}
 
+	new inventoryResult = CallRemoteFunction(
+		"SAMPP_InventoryDemoAddItem",
+		"iiisss",
+		playerid,
+		5001,
+		1,
+		"Water Bottle",
+		"Fresh water bottle picked up from the world. Drag it outside the inventory to drop it again.",
+		"water"
+	);
+
+	if (!inventoryResult)
+	{
+		SendClientMessage(playerid, ITEM_DEMO_WARN_COLOUR, "[ItemDemo] Inventory did not accept the Water Bottle. The world item was left in place.");
+		return 1;
+	}
+
 	DestroyItemSlot(slot);
 	SAMPP_EndKeyCapture(playerid, SAMPP_KEY_E, "item_pickup");
 	gItemCaptureActive[playerid] = false;
 	ApplyAnimation(playerid, "BOMBER", "BOM_Plant", 4.0, false, false, false, false, 0);
-	SendClientMessage(playerid, ITEM_DEMO_COLOUR, "[ItemDemo] You picked up a Water Bottle through the SA-MP+ E keybind.");
+	SendClientMessage(playerid, ITEM_DEMO_COLOUR, "[ItemDemo] You picked up a Water Bottle and it was added to the inventory demo.");
 	return 1;
 }
 
@@ -245,7 +289,8 @@ stock RefreshItemCapture(playerid, bool:force = false)
 stock SendItemHelp(playerid)
 {
 	SendClientMessage(playerid, ITEM_DEMO_COLOUR, "[ItemDemo] /itemadd creates a Water Bottle at your position.");
-	SendClientMessage(playerid, ITEM_DEMO_COLOUR, "[ItemDemo] Press E near the label to pick it up through OnPlayerSAMPPKey.");
+	SendClientMessage(playerid, ITEM_DEMO_COLOUR, "[ItemDemo] Press E near the label to add it to /inventorydemo.");
+	SendClientMessage(playerid, ITEM_DEMO_COLOUR, "[ItemDemo] Drag the Water Bottle outside the inventory to drop it back into the world.");
 	SendClientMessage(playerid, ITEM_DEMO_COLOUR, "[ItemDemo] /itemkeys rebinds E, /itemclear removes all demo items.");
 	return 1;
 }

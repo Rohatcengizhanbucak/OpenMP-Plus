@@ -13,6 +13,7 @@
 #include <cstring>
 #include <map>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string>
 #include <vector>
 
@@ -35,6 +36,7 @@ namespace
 		std::string label;
 		std::string description;
 		std::string icon;
+		std::vector<std::pair<std::string, std::string> > actions;
 
 		InventorySlot()
 			: used(false)
@@ -67,6 +69,73 @@ namespace
 		}
 	};
 
+	struct InventoryLayout
+	{
+		int slotSize;
+		int gap;
+		int columns;
+		int maxRows;
+		int startX;
+		int startY;
+	};
+
+	struct InventoryDragState
+	{
+		bool candidate;
+		bool active;
+		std::string documentId;
+		int sourceSlot;
+		POINT startMouse;
+		InventorySlot item;
+
+		InventoryDragState()
+			: candidate(false)
+			, active(false)
+			, sourceSlot(-1)
+		{
+			startMouse.x = 0;
+			startMouse.y = 0;
+		}
+	};
+
+	struct InventoryContextMenuState
+	{
+		bool active;
+		std::string documentId;
+		int slot;
+		int x;
+		int y;
+		int hoveredAction;
+		std::vector<std::pair<std::string, std::string> > actions;
+
+		InventoryContextMenuState()
+			: active(false)
+			, slot(-1)
+			, x(0)
+			, y(0)
+			, hoveredAction(-1)
+		{
+		}
+	};
+
+	struct InventorySplitState
+	{
+		bool active;
+		std::string documentId;
+		int slot;
+		int amount;
+		int maxAmount;
+		std::string actionId;
+
+		InventorySplitState()
+			: active(false)
+			, slot(-1)
+			, amount(1)
+			, maxAmount(1)
+		{
+		}
+	};
+
 	const DWORD UiFvf = D3DFVF_XYZRHW | D3DFVF_DIFFUSE;
 	const size_t MaxDocumentIdLength = 31;
 	const size_t MaxTitleLength = 64;
@@ -76,6 +145,7 @@ namespace
 	const size_t MaxSlotLabelLength = 48;
 	const size_t MaxSlotDescriptionLength = 96;
 	const size_t MaxIconLength = 48;
+	const size_t MaxActionsLength = 255;
 	const uint16_t MaxInventorySlots = 120;
 
 	static HWND g_window = NULL;
@@ -84,6 +154,9 @@ namespace
 	static ID3DXFont* g_titleFont = NULL;
 	static std::vector<UiDocument> g_documents;
 	static POINT g_mouse = { 0, 0 };
+	static InventoryDragState g_drag;
+	static InventoryContextMenuState g_contextMenu;
+	static InventorySplitState g_split;
 	static bool g_initialized = false;
 	static bool g_loggedFallback = false;
 	static bool g_captureActive = false;
@@ -178,6 +251,188 @@ namespace
 		return (document.flags & (OMPPlusProtocol::UiFlagCaptureMouse | OMPPlusProtocol::UiFlagModal)) != 0;
 	}
 
+	bool IsInventoryTemplate(const UiDocument& document)
+	{
+		return document.templateId == OMPPlusProtocol::UiTemplateInventory || document.templateId == OMPPlusProtocol::UiTemplateStorage;
+	}
+
+	bool IsSlotUsed(const UiDocument& document, int slot)
+	{
+		return slot >= 0 && slot < static_cast<int>(document.slots.size()) && document.slots[slot].used;
+	}
+
+	InventoryLayout GetInventoryLayout(const UiDocument& document)
+	{
+		InventoryLayout layout;
+		layout.slotSize = 62;
+		layout.gap = 8;
+		layout.columns = 6;
+		layout.maxRows = 5;
+		layout.startX = document.bounds.left + 20;
+		layout.startY = document.bounds.top + 104;
+		return layout;
+	}
+
+	RECT GetInventorySlotRect(const UiDocument& document, uint16_t slot)
+	{
+		InventoryLayout layout = GetInventoryLayout(document);
+		const int col = slot % layout.columns;
+		const int row = slot / layout.columns;
+		const int sx = layout.startX + col * (layout.slotSize + layout.gap);
+		const int sy = layout.startY + row * (layout.slotSize + layout.gap);
+		RECT rect = { sx, sy, sx + layout.slotSize, sy + layout.slotSize };
+		return rect;
+	}
+
+	int FindInventorySlotAt(UiDocument& document, int x, int y)
+	{
+		const uint16_t requestedCapacity = document.capacity ? document.capacity : 30;
+		const uint16_t capacity = requestedCapacity < MaxInventorySlots ? requestedCapacity : MaxInventorySlots;
+		if (document.slots.size() < capacity)
+			document.slots.resize(capacity);
+
+		const int visibleSlots = 6 * 5;
+		for (uint16_t slot = 0; slot < capacity && slot < visibleSlots; ++slot)
+		{
+			if (PointInRect(x, y, GetInventorySlotRect(document, slot)))
+				return slot;
+		}
+
+		return -1;
+	}
+
+	void UpdateInventoryHover(UiDocument& document)
+	{
+		document.hoveredSlot = IsInventoryTemplate(document) ? FindInventorySlotAt(document, g_mouse.x, g_mouse.y) : -1;
+	}
+
+	void ClearInventoryDrag()
+	{
+		g_drag = InventoryDragState();
+	}
+
+	void ClearInventoryContextMenu()
+	{
+		g_contextMenu = InventoryContextMenuState();
+	}
+
+	void ClearInventorySplit()
+	{
+		g_split = InventorySplitState();
+	}
+
+	std::string Trim(const std::string& value)
+	{
+		size_t start = 0;
+		while (start < value.length() && (value[start] == ' ' || value[start] == '\t'))
+			++start;
+
+		size_t end = value.length();
+		while (end > start && (value[end - 1] == ' ' || value[end - 1] == '\t'))
+			--end;
+
+		return value.substr(start, end - start);
+	}
+
+	std::vector<std::pair<std::string, std::string> > ParseInventoryActions(const std::string& encoded)
+	{
+		std::vector<std::pair<std::string, std::string> > actions;
+		size_t cursor = 0;
+		while (cursor < encoded.length() && actions.size() < 10)
+		{
+			size_t next = encoded.find(';', cursor);
+			if (next == std::string::npos)
+				next = encoded.length();
+
+			std::string token = Trim(encoded.substr(cursor, next - cursor));
+			if (!token.empty())
+			{
+				size_t sep = token.find(':');
+				std::string id = sep == std::string::npos ? token : token.substr(0, sep);
+				std::string label = sep == std::string::npos ? token : token.substr(sep + 1);
+				id = Trim(id);
+				label = Trim(label);
+				if (!id.empty())
+				{
+					if (label.empty())
+						label = id;
+					actions.push_back(std::make_pair(id, label));
+				}
+			}
+
+			cursor = next + 1;
+		}
+		return actions;
+	}
+
+	std::vector<std::pair<std::string, std::string> > GetInventoryActions(const InventorySlot& slot)
+	{
+		if (!slot.actions.empty())
+			return slot.actions;
+
+		std::vector<std::pair<std::string, std::string> > actions;
+		actions.push_back(std::make_pair(std::string("use"), std::string("Use")));
+		if (slot.amount > 1)
+			actions.push_back(std::make_pair(std::string("split"), std::string("Split Stack")));
+		actions.push_back(std::make_pair(std::string("drop"), std::string("Drop")));
+		actions.push_back(std::make_pair(std::string("inspect"), std::string("Inspect")));
+		return actions;
+	}
+
+	std::string BuildInventoryActionPayload(const InventorySlot& slot, const std::string& actionId)
+	{
+		char prefix[96] = {};
+		sprintf(prefix, "%s|%u|%u|", actionId.c_str(), static_cast<unsigned>(slot.itemId), static_cast<unsigned>(slot.amount));
+		std::string payload(prefix);
+		payload += slot.label;
+		return payload;
+	}
+
+	std::string BuildInventorySplitPayload(const InventorySlot& slot, int amount, const std::string& actionId)
+	{
+		char prefix[96] = {};
+		sprintf(prefix, "%d|%s|%u|%u|", amount, actionId.c_str(), static_cast<unsigned>(slot.itemId), static_cast<unsigned>(slot.amount));
+		std::string payload(prefix);
+		payload += slot.label;
+		return payload;
+	}
+
+	void OpenInventoryContextMenu(UiDocument& document)
+	{
+		UpdateInventoryHover(document);
+		if (!IsSlotUsed(document, document.hoveredSlot))
+		{
+			ClearInventoryContextMenu();
+			return;
+		}
+
+		g_contextMenu = InventoryContextMenuState();
+		g_contextMenu.active = true;
+		g_contextMenu.documentId = document.id;
+		g_contextMenu.slot = document.hoveredSlot;
+		g_contextMenu.x = g_mouse.x + 10;
+		g_contextMenu.y = g_mouse.y + 10;
+		g_contextMenu.actions = GetInventoryActions(document.slots[document.hoveredSlot]);
+	}
+
+	void BeginInventorySplit(UiDocument& document, int slot, const std::string& actionId)
+	{
+		if (!IsSlotUsed(document, slot) || document.slots[slot].amount <= 1)
+			return;
+
+		g_split = InventorySplitState();
+		g_split.active = true;
+		g_split.documentId = document.id;
+		g_split.slot = slot;
+		g_split.maxAmount = document.slots[slot].amount - 1;
+		if (g_split.maxAmount < 1)
+			g_split.maxAmount = 1;
+		g_split.amount = (g_split.maxAmount + 1) / 2;
+		if (g_split.amount < 1)
+			g_split.amount = 1;
+		g_split.actionId = actionId;
+	}
+
 	bool ShouldCloseOnEscape(const UiDocument& document)
 	{
 		return (document.flags & OMPPlusProtocol::UiFlagCloseOnEscape) != 0;
@@ -194,6 +449,81 @@ namespace
 		Network::SendRPC(OMPPlusProtocol::ON_UI_EVENT, &stream);
 	}
 
+	std::string BuildInventoryDropPayload(int targetSlot, const InventorySlot& slot)
+	{
+		char prefix[64] = {};
+		sprintf(prefix, "%d|%u|%u|", targetSlot, static_cast<unsigned>(slot.itemId), static_cast<unsigned>(slot.amount));
+		std::string payload(prefix);
+		payload += slot.label;
+		return payload;
+	}
+
+	bool BeginInventoryDrag(UiDocument& document)
+	{
+		UpdateInventoryHover(document);
+		if (!IsSlotUsed(document, document.hoveredSlot))
+			return false;
+
+		g_drag = InventoryDragState();
+		g_drag.candidate = true;
+		g_drag.documentId = document.id;
+		g_drag.sourceSlot = document.hoveredSlot;
+		g_drag.startMouse = g_mouse;
+		g_drag.item = document.slots[document.hoveredSlot];
+		return true;
+	}
+
+	void UpdateInventoryDrag()
+	{
+		if (!g_drag.candidate || g_drag.active)
+			return;
+
+		const int dx = g_mouse.x - g_drag.startMouse.x;
+		const int dy = g_mouse.y - g_drag.startMouse.y;
+		if ((dx * dx + dy * dy) >= 25)
+			g_drag.active = true;
+	}
+
+	bool FinishInventoryDrag(UiDocument& document)
+	{
+		if (!g_drag.candidate || g_drag.documentId != document.id)
+			return false;
+
+		UpdateInventoryHover(document);
+		if (g_drag.active)
+		{
+			if (document.hoveredSlot >= 0)
+			{
+				if (document.hoveredSlot != g_drag.sourceSlot)
+				{
+					SendUiEvent(
+						document,
+						OMPPlusProtocol::UiEventSlotDrop,
+						static_cast<uint16_t>(g_drag.sourceSlot),
+						"slot_drop",
+						BuildInventoryDropPayload(document.hoveredSlot, g_drag.item)
+					);
+				}
+			}
+			else if (!PointInRect(g_mouse.x, g_mouse.y, document.bounds))
+			{
+				SendUiEvent(
+					document,
+					OMPPlusProtocol::UiEventWorldDrop,
+					static_cast<uint16_t>(g_drag.sourceSlot),
+					"world_drop",
+					BuildInventoryDropPayload(-1, g_drag.item)
+				);
+			}
+
+			ClearInventoryDrag();
+			return true;
+		}
+
+		ClearInventoryDrag();
+		return false;
+	}
+
 	void CloseDocument(std::vector<UiDocument>::iterator it, bool notify)
 	{
 		if (it == g_documents.end())
@@ -201,6 +531,13 @@ namespace
 
 		if (notify)
 			SendUiEvent(*it, OMPPlusProtocol::UiEventClose, 0, "document", "");
+
+		if (g_drag.documentId == it->id)
+			ClearInventoryDrag();
+		if (g_contextMenu.documentId == it->id)
+			ClearInventoryContextMenu();
+		if (g_split.documentId == it->id)
+			ClearInventorySplit();
 
 		g_documents.erase(it);
 		CDInput8DeviceProxy::RequestInputReset();
@@ -298,6 +635,112 @@ namespace
 		DrawTextLine(g_titleFont, document.title.empty() ? document.id : document.title, x + 16, y + 9, width - 32, C(255, 240, 245, 242));
 	}
 
+	void ClampPopupToWindow(int& x, int& y, int width, int height)
+	{
+		RECT client = {};
+		if (!g_window || !GetClientRect(g_window, &client))
+			return;
+
+		if (x + width > client.right)
+			x = client.right - width - 8;
+		if (y + height > client.bottom)
+			y = client.bottom - height - 8;
+		if (x < 8)
+			x = 8;
+		if (y < 8)
+			y = 8;
+	}
+
+	RECT GetContextMenuRect()
+	{
+		const int width = 210;
+		const int height = 34 + static_cast<int>(g_contextMenu.actions.size()) * 30 + 10;
+		int x = g_contextMenu.x;
+		int y = g_contextMenu.y;
+		ClampPopupToWindow(x, y, width, height);
+		RECT rect = { x, y, x + width, y + height };
+		return rect;
+	}
+
+	RECT GetSplitDialogRect(const UiDocument& document)
+	{
+		const int width = 340;
+		const int height = 178;
+		const int x = document.bounds.left + ((document.bounds.right - document.bounds.left) - width) / 2;
+		const int y = document.bounds.top + ((document.bounds.bottom - document.bounds.top) - height) / 2;
+		RECT rect = { x, y, x + width, y + height };
+		return rect;
+	}
+
+	void RenderInventoryContextMenu(IDirect3DDevice9* device, UiDocument& document)
+	{
+		if (!g_contextMenu.active || g_contextMenu.documentId != document.id)
+			return;
+
+		if (!IsSlotUsed(document, g_contextMenu.slot))
+		{
+			ClearInventoryContextMenu();
+			return;
+		}
+
+		RECT rect = GetContextMenuRect();
+		const int width = rect.right - rect.left;
+		const int rowH = 30;
+		g_contextMenu.hoveredAction = -1;
+
+		DrawRect(device, static_cast<float>(rect.left), static_cast<float>(rect.top), static_cast<float>(width), static_cast<float>(rect.bottom - rect.top), C(238, 5, 6, 7));
+		DrawBorder(device, static_cast<float>(rect.left), static_cast<float>(rect.top), static_cast<float>(width), static_cast<float>(rect.bottom - rect.top), C(190, 220, 222, 222));
+		DrawTextLine(g_titleFont, document.slots[g_contextMenu.slot].label, rect.left + 12, rect.top + 8, width - 24, C(255, 255, 255, 255));
+		DrawRect(device, static_cast<float>(rect.left + 10), static_cast<float>(rect.top + 32), static_cast<float>(width - 20), 1.0f, C(90, 220, 220, 220));
+
+		for (size_t i = 0; i < g_contextMenu.actions.size(); ++i)
+		{
+			const int y = rect.top + 38 + static_cast<int>(i) * rowH;
+			RECT row = { rect.left + 8, y, rect.right - 8, y + rowH - 4 };
+			const bool hovered = PointInRect(g_mouse.x, g_mouse.y, row);
+			if (hovered)
+				g_contextMenu.hoveredAction = static_cast<int>(i);
+
+			DrawRect(device, static_cast<float>(row.left), static_cast<float>(row.top), static_cast<float>(row.right - row.left), static_cast<float>(row.bottom - row.top), hovered ? C(245, 82, 86, 89) : C(210, 11, 15, 17));
+			DrawBorder(device, static_cast<float>(row.left), static_cast<float>(row.top), static_cast<float>(row.right - row.left), static_cast<float>(row.bottom - row.top), hovered ? C(230, 245, 245, 245) : C(70, 90, 98, 98));
+			DrawTextLine(g_font, g_contextMenu.actions[i].second, row.left + 12, row.top + 6, row.right - row.left - 24, C(255, 255, 255, 255));
+		}
+	}
+
+	void RenderInventorySplitDialog(IDirect3DDevice9* device, UiDocument& document)
+	{
+		if (!g_split.active || g_split.documentId != document.id || !IsSlotUsed(document, g_split.slot))
+			return;
+
+		RECT rect = GetSplitDialogRect(document);
+		const int width = rect.right - rect.left;
+		DrawRect(device, static_cast<float>(rect.left), static_cast<float>(rect.top), static_cast<float>(width), static_cast<float>(rect.bottom - rect.top), C(242, 4, 5, 6));
+		DrawBorder(device, static_cast<float>(rect.left), static_cast<float>(rect.top), static_cast<float>(width), static_cast<float>(rect.bottom - rect.top), C(210, 245, 245, 245));
+		DrawTextLine(g_titleFont, "Split Stack", rect.left + 14, rect.top + 10, width - 28, C(255, 255, 255, 255));
+		DrawRect(device, static_cast<float>(rect.left + 12), static_cast<float>(rect.top + 40), static_cast<float>(width - 24), 1.0f, C(90, 230, 230, 230));
+
+		const InventorySlot& slot = document.slots[g_split.slot];
+		DrawTextLine(g_font, slot.label, rect.left + 16, rect.top + 55, width - 32, C(230, 225, 232, 232));
+		char amountText[64] = {};
+		sprintf(amountText, "%d / %d", g_split.amount, g_split.maxAmount);
+		DrawTextLine(g_titleFont, amountText, rect.left + 16, rect.top + 82, width - 32, C(255, 255, 255, 255), DT_CENTER | DT_TOP | DT_NOCLIP);
+
+		const char* labels[6] = { "-", "+", "Half", "Max", "Split", "Cancel" };
+		for (int i = 0; i < 6; ++i)
+		{
+			const int buttonW = i < 2 ? 46 : 70;
+			const int bx = rect.left + 16 + (i < 2 ? i * 54 : 108 + (i - 2) * 76);
+			const int by = i < 4 ? rect.top + 114 : rect.top + 144;
+			const int actualW = i < 4 ? buttonW : 145;
+			const int actualX = i == 4 ? rect.left + 16 : (i == 5 ? rect.left + 179 : bx);
+			RECT button = { actualX, by, actualX + actualW, by + 24 };
+			const bool hovered = PointInRect(g_mouse.x, g_mouse.y, button);
+			DrawRect(device, static_cast<float>(button.left), static_cast<float>(button.top), static_cast<float>(button.right - button.left), static_cast<float>(button.bottom - button.top), hovered ? C(245, 82, 86, 89) : C(215, 12, 16, 18));
+			DrawBorder(device, static_cast<float>(button.left), static_cast<float>(button.top), static_cast<float>(button.right - button.left), static_cast<float>(button.bottom - button.top), hovered ? C(230, 245, 245, 245) : C(80, 95, 104, 104));
+			DrawTextLine(g_font, labels[i], button.left, button.top + 5, button.right - button.left, C(255, 255, 255, 255), DT_CENTER | DT_TOP | DT_NOCLIP);
+		}
+	}
+
 	void RenderInventory(IDirect3DDevice9* device, UiDocument& document, const D3DVIEWPORT9& viewport)
 	{
 		const int panelW = 780;
@@ -308,12 +751,13 @@ namespace
 
 		DrawWrappedText(g_font, document.body, x + 18, y + 48, panelW - 36, 42, C(220, 230, 234, 232));
 
-		const int slotSize = 62;
-		const int gap = 8;
-		const int columns = 6;
-		const int startX = x + 20;
-		const int startY = y + 104;
-		const int maxRows = 5;
+		const InventoryLayout layout = GetInventoryLayout(document);
+		const int slotSize = layout.slotSize;
+		const int gap = layout.gap;
+		const int columns = layout.columns;
+		const int startX = layout.startX;
+		const int startY = layout.startY;
+		const int maxRows = layout.maxRows;
 		document.hoveredSlot = -1;
 
 		const uint16_t requestedCapacity = document.capacity ? document.capacity : 30;
@@ -332,8 +776,24 @@ namespace
 			if (hovered)
 				document.hoveredSlot = i;
 
-			DrawRect(device, static_cast<float>(sx), static_cast<float>(sy), static_cast<float>(slotSize), static_cast<float>(slotSize), hovered ? C(238, 68, 72, 76) : C(205, 11, 15, 17));
-			DrawBorder(device, static_cast<float>(sx), static_cast<float>(sy), static_cast<float>(slotSize), static_cast<float>(slotSize), hovered ? C(230, 245, 245, 245) : C(96, 95, 104, 104));
+			const bool dragSource = g_drag.candidate && g_drag.documentId == document.id && g_drag.sourceSlot == static_cast<int>(i);
+			const bool dragTarget = g_drag.active && g_drag.documentId == document.id && document.hoveredSlot == static_cast<int>(i) && !dragSource;
+
+			D3DCOLOR slotFill = hovered ? C(238, 68, 72, 76) : C(205, 11, 15, 17);
+			D3DCOLOR slotBorder = hovered ? C(230, 245, 245, 245) : C(96, 95, 104, 104);
+			if (dragSource)
+			{
+				slotFill = C(155, 45, 34, 12);
+				slotBorder = C(245, 255, 171, 65);
+			}
+			else if (dragTarget)
+			{
+				slotFill = C(235, 91, 75, 38);
+				slotBorder = C(255, 255, 194, 96);
+			}
+
+			DrawRect(device, static_cast<float>(sx), static_cast<float>(sy), static_cast<float>(slotSize), static_cast<float>(slotSize), slotFill);
+			DrawBorder(device, static_cast<float>(sx), static_cast<float>(sy), static_cast<float>(slotSize), static_cast<float>(slotSize), slotBorder);
 
 			const InventorySlot& slot = document.slots[i];
 			if (slot.used)
@@ -369,11 +829,32 @@ namespace
 		else
 		{
 			DrawTextLine(g_titleFont, "Inventory", detailsX + 16, detailsY + 14, detailsW - 32, C(255, 255, 255, 255));
-			DrawWrappedText(g_font, "Hover a slot to inspect it. Click events are sent back to Pawn with the document id, slot index, and event type.", detailsX + 16, detailsY + 48, detailsW - 32, 130, C(215, 225, 230, 230));
+			DrawWrappedText(g_font, "Hover a slot to inspect it. Drag a used slot onto another slot to move, merge, or swap. Drop outside the panel to request a world drop.", detailsX + 16, detailsY + 48, detailsW - 32, 150, C(215, 225, 230, 230));
 		}
 
 		DrawRect(device, static_cast<float>(x + 14), static_cast<float>(y + panelH - 38), static_cast<float>(panelW - 28), 1.0f, C(80, 230, 230, 230));
-		DrawTextLine(g_font, "ESC close", x + 18, y + panelH - 27, panelW - 36, C(210, 230, 230, 230));
+		DrawTextLine(g_font, "LMB drag/drop  |  RMB secondary  |  ESC close", x + 18, y + panelH - 27, panelW - 36, C(210, 230, 230, 230));
+
+		if (g_drag.active && g_drag.documentId == document.id)
+		{
+			const bool outsidePanel = !PointInRect(g_mouse.x, g_mouse.y, document.bounds);
+			const int ghostW = 160;
+			const int ghostH = 52;
+			int gx = g_mouse.x + 18;
+			int gy = g_mouse.y + 18;
+			if (gx + ghostW > static_cast<int>(viewport.Width))
+				gx = g_mouse.x - ghostW - 18;
+			if (gy + ghostH > static_cast<int>(viewport.Height))
+				gy = g_mouse.y - ghostH - 18;
+
+			DrawRect(device, static_cast<float>(gx), static_cast<float>(gy), static_cast<float>(ghostW), static_cast<float>(ghostH), outsidePanel ? C(230, 58, 24, 12) : C(232, 24, 26, 27));
+			DrawBorder(device, static_cast<float>(gx), static_cast<float>(gy), static_cast<float>(ghostW), static_cast<float>(ghostH), outsidePanel ? C(255, 255, 128, 64) : C(230, 255, 255, 255));
+			DrawTextLine(g_titleFont, g_drag.item.label, gx + 10, gy + 8, ghostW - 20, C(255, 255, 255, 255));
+			DrawTextLine(g_font, outsidePanel ? "drop to world" : "drop into slot", gx + 10, gy + 31, ghostW - 20, outsidePanel ? C(255, 255, 178, 86) : C(220, 225, 232, 232));
+		}
+
+		RenderInventoryContextMenu(device, document);
+		RenderInventorySplitDialog(device, document);
 	}
 
 	void RenderGenericPanel(IDirect3DDevice9* device, UiDocument& document, const D3DVIEWPORT9& viewport)
@@ -401,6 +882,7 @@ namespace
 
 	void HandleInventoryClick(UiDocument& document, uint8_t eventType)
 	{
+		UpdateInventoryHover(document);
 		if (document.hoveredSlot < 0)
 			return;
 
@@ -409,6 +891,95 @@ namespace
 			payload = document.slots[document.hoveredSlot].label;
 
 		SendUiEvent(document, eventType, static_cast<uint16_t>(document.hoveredSlot), "slot", payload);
+	}
+
+	bool HandleInventoryContextMenuClick(UiDocument& document)
+	{
+		if (!g_contextMenu.active || g_contextMenu.documentId != document.id)
+			return false;
+
+		RECT rect = GetContextMenuRect();
+		if (!PointInRect(g_mouse.x, g_mouse.y, rect))
+		{
+			ClearInventoryContextMenu();
+			return true;
+		}
+
+		const int rowH = 30;
+		const int index = (g_mouse.y - (rect.top + 38)) / rowH;
+		if (index < 0 || index >= static_cast<int>(g_contextMenu.actions.size()))
+			return true;
+
+		if (!IsSlotUsed(document, g_contextMenu.slot))
+		{
+			ClearInventoryContextMenu();
+			return true;
+		}
+
+		const std::string actionId = g_contextMenu.actions[index].first;
+		const int slot = g_contextMenu.slot;
+		if (actionId == "split")
+		{
+			BeginInventorySplit(document, slot, actionId);
+			ClearInventoryContextMenu();
+			return true;
+		}
+
+		SendUiEvent(
+			document,
+			OMPPlusProtocol::UiEventInventoryAction,
+			static_cast<uint16_t>(slot),
+			actionId,
+			BuildInventoryActionPayload(document.slots[slot], actionId)
+		);
+		ClearInventoryContextMenu();
+		return true;
+	}
+
+	bool HandleInventorySplitClick(UiDocument& document)
+	{
+		if (!g_split.active || g_split.documentId != document.id)
+			return false;
+
+		RECT rect = GetSplitDialogRect(document);
+		if (!PointInRect(g_mouse.x, g_mouse.y, rect))
+			return true;
+
+		RECT minusButton = { rect.left + 16, rect.top + 114, rect.left + 62, rect.top + 138 };
+		RECT plusButton = { rect.left + 70, rect.top + 114, rect.left + 116, rect.top + 138 };
+		RECT halfButton = { rect.left + 124, rect.top + 114, rect.left + 194, rect.top + 138 };
+		RECT maxButton = { rect.left + 200, rect.top + 114, rect.left + 270, rect.top + 138 };
+		RECT splitButton = { rect.left + 16, rect.top + 144, rect.left + 161, rect.top + 168 };
+		RECT cancelButton = { rect.left + 179, rect.top + 144, rect.left + 324, rect.top + 168 };
+
+		if (PointInRect(g_mouse.x, g_mouse.y, minusButton))
+			g_split.amount = g_split.amount > 1 ? g_split.amount - 1 : 1;
+		else if (PointInRect(g_mouse.x, g_mouse.y, plusButton))
+			g_split.amount = g_split.amount < g_split.maxAmount ? g_split.amount + 1 : g_split.maxAmount;
+		else if (PointInRect(g_mouse.x, g_mouse.y, halfButton))
+			g_split.amount = (g_split.maxAmount + 1) / 2 > 1 ? (g_split.maxAmount + 1) / 2 : 1;
+		else if (PointInRect(g_mouse.x, g_mouse.y, maxButton))
+			g_split.amount = g_split.maxAmount;
+		else if (PointInRect(g_mouse.x, g_mouse.y, splitButton))
+		{
+			if (IsSlotUsed(document, g_split.slot))
+			{
+				SendUiEvent(
+					document,
+					OMPPlusProtocol::UiEventInventorySplit,
+					static_cast<uint16_t>(g_split.slot),
+					g_split.actionId,
+					BuildInventorySplitPayload(document.slots[g_split.slot], g_split.amount, g_split.actionId)
+				);
+			}
+			ClearInventorySplit();
+		}
+		else if (PointInRect(g_mouse.x, g_mouse.y, cancelButton))
+		{
+			ClearInventorySplit();
+		}
+
+		return true;
 	}
 }
 
@@ -449,6 +1020,9 @@ void CRmlUiManager::Clear()
 {
 	const bool hadDocuments = !g_documents.empty();
 	g_documents.clear();
+	ClearInventoryDrag();
+	ClearInventoryContextMenu();
+	ClearInventorySplit();
 	g_captureActive = false;
 	if (hadDocuments)
 		CDInput8DeviceProxy::RequestInputReset();
@@ -549,24 +1123,60 @@ bool CRmlUiManager::HandleWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM
 	case WM_MOUSEMOVE:
 		g_mouse.x = GET_X_LPARAM(lParam);
 		g_mouse.y = GET_Y_LPARAM(lParam);
+		ClampMouseToWindow();
+		UpdateInventoryDrag();
 		return ShouldCaptureMouse();
-	case WM_LBUTTONUP:
-		UpdateMouseFromCursor();
+	case WM_LBUTTONDOWN:
+		ClampMouseToWindow();
 		if (UiDocument* document = TopDocument())
 		{
-			if (document->templateId == OMPPlusProtocol::UiTemplateInventory || document->templateId == OMPPlusProtocol::UiTemplateStorage)
-				HandleInventoryClick(*document, OMPPlusProtocol::UiEventClick);
+			if (IsInventoryTemplate(*document) && HandleInventorySplitClick(*document))
+				return true;
+			if (IsInventoryTemplate(*document) && HandleInventoryContextMenuClick(*document))
+				return true;
+			if (IsInventoryTemplate(*document) && BeginInventoryDrag(*document))
+				return true;
+		}
+		return ShouldCaptureMouse();
+	case WM_LBUTTONUP:
+		ClampMouseToWindow();
+		if (UiDocument* document = TopDocument())
+		{
+			if (IsInventoryTemplate(*document))
+			{
+				if (!FinishInventoryDrag(*document))
+					HandleInventoryClick(*document, OMPPlusProtocol::UiEventClick);
+			}
 		}
 		return ShouldCaptureMouse();
 	case WM_RBUTTONUP:
-		UpdateMouseFromCursor();
+		ClampMouseToWindow();
+		if (g_drag.candidate)
+		{
+			ClearInventoryDrag();
+			return true;
+		}
+		if (g_split.active)
+		{
+			ClearInventorySplit();
+			return true;
+		}
+		if (g_contextMenu.active)
+		{
+			ClearInventoryContextMenu();
+			return true;
+		}
 		if (UiDocument* document = TopDocument())
 		{
-			if (document->templateId == OMPPlusProtocol::UiTemplateInventory || document->templateId == OMPPlusProtocol::UiTemplateStorage)
+			if (IsInventoryTemplate(*document))
+			{
+				OpenInventoryContextMenu(*document);
+				if (g_contextMenu.active)
+					return true;
 				HandleInventoryClick(*document, OMPPlusProtocol::UiEventSecondaryClick);
+			}
 		}
 		return ShouldCaptureMouse();
-	case WM_LBUTTONDOWN:
 	case WM_RBUTTONDOWN:
 	case WM_MBUTTONDOWN:
 	case WM_MBUTTONUP:
@@ -576,6 +1186,16 @@ bool CRmlUiManager::HandleWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM
 	case WM_SYSKEYDOWN:
 		if (wParam == VK_ESCAPE)
 		{
+			if (g_split.active)
+			{
+				ClearInventorySplit();
+				return true;
+			}
+			if (g_contextMenu.active)
+			{
+				ClearInventoryContextMenu();
+				return true;
+			}
 			UiDocument* top = TopDocument();
 			if (top && ShouldCloseOnEscape(*top))
 			{
@@ -653,6 +1273,7 @@ void CRmlUiManager::AddMouseDelta(LONG x, LONG y, LONG)
 	g_mouse.x += x;
 	g_mouse.y += y;
 	ClampMouseToWindow();
+	UpdateInventoryDrag();
 }
 
 void CRmlUiManager::HandleOpen(RakNet::BitStream& stream)
@@ -680,7 +1301,11 @@ void CRmlUiManager::HandleOpen(RakNet::BitStream& stream)
 
 	std::vector<UiDocument>::iterator existing = FindDocument(document.id);
 	if (existing != g_documents.end())
+	{
+		if (g_drag.documentId == document.id)
+			ClearInventoryDrag();
 		g_documents.erase(existing);
+	}
 
 	g_documents.push_back(document);
 	UpdateMouseFromCursor();
@@ -768,5 +1393,31 @@ void CRmlUiManager::HandleInventorySetSlot(RakNet::BitStream& stream)
 		it->capacity = slot + 1;
 
 	value.used = value.itemId != 0 || !value.label.empty();
+	if (it->slots[slot].used && !it->slots[slot].actions.empty())
+		value.actions = it->slots[slot].actions;
 	it->slots[slot] = value;
+}
+
+void CRmlUiManager::HandleInventorySetSlotActions(RakNet::BitStream& stream)
+{
+	std::string id;
+	uint16_t slot = 0;
+	std::string actions;
+	if (!ReadBoundString(stream, id, MaxDocumentIdLength)
+		|| !stream.Read(slot)
+		|| !ReadBoundString(stream, actions, MaxActionsLength))
+	{
+		return;
+	}
+
+	std::vector<UiDocument>::iterator it = FindDocument(id);
+	if (it == g_documents.end() || slot >= MaxInventorySlots)
+		return;
+
+	if (it->slots.size() <= slot)
+		it->slots.resize(slot + 1);
+	if (it->capacity <= slot)
+		it->capacity = slot + 1;
+
+	it->slots[slot].actions = ParseInventoryActions(actions);
 }

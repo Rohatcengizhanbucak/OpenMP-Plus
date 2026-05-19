@@ -172,10 +172,8 @@ examples/filterscripts/sampp_targetdemo.amx
 examples/filterscripts/sampp_builddemo.pwn
 examples/filterscripts/sampp_builddemo.amx
 examples/filterscripts/sampp_inventorydemo.pwn
+examples/filterscripts/sampp_inventorydemo.amx
 ```
-
-`sampp_inventorydemo.pwn` is source-only until you compile it with your Pawn
-compiler.
 
 Copy the `.amx` files you want to test to your open.mp server `filterscripts` directory, then add them to your open.mp config:
 
@@ -187,13 +185,11 @@ Copy the `.amx` files you want to test to your open.mp server `filterscripts` di
         "filterscripts/sampp_menudemo",
         "filterscripts/sampp_capabilitydemo",
         "filterscripts/sampp_targetdemo",
-        "filterscripts/sampp_builddemo"
+        "filterscripts/sampp_builddemo",
+        "filterscripts/sampp_inventorydemo"
     ]
 }
 ```
-
-After compiling `sampp_inventorydemo.pwn`, add
-`"filterscripts/sampp_inventorydemo"` to the same list.
 
 Smoke-test commands:
 
@@ -226,6 +222,29 @@ Item demo keybind:
 
 - `E`: pick up the nearest Water Bottle through a short-lived capture lease.
   GTA's default `E` behavior is consumed only while the player is near the item.
+  When `sampp_inventorydemo` is loaded, the picked-up Water Bottle is added to
+  the server-owned inventory demo instead of being only deleted from the world.
+
+Inventory demo commands:
+
+- `/inventorydemo` or `/invdemo`: open the RmlUi-style inventory panel.
+- `/inventoryclose` or `/invclose`: close the inventory panel from Pawn.
+- `/inventoryreset` or `/invreset`: reset the demo inventory to its default
+  items.
+
+Inventory demo flow:
+
+- Drag a used slot onto another slot to move, merge matching item IDs, or swap
+  different items. The client only reports the drag request; Pawn owns the item
+  arrays and refreshes the UI.
+- Right-click a used slot to open its Pawn-defined action menu. The bundled
+  demo exposes `Use`, `Split Stack`, `Drop`, and `Inspect` where the item type
+  supports them.
+- `Split Stack` opens a small amount selector. The client only sends the
+  requested amount; Pawn validates the source stack and creates the new stack.
+- Drag a Water Bottle outside the inventory panel to drop it back into the
+  world through `sampp_itemdemo`. Walk near it and press `E` to pick it up into
+  the inventory again.
 
 Menu demo commands:
 
