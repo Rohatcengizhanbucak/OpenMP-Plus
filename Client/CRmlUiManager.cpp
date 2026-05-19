@@ -3,11 +3,14 @@
 #include <SAMP+/OMPPlusProtocol.h>
 #include <SAMP+/client/CLog.h>
 #include <SAMP+/client/Network.h>
+#include <SAMP+/client/Proxy/CDInput8DeviceProxy.h>
 
+#include <DirectX/dinput.h>
 #include <DirectX/d3dx9.h>
 #include <windowsx.h>
 
 #include <algorithm>
+#include <cstring>
 #include <map>
 #include <stdio.h>
 #include <string>
@@ -83,6 +86,32 @@ namespace
 	static POINT g_mouse = { 0, 0 };
 	static bool g_initialized = false;
 	static bool g_loggedFallback = false;
+	static bool g_captureActive = false;
+
+	void ClampMouseToWindow()
+	{
+		if (!g_window)
+			return;
+
+		RECT client = {};
+		if (!GetClientRect(g_window, &client))
+			return;
+
+		const LONG width = client.right - client.left;
+		const LONG height = client.bottom - client.top;
+		if (width <= 1 || height <= 1)
+			return;
+
+		if (g_mouse.x < 0)
+			g_mouse.x = 0;
+		else if (g_mouse.x >= width)
+			g_mouse.x = width - 1;
+
+		if (g_mouse.y < 0)
+			g_mouse.y = 0;
+		else if (g_mouse.y >= height)
+			g_mouse.y = height - 1;
+	}
 
 	D3DCOLOR C(unsigned char a, unsigned char r, unsigned char g, unsigned char b)
 	{
@@ -101,7 +130,10 @@ namespace
 
 		POINT point = {};
 		if (GetCursorPos(&point) && ScreenToClient(g_window, &point))
+		{
 			g_mouse = point;
+			ClampMouseToWindow();
+		}
 	}
 
 	bool ReadBoundString(RakNet::BitStream& stream, std::string& value, size_t maxLength)
@@ -171,6 +203,7 @@ namespace
 			SendUiEvent(*it, OMPPlusProtocol::UiEventClose, 0, "document", "");
 
 		g_documents.erase(it);
+		CDInput8DeviceProxy::RequestInputReset();
 	}
 
 	void DrawRect(IDirect3DDevice9* device, float x, float y, float width, float height, D3DCOLOR color)
@@ -414,7 +447,11 @@ void CRmlUiManager::Shutdown()
 
 void CRmlUiManager::Clear()
 {
+	const bool hadDocuments = !g_documents.empty();
 	g_documents.clear();
+	g_captureActive = false;
+	if (hadDocuments)
+		CDInput8DeviceProxy::RequestInputReset();
 }
 
 void CRmlUiManager::Process()
@@ -422,7 +459,21 @@ void CRmlUiManager::Process()
 	if (!g_initialized || g_documents.empty())
 		return;
 
-	UpdateMouseFromCursor();
+	const bool capture = ShouldCaptureMouse();
+	if (capture)
+	{
+		if (!g_captureActive)
+		{
+			UpdateMouseFromCursor();
+			CDInput8DeviceProxy::RequestInputReset();
+		}
+		ClampMouseToWindow();
+	}
+	else
+	{
+		UpdateMouseFromCursor();
+	}
+	g_captureActive = capture;
 }
 
 void CRmlUiManager::Render(IDirect3DDevice9* device)
@@ -550,10 +601,58 @@ bool CRmlUiManager::ShouldCaptureMouse()
 	return document && IsInteractive(*document);
 }
 
+bool CRmlUiManager::ShouldNeutralizeKeyboard()
+{
+	UiDocument* document = TopDocument();
+	return document && (document->flags & (OMPPlusProtocol::UiFlagCaptureKeyboard | OMPPlusProtocol::UiFlagModal)) != 0;
+}
+
 bool CRmlUiManager::ShouldSuppressKeyboard()
 {
 	UiDocument* document = TopDocument();
 	return document && (document->flags & (OMPPlusProtocol::UiFlagCaptureKeyboard | OMPPlusProtocol::UiFlagModal)) != 0;
+}
+
+void CRmlUiManager::FilterKeyboardState(DWORD size, LPVOID state)
+{
+	if (!state || !size || !ShouldNeutralizeKeyboard())
+		return;
+
+	std::memset(state, 0, size);
+}
+
+void CRmlUiManager::FilterMouseState(DWORD size, LPVOID state)
+{
+	if (!state || !size || !ShouldCaptureMouse())
+		return;
+
+	if (size >= sizeof(DIMOUSESTATE2))
+	{
+		DIMOUSESTATE2* mouse = reinterpret_cast<DIMOUSESTATE2*>(state);
+		AddMouseDelta(mouse->lX, mouse->lY, mouse->lZ);
+		std::memset(mouse, 0, sizeof(DIMOUSESTATE2));
+	}
+	else if (size >= sizeof(DIMOUSESTATE))
+	{
+		DIMOUSESTATE* mouse = reinterpret_cast<DIMOUSESTATE*>(state);
+		AddMouseDelta(mouse->lX, mouse->lY, mouse->lZ);
+		std::memset(mouse, 0, sizeof(DIMOUSESTATE));
+	}
+}
+
+bool CRmlUiManager::ShouldConsumeDirectInputEvent(DWORD, DWORD)
+{
+	return ShouldNeutralizeKeyboard();
+}
+
+void CRmlUiManager::AddMouseDelta(LONG x, LONG y, LONG)
+{
+	if (!ShouldCaptureMouse())
+		return;
+
+	g_mouse.x += x;
+	g_mouse.y += y;
+	ClampMouseToWindow();
 }
 
 void CRmlUiManager::HandleOpen(RakNet::BitStream& stream)
@@ -584,6 +683,9 @@ void CRmlUiManager::HandleOpen(RakNet::BitStream& stream)
 		g_documents.erase(existing);
 
 	g_documents.push_back(document);
+	UpdateMouseFromCursor();
+	g_captureActive = false;
+	CDInput8DeviceProxy::RequestInputReset();
 }
 
 void CRmlUiManager::HandleClose(RakNet::BitStream& stream)

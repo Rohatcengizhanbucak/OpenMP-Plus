@@ -3,6 +3,7 @@
 #include <SAMP+/client/CGraphics.h>
 #include <SAMP+/client/CBuildManager.h>
 #include <SAMP+/client/COverlayRenderer.h>
+#include <SAMP+/client/CRmlUiManager.h>
 #include <SAMP+/client/CTargetManager.h>
 #include <SAMP+/client/Proxy/CMessageProxy.h>
 #include <windowsx.h>
@@ -90,7 +91,7 @@ LRESULT CALLBACK CMessageProxy::Process(HWND wnd, UINT umsg, WPARAM wparam, LPAR
 		{
 			case WM_MOUSEMOVE:
 			{
-				if (CTargetManager::ShouldCaptureMouse() || CBuildManager::ShouldBlockCursorMove())
+				if (CRmlUiManager::ShouldCaptureMouse() || CTargetManager::ShouldCaptureMouse() || CBuildManager::ShouldBlockCursorMove())
 					return 0;
 				break;
 			}
@@ -107,21 +108,21 @@ LRESULT CALLBACK CMessageProxy::Process(HWND wnd, UINT umsg, WPARAM wparam, LPAR
 	
 			case WM_LBUTTONDOWN:
 			{
-				if (CTargetManager::ShouldCaptureMouse() || CBuildManager::ShouldCaptureMouse())
+				if (CRmlUiManager::ShouldCaptureMouse() || CTargetManager::ShouldCaptureMouse() || CBuildManager::ShouldCaptureMouse())
 					return 0;
 				CGame::OnMouseClick(0, (UINT16)GET_X_LPARAM(lparam), (UINT16)GET_Y_LPARAM(lparam));
 				break;
 			}
 			case WM_RBUTTONDOWN:
 			{
-				if (CTargetManager::ShouldCaptureMouse() || CBuildManager::ShouldCaptureMouse())
+				if (CRmlUiManager::ShouldCaptureMouse() || CTargetManager::ShouldCaptureMouse() || CBuildManager::ShouldCaptureMouse())
 					return 0;
 				CGame::OnMouseClick(1, (UINT16) GET_X_LPARAM(lparam), (UINT16) GET_Y_LPARAM(lparam));
 				break;
 			}
 			case WM_MBUTTONDOWN:
 			{
-				if (CTargetManager::ShouldCaptureMouse() || CBuildManager::ShouldCaptureMouse())
+				if (CRmlUiManager::ShouldCaptureMouse() || CTargetManager::ShouldCaptureMouse() || CBuildManager::ShouldCaptureMouse())
 					return 0;
 				CGame::OnMouseClick(2, (UINT16) GET_X_LPARAM(lparam), (UINT16) GET_Y_LPARAM(lparam));
 				break;

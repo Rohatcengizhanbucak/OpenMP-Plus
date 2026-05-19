@@ -9,6 +9,7 @@
 #include <SAMP+/client/Network.h>
 #include <SAMP+/client/CSystem.h>
 #include <SAMP+/client/CBuildManager.h>
+#include <SAMP+/client/CRmlUiManager.h>
 #include <SAMP+/client/CTargetManager.h>
 
 namespace
@@ -234,7 +235,7 @@ void CGame::OnUnload()
 
 int CGame::OnCursorMove(int iX, int iY)
 {
-	return !CTargetManager::IsMenuOpen() && !CBuildManager::ShouldBlockCursorMove();
+	return !CRmlUiManager::ShouldCaptureMouse() && !CTargetManager::IsMenuOpen() && !CBuildManager::ShouldBlockCursorMove();
 }
 
 void CGame::PreDeviceReset()

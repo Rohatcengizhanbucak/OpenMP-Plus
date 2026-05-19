@@ -16,7 +16,12 @@ public:
 	static void RestoreDeviceObjects();
 	static bool HandleWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 	static bool ShouldCaptureMouse();
+	static bool ShouldNeutralizeKeyboard();
 	static bool ShouldSuppressKeyboard();
+	static void FilterKeyboardState(DWORD size, LPVOID state);
+	static void FilterMouseState(DWORD size, LPVOID state);
+	static bool ShouldConsumeDirectInputEvent(DWORD offset, DWORD data);
+	static void AddMouseDelta(LONG x, LONG y, LONG wheel = 0);
 
 	static void HandleOpen(RakNet::BitStream& stream);
 	static void HandleClose(RakNet::BitStream& stream);
