@@ -140,6 +140,11 @@ public:
 	bool clearInventory(int playerid, const std::string& documentid);
 	bool setInventorySlot(int playerid, const std::string& documentid, uint16_t slot, uint32_t itemid, uint16_t amount, const std::string& label, const std::string& description, const std::string& icon);
 	bool setInventorySlotActions(int playerid, const std::string& documentid, uint16_t slot, const std::string& actions);
+	bool openWorkspace(int playerid, const std::string& documentid, uint8_t layout, const std::string& title, const std::string& body, uint32_t flags);
+	bool clearWorkspace(int playerid, const std::string& documentid);
+	bool setWorkspacePane(int playerid, const std::string& documentid, const std::string& paneid, uint8_t paneType, const std::string& title, uint16_t capacity, const std::string& body);
+	bool setWorkspaceSlot(int playerid, const std::string& documentid, const std::string& paneid, uint16_t slot, uint32_t itemid, uint16_t amount, const std::string& label, const std::string& description, const std::string& icon);
+	bool setWorkspaceSlotActions(int playerid, const std::string& documentid, const std::string& paneid, uint16_t slot, const std::string& actions);
 
 	template <typename... Args>
 	cell callPublic(const char* name, DefaultReturnValue defaultReturn, Args&&... args)

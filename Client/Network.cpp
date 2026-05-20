@@ -216,6 +216,26 @@ namespace Network
 				CRmlUiManager::HandleInventorySetSlotActions(bitStream);
 				break;
 			}
+			case eRPC::UI_WORKSPACE_CLEAR:
+			{
+				CRmlUiManager::HandleWorkspaceClear(bitStream);
+				break;
+			}
+			case eRPC::UI_WORKSPACE_SET_PANE:
+			{
+				CRmlUiManager::HandleWorkspaceSetPane(bitStream);
+				break;
+			}
+			case eRPC::UI_WORKSPACE_SET_SLOT:
+			{
+				CRmlUiManager::HandleWorkspaceSetSlot(bitStream);
+				break;
+			}
+			case eRPC::UI_WORKSPACE_SET_SLOT_ACTIONS:
+			{
+				CRmlUiManager::HandleWorkspaceSetSlotActions(bitStream);
+				break;
+			}
 			default:
 				CLog::Write("Safe RPC ignored: %u", usRpcId);
 				break;

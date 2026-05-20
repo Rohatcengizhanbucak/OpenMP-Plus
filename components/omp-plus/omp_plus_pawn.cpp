@@ -637,6 +637,60 @@ namespace
 		const std::string actions = Component()->getPawnString(amx, params[4], 255);
 		return Component()->setInventorySlotActions(playerid, documentid, slot, actions) ? 1 : 0;
 	}
+
+	cell AMX_NATIVE_CALL WorkspaceOpenProc(AMX* amx, cell* params)
+	{
+		const int playerid = static_cast<int>(params[1]);
+		const std::string documentid = Component()->getPawnString(amx, params[2], 31);
+		const uint8_t layout = static_cast<uint8_t>(std::max<cell>(0, std::min<cell>(255, params[3])));
+		const std::string title = Component()->getPawnString(amx, params[4], 64);
+		const std::string body = ParamCount(params) >= 5 ? Component()->getPawnString(amx, params[5], 255) : std::string();
+		const uint32_t flags = ParamCount(params) >= 6 ? static_cast<uint32_t>(params[6]) : (UiFlagModal | UiFlagCaptureMouse | UiFlagCaptureKeyboard | UiFlagCloseOnEscape);
+		return Component()->openWorkspace(playerid, documentid, layout, title, body, flags) ? 1 : 0;
+	}
+
+	cell AMX_NATIVE_CALL WorkspaceClearProc(AMX* amx, cell* params)
+	{
+		const int playerid = static_cast<int>(params[1]);
+		const std::string documentid = Component()->getPawnString(amx, params[2], 31);
+		return Component()->clearWorkspace(playerid, documentid) ? 1 : 0;
+	}
+
+	cell AMX_NATIVE_CALL WorkspaceSetPaneProc(AMX* amx, cell* params)
+	{
+		const int playerid = static_cast<int>(params[1]);
+		const std::string documentid = Component()->getPawnString(amx, params[2], 31);
+		const std::string paneid = Component()->getPawnString(amx, params[3], 31);
+		const uint8_t paneType = static_cast<uint8_t>(std::max<cell>(0, std::min<cell>(255, params[4])));
+		const std::string title = Component()->getPawnString(amx, params[5], 64);
+		const uint16_t capacity = ParamCount(params) >= 6 ? static_cast<uint16_t>(std::max<cell>(0, std::min<cell>(120, params[6]))) : 0;
+		const std::string body = ParamCount(params) >= 7 ? Component()->getPawnString(amx, params[7], 255) : std::string();
+		return Component()->setWorkspacePane(playerid, documentid, paneid, paneType, title, capacity, body) ? 1 : 0;
+	}
+
+	cell AMX_NATIVE_CALL WorkspaceSetSlotProc(AMX* amx, cell* params)
+	{
+		const int playerid = static_cast<int>(params[1]);
+		const std::string documentid = Component()->getPawnString(amx, params[2], 31);
+		const std::string paneid = Component()->getPawnString(amx, params[3], 31);
+		const uint16_t slot = static_cast<uint16_t>(std::max<cell>(0, std::min<cell>(119, params[4])));
+		const uint32_t itemid = static_cast<uint32_t>(std::max<cell>(0, params[5]));
+		const uint16_t amount = static_cast<uint16_t>(std::max<cell>(0, std::min<cell>(65535, params[6])));
+		const std::string label = Component()->getPawnString(amx, params[7], 48);
+		const std::string description = ParamCount(params) >= 8 ? Component()->getPawnString(amx, params[8], 96) : std::string();
+		const std::string icon = ParamCount(params) >= 9 ? Component()->getPawnString(amx, params[9], 48) : std::string();
+		return Component()->setWorkspaceSlot(playerid, documentid, paneid, slot, itemid, amount, label, description, icon) ? 1 : 0;
+	}
+
+	cell AMX_NATIVE_CALL WorkspaceSetSlotActionsProc(AMX* amx, cell* params)
+	{
+		const int playerid = static_cast<int>(params[1]);
+		const std::string documentid = Component()->getPawnString(amx, params[2], 31);
+		const std::string paneid = Component()->getPawnString(amx, params[3], 31);
+		const uint16_t slot = static_cast<uint16_t>(std::max<cell>(0, std::min<cell>(119, params[4])));
+		const std::string actions = Component()->getPawnString(amx, params[5], 255);
+		return Component()->setWorkspaceSlotActions(playerid, documentid, paneid, slot, actions) ? 1 : 0;
+	}
 }
 
 AMX_NATIVE_INFO OMPPlusNatives[] =
@@ -712,5 +766,10 @@ AMX_NATIVE_INFO OMPPlusNatives[] =
 	{ "SAMPP_InventoryClear", InventoryClearProc },
 	{ "SAMPP_InventorySetSlot", InventorySetSlotProc },
 	{ "SAMPP_InventorySetSlotActions", InventorySetSlotActionsProc },
+	{ "SAMPP_WorkspaceOpen", WorkspaceOpenProc },
+	{ "SAMPP_WorkspaceClear", WorkspaceClearProc },
+	{ "SAMPP_WorkspaceSetPane", WorkspaceSetPaneProc },
+	{ "SAMPP_WorkspaceSetSlot", WorkspaceSetSlotProc },
+	{ "SAMPP_WorkspaceSetSlotActions", WorkspaceSetSlotActionsProc },
 	{ nullptr, nullptr }
 };

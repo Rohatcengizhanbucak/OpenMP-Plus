@@ -227,7 +227,14 @@ Item demo keybind:
 
 Inventory demo commands:
 
-- `/inventorydemo` or `/invdemo`: open the RmlUi-style inventory panel.
+- `/inventorydemo` or `/invdemo`: open the character workspace. Equipment is
+  shown on the left, player inventory on the right.
+- `/inventorysimple` or `/invdemo_simple`: open the older single-grid
+  inventory panel for compatibility testing.
+- `/storagedemo` or `/chestdemo`: open a storage workspace. The chest/storage
+  pane and the player inventory pane can exchange items through drag/drop.
+- `/craftdemo`: open a crafting workspace with recipes, queue/details, and
+  player inventory panes.
 - `/inventoryclose` or `/invclose`: close the inventory panel from Pawn.
 - `/inventoryreset` or `/invreset`: reset the demo inventory to its default
   items.
@@ -240,11 +247,21 @@ Inventory demo flow:
 - Right-click a used slot to open its Pawn-defined action menu. The bundled
   demo exposes `Use`, `Split Stack`, `Drop`, and `Inspect` where the item type
   supports them.
-- `Split Stack` opens a small amount selector. The client only sends the
-  requested amount; Pawn validates the source stack and creates the new stack.
-- Drag a Water Bottle outside the inventory panel to drop it back into the
-  world through `sampp_itemdemo`. Walk near it and press `E` to pick it up into
-  the inventory again.
+- `Split Stack` opens a small amount selector in both the single inventory and
+  workspace panes. The client only sends the requested amount plus pane context;
+  Pawn validates the source stack and creates the new stack.
+- Drag a Water Bottle outside the single inventory panel or a workspace
+  inventory pane to drop it back into the world through `sampp_itemdemo`. Walk
+  near it and press `E` to pick it up into the inventory again.
+- In `/inventorydemo`, drag compatible items such as Kevlar Vest or Backpack
+  into equipment slots. Pawn validates the target slot type before changing the
+  real item state.
+- In `/storagedemo`, drag items between the storage pane and inventory pane.
+  This is the same flow a server can reuse for loot chests, trunks, lockers, or
+  another player's loot inventory.
+- In `/craftdemo`, select a recipe such as Foundation Kit or Hatchet. Pawn
+  checks materials, consumes them, and inserts the output into inventory. The
+  client only displays the workspace and reports the requested recipe action.
 
 Menu demo commands:
 

@@ -46,24 +46,49 @@ namespace
 		}
 	};
 
+	struct UiPane
+	{
+		std::string id;
+		uint8_t type;
+		uint16_t capacity;
+		std::string title;
+		std::string body;
+		std::vector<InventorySlot> slots;
+		int hoveredSlot;
+		RECT bounds;
+
+		UiPane()
+			: type(OMPPlusProtocol::UiPaneGrid)
+			, capacity(0)
+			, hoveredSlot(-1)
+		{
+			SetRectEmpty(&bounds);
+		}
+	};
+
 	struct UiDocument
 	{
 		std::string id;
 		uint8_t templateId;
+		uint8_t workspaceLayout;
 		uint32_t flags;
 		uint16_t capacity;
 		std::string title;
 		std::string body;
 		std::map<std::string, std::string> data;
 		std::vector<InventorySlot> slots;
+		std::vector<UiPane> panes;
 		int hoveredSlot;
+		int hoveredPane;
 		RECT bounds;
 
 		UiDocument()
 			: templateId(OMPPlusProtocol::UiTemplatePanel)
+			, workspaceLayout(OMPPlusProtocol::UiWorkspaceLayoutAuto)
 			, flags(0)
 			, capacity(0)
 			, hoveredSlot(-1)
+			, hoveredPane(-1)
 		{
 			SetRectEmpty(&bounds);
 		}
@@ -84,6 +109,7 @@ namespace
 		bool candidate;
 		bool active;
 		std::string documentId;
+		std::string sourcePaneId;
 		int sourceSlot;
 		POINT startMouse;
 		InventorySlot item;
@@ -102,6 +128,7 @@ namespace
 	{
 		bool active;
 		std::string documentId;
+		std::string paneId;
 		int slot;
 		int x;
 		int y;
@@ -121,7 +148,9 @@ namespace
 	struct InventorySplitState
 	{
 		bool active;
+		bool draggingSlider;
 		std::string documentId;
+		std::string paneId;
 		int slot;
 		int amount;
 		int maxAmount;
@@ -129,6 +158,7 @@ namespace
 
 		InventorySplitState()
 			: active(false)
+			, draggingSlider(false)
 			, slot(-1)
 			, amount(1)
 			, maxAmount(1)
@@ -157,9 +187,13 @@ namespace
 	static InventoryDragState g_drag;
 	static InventoryContextMenuState g_contextMenu;
 	static InventorySplitState g_split;
+	static bool g_suppressNextLeftUp = false;
 	static bool g_initialized = false;
 	static bool g_loggedFallback = false;
 	static bool g_captureActive = false;
+
+	void RenderGenericPanel(IDirect3DDevice9* device, UiDocument& document, const D3DVIEWPORT9& viewport);
+	void UpdateWorkspaceHover(UiDocument& document);
 
 	void ClampMouseToWindow()
 	{
@@ -239,6 +273,20 @@ namespace
 		});
 	}
 
+	std::vector<UiPane>::iterator FindPane(UiDocument& document, const std::string& id)
+	{
+		return std::find_if(document.panes.begin(), document.panes.end(), [&id](const UiPane& pane)
+		{
+			return pane.id == id;
+		});
+	}
+
+	UiPane* FindPanePtr(UiDocument& document, const std::string& id)
+	{
+		std::vector<UiPane>::iterator it = FindPane(document, id);
+		return it == document.panes.end() ? NULL : &(*it);
+	}
+
 	UiDocument* TopDocument()
 	{
 		if (g_documents.empty())
@@ -256,9 +304,50 @@ namespace
 		return document.templateId == OMPPlusProtocol::UiTemplateInventory || document.templateId == OMPPlusProtocol::UiTemplateStorage;
 	}
 
+	bool IsWorkspaceTemplate(const UiDocument& document)
+	{
+		return document.templateId == OMPPlusProtocol::UiTemplateWorkspace;
+	}
+
+	bool IsWorkspaceGridPane(const UiPane& pane)
+	{
+		return pane.type == OMPPlusProtocol::UiPaneGrid
+			|| pane.type == OMPPlusProtocol::UiPaneStorage
+			|| pane.type == OMPPlusProtocol::UiPaneLoot;
+	}
+
 	bool IsSlotUsed(const UiDocument& document, int slot)
 	{
 		return slot >= 0 && slot < static_cast<int>(document.slots.size()) && document.slots[slot].used;
+	}
+
+	bool IsPaneSlotUsed(const UiPane& pane, int slot)
+	{
+		return slot >= 0 && slot < static_cast<int>(pane.slots.size()) && pane.slots[slot].used;
+	}
+
+	InventorySlot* GetUiSlot(UiDocument& document, const std::string& paneId, int slot)
+	{
+		if (paneId.empty())
+			return IsSlotUsed(document, slot) ? &document.slots[slot] : NULL;
+
+		UiPane* pane = FindPanePtr(document, paneId);
+		return pane && IsPaneSlotUsed(*pane, slot) ? &pane->slots[slot] : NULL;
+	}
+
+	bool IsDocumentSplitActive(const UiDocument& document)
+	{
+		return g_split.active && g_split.documentId == document.id;
+	}
+
+	bool IsDocumentContextMenuActive(const UiDocument& document)
+	{
+		return g_contextMenu.active && g_contextMenu.documentId == document.id;
+	}
+
+	bool IsDocumentPopupActive(const UiDocument& document)
+	{
+		return IsDocumentSplitActive(document) || IsDocumentContextMenuActive(document);
 	}
 
 	InventoryLayout GetInventoryLayout(const UiDocument& document)
@@ -281,6 +370,47 @@ namespace
 		const int sx = layout.startX + col * (layout.slotSize + layout.gap);
 		const int sy = layout.startY + row * (layout.slotSize + layout.gap);
 		RECT rect = { sx, sy, sx + layout.slotSize, sy + layout.slotSize };
+		return rect;
+	}
+
+	RECT GetPaneSlotRect(const UiPane& pane, uint16_t slot)
+	{
+		if (pane.type == OMPPlusProtocol::UiPaneEquipment)
+		{
+			const int slotW = 132;
+			const int slotH = 48;
+			const int gap = 8;
+			const int col = slot % 2;
+			const int row = slot / 2;
+			const int sx = pane.bounds.left + 14 + col * (slotW + gap);
+			const int sy = pane.bounds.top + 88 + row * (slotH + gap);
+			RECT rect = { sx, sy, sx + slotW, sy + slotH };
+			return rect;
+		}
+
+		if (pane.type == OMPPlusProtocol::UiPaneRecipeList || pane.type == OMPPlusProtocol::UiPaneCraftQueue || pane.type == OMPPlusProtocol::UiPaneInfo)
+		{
+			const int rowH = pane.type == OMPPlusProtocol::UiPaneInfo ? 34 : 42;
+			const int sx = pane.bounds.left + 12;
+			const int sy = pane.bounds.top + 88 + slot * rowH;
+			RECT rect = { sx, sy, pane.bounds.right - 12, sy + rowH - 7 };
+			return rect;
+		}
+
+		const int slotSize = 54;
+		const int gap = 8;
+		const int width = pane.bounds.right - pane.bounds.left - 28;
+		int columns = width / (slotSize + gap);
+		if (columns < 3)
+			columns = 3;
+		if (columns > 7)
+			columns = 7;
+
+		const int col = slot % columns;
+		const int row = slot / columns;
+		const int sx = pane.bounds.left + 14 + col * (slotSize + gap);
+		const int sy = pane.bounds.top + 88 + row * (slotSize + gap);
+		RECT rect = { sx, sy, sx + slotSize, sy + slotSize };
 		return rect;
 	}
 
@@ -319,6 +449,12 @@ namespace
 	void ClearInventorySplit()
 	{
 		g_split = InventorySplitState();
+	}
+
+	void ClearInventorySplitAndSuppressClick()
+	{
+		ClearInventorySplit();
+		g_suppressNextLeftUp = true;
 	}
 
 	std::string Trim(const std::string& value)
@@ -397,10 +533,10 @@ namespace
 		return payload;
 	}
 
-	void OpenInventoryContextMenu(UiDocument& document)
+	void OpenSlotContextMenu(UiDocument& document, const std::string& paneId, int slot)
 	{
-		UpdateInventoryHover(document);
-		if (!IsSlotUsed(document, document.hoveredSlot))
+		InventorySlot* item = GetUiSlot(document, paneId, slot);
+		if (!item)
 		{
 			ClearInventoryContextMenu();
 			return;
@@ -409,28 +545,62 @@ namespace
 		g_contextMenu = InventoryContextMenuState();
 		g_contextMenu.active = true;
 		g_contextMenu.documentId = document.id;
-		g_contextMenu.slot = document.hoveredSlot;
+		g_contextMenu.paneId = paneId;
+		g_contextMenu.slot = slot;
 		g_contextMenu.x = g_mouse.x + 10;
 		g_contextMenu.y = g_mouse.y + 10;
-		g_contextMenu.actions = GetInventoryActions(document.slots[document.hoveredSlot]);
+		g_contextMenu.actions = GetInventoryActions(*item);
+		ClearInventoryDrag();
 	}
 
-	void BeginInventorySplit(UiDocument& document, int slot, const std::string& actionId)
+	void OpenInventoryContextMenu(UiDocument& document)
 	{
-		if (!IsSlotUsed(document, slot) || document.slots[slot].amount <= 1)
+		UpdateInventoryHover(document);
+		OpenSlotContextMenu(document, std::string(), document.hoveredSlot);
+	}
+
+	void OpenWorkspaceContextMenu(UiDocument& document)
+	{
+		UpdateWorkspaceHover(document);
+		if (document.hoveredPane < 0 || document.hoveredPane >= static_cast<int>(document.panes.size()))
+		{
+			ClearInventoryContextMenu();
+			return;
+		}
+
+		UiPane& pane = document.panes[document.hoveredPane];
+		OpenSlotContextMenu(document, pane.id, pane.hoveredSlot);
+	}
+
+	void BeginSlotSplit(UiDocument& document, const std::string& paneId, int slot, const std::string& actionId)
+	{
+		InventorySlot* item = GetUiSlot(document, paneId, slot);
+		if (!item || item->amount <= 1)
 			return;
 
+		ClearInventoryDrag();
 		g_split = InventorySplitState();
 		g_split.active = true;
 		g_split.documentId = document.id;
+		g_split.paneId = paneId;
 		g_split.slot = slot;
-		g_split.maxAmount = document.slots[slot].amount - 1;
+		g_split.maxAmount = item->amount - 1;
 		if (g_split.maxAmount < 1)
 			g_split.maxAmount = 1;
 		g_split.amount = (g_split.maxAmount + 1) / 2;
 		if (g_split.amount < 1)
 			g_split.amount = 1;
 		g_split.actionId = actionId;
+	}
+
+	void BeginInventorySplit(UiDocument& document, int slot, const std::string& actionId)
+	{
+		BeginSlotSplit(document, std::string(), slot, actionId);
+	}
+
+	void BeginWorkspaceSplit(UiDocument& document, const std::string& paneId, int slot, const std::string& actionId)
+	{
+		BeginSlotSplit(document, paneId, slot, actionId);
 	}
 
 	bool ShouldCloseOnEscape(const UiDocument& document)
@@ -458,8 +628,29 @@ namespace
 		return payload;
 	}
 
+	std::string BuildWorkspaceDropPayload(const std::string& toPaneId, int targetSlot, const InventorySlot& slot)
+	{
+		char prefix[96] = {};
+		sprintf(prefix, "%s|%d|%u|%u|", toPaneId.c_str(), targetSlot, static_cast<unsigned>(slot.amount), static_cast<unsigned>(slot.itemId));
+		std::string payload(prefix);
+		payload += slot.label;
+		return payload;
+	}
+
+	std::string BuildWorkspaceActionPayload(const InventorySlot& slot, const std::string& actionId)
+	{
+		char prefix[96] = {};
+		sprintf(prefix, "%s|%u|%u|", actionId.c_str(), static_cast<unsigned>(slot.itemId), static_cast<unsigned>(slot.amount));
+		std::string payload(prefix);
+		payload += slot.label;
+		return payload;
+	}
+
 	bool BeginInventoryDrag(UiDocument& document)
 	{
+		if (IsDocumentPopupActive(document))
+			return false;
+
 		UpdateInventoryHover(document);
 		if (!IsSlotUsed(document, document.hoveredSlot))
 			return false;
@@ -522,6 +713,141 @@ namespace
 
 		ClearInventoryDrag();
 		return false;
+	}
+
+	int FindPaneSlotAt(UiPane& pane, int x, int y)
+	{
+		const uint16_t requestedCapacity = pane.capacity ? pane.capacity : 0;
+		const uint16_t capacity = requestedCapacity < MaxInventorySlots ? requestedCapacity : MaxInventorySlots;
+		if (capacity && pane.slots.size() < capacity)
+			pane.slots.resize(capacity);
+
+		for (uint16_t slot = 0; slot < capacity; ++slot)
+		{
+			if (PointInRect(x, y, GetPaneSlotRect(pane, slot)))
+				return slot;
+		}
+
+		return -1;
+	}
+
+	void UpdateWorkspaceHover(UiDocument& document)
+	{
+		document.hoveredPane = -1;
+		document.hoveredSlot = -1;
+		for (size_t i = 0; i < document.panes.size(); ++i)
+		{
+			UiPane& pane = document.panes[i];
+			pane.hoveredSlot = -1;
+			if (!PointInRect(g_mouse.x, g_mouse.y, pane.bounds))
+				continue;
+
+			const int slot = FindPaneSlotAt(pane, g_mouse.x, g_mouse.y);
+			if (slot >= 0)
+			{
+				pane.hoveredSlot = slot;
+				document.hoveredPane = static_cast<int>(i);
+				document.hoveredSlot = slot;
+				return;
+			}
+		}
+	}
+
+	bool BeginWorkspaceDrag(UiDocument& document)
+	{
+		if (IsDocumentPopupActive(document))
+			return false;
+
+		UpdateWorkspaceHover(document);
+		if (document.hoveredPane < 0 || document.hoveredPane >= static_cast<int>(document.panes.size()))
+			return false;
+
+		UiPane& pane = document.panes[document.hoveredPane];
+		if (pane.type == OMPPlusProtocol::UiPaneRecipeList || pane.type == OMPPlusProtocol::UiPaneCraftQueue || pane.type == OMPPlusProtocol::UiPaneInfo)
+			return false;
+		if (!IsPaneSlotUsed(pane, pane.hoveredSlot))
+			return false;
+
+		g_drag = InventoryDragState();
+		g_drag.candidate = true;
+		g_drag.documentId = document.id;
+		g_drag.sourcePaneId = pane.id;
+		g_drag.sourceSlot = pane.hoveredSlot;
+		g_drag.startMouse = g_mouse;
+		g_drag.item = pane.slots[pane.hoveredSlot];
+		return true;
+	}
+
+	bool FinishWorkspaceDrag(UiDocument& document)
+	{
+		if (!g_drag.candidate || g_drag.documentId != document.id || g_drag.sourcePaneId.empty())
+			return false;
+
+		UpdateWorkspaceHover(document);
+		if (g_drag.active)
+		{
+			if (document.hoveredPane >= 0 && document.hoveredPane < static_cast<int>(document.panes.size()))
+			{
+				UiPane& targetPane = document.panes[document.hoveredPane];
+				if (!(targetPane.id == g_drag.sourcePaneId && targetPane.hoveredSlot == g_drag.sourceSlot))
+				{
+					SendUiEvent(
+						document,
+						OMPPlusProtocol::UiEventWorkspaceDrop,
+						static_cast<uint16_t>(g_drag.sourceSlot),
+						g_drag.sourcePaneId,
+						BuildWorkspaceDropPayload(targetPane.id, targetPane.hoveredSlot, g_drag.item)
+					);
+				}
+			}
+			else if (!PointInRect(g_mouse.x, g_mouse.y, document.bounds))
+			{
+				SendUiEvent(
+					document,
+					OMPPlusProtocol::UiEventWorkspaceWorldDrop,
+					static_cast<uint16_t>(g_drag.sourceSlot),
+					g_drag.sourcePaneId,
+					BuildWorkspaceDropPayload("world", -1, g_drag.item)
+				);
+			}
+
+			ClearInventoryDrag();
+			return true;
+		}
+
+		ClearInventoryDrag();
+		return false;
+	}
+
+	bool HandleWorkspaceClick(UiDocument& document)
+	{
+		if (IsDocumentPopupActive(document))
+			return true;
+
+		UpdateWorkspaceHover(document);
+		if (document.hoveredPane < 0 || document.hoveredPane >= static_cast<int>(document.panes.size()))
+			return false;
+
+		UiPane& pane = document.panes[document.hoveredPane];
+		if (!IsPaneSlotUsed(pane, pane.hoveredSlot))
+			return false;
+
+		std::vector<std::pair<std::string, std::string> > actions = GetInventoryActions(pane.slots[pane.hoveredSlot]);
+		std::string action = actions.empty() ? std::string("select") : actions[0].first;
+		if (action == "split")
+		{
+			BeginWorkspaceSplit(document, pane.id, pane.hoveredSlot, action);
+			return true;
+		}
+
+		SendUiEvent(
+			document,
+			OMPPlusProtocol::UiEventWorkspaceAction,
+			static_cast<uint16_t>(pane.hoveredSlot),
+			pane.id,
+			BuildWorkspaceActionPayload(pane.slots[pane.hoveredSlot], action)
+		);
+		return true;
 	}
 
 	void CloseDocument(std::vector<UiDocument>::iterator it, bool notify)
@@ -664,12 +990,47 @@ namespace
 
 	RECT GetSplitDialogRect(const UiDocument& document)
 	{
-		const int width = 340;
-		const int height = 178;
+		const int width = 390;
+		const int height = 230;
 		const int x = document.bounds.left + ((document.bounds.right - document.bounds.left) - width) / 2;
 		const int y = document.bounds.top + ((document.bounds.bottom - document.bounds.top) - height) / 2;
 		RECT rect = { x, y, x + width, y + height };
 		return rect;
+	}
+
+	RECT GetSplitSliderRect(const UiDocument& document)
+	{
+		RECT rect = GetSplitDialogRect(document);
+		RECT slider = { rect.left + 24, rect.top + 116, rect.right - 24, rect.top + 134 };
+		return slider;
+	}
+
+	void ClampSplitAmount()
+	{
+		if (g_split.maxAmount < 1)
+			g_split.maxAmount = 1;
+		if (g_split.amount < 1)
+			g_split.amount = 1;
+		if (g_split.amount > g_split.maxAmount)
+			g_split.amount = g_split.maxAmount;
+	}
+
+	void SetSplitAmountFromMouse(const UiDocument& document)
+	{
+		RECT slider = GetSplitSliderRect(document);
+		const int width = slider.right - slider.left;
+		if (width <= 0)
+			return;
+
+		int x = g_mouse.x;
+		if (x < slider.left)
+			x = slider.left;
+		if (x > slider.right)
+			x = slider.right;
+
+		const float ratio = static_cast<float>(x - slider.left) / static_cast<float>(width);
+		g_split.amount = 1 + static_cast<int>(ratio * static_cast<float>(g_split.maxAmount - 1) + 0.5f);
+		ClampSplitAmount();
 	}
 
 	void RenderInventoryContextMenu(IDirect3DDevice9* device, UiDocument& document)
@@ -677,7 +1038,8 @@ namespace
 		if (!g_contextMenu.active || g_contextMenu.documentId != document.id)
 			return;
 
-		if (!IsSlotUsed(document, g_contextMenu.slot))
+		InventorySlot* item = GetUiSlot(document, g_contextMenu.paneId, g_contextMenu.slot);
+		if (!item)
 		{
 			ClearInventoryContextMenu();
 			return;
@@ -690,7 +1052,7 @@ namespace
 
 		DrawRect(device, static_cast<float>(rect.left), static_cast<float>(rect.top), static_cast<float>(width), static_cast<float>(rect.bottom - rect.top), C(238, 5, 6, 7));
 		DrawBorder(device, static_cast<float>(rect.left), static_cast<float>(rect.top), static_cast<float>(width), static_cast<float>(rect.bottom - rect.top), C(190, 220, 222, 222));
-		DrawTextLine(g_titleFont, document.slots[g_contextMenu.slot].label, rect.left + 12, rect.top + 8, width - 24, C(255, 255, 255, 255));
+		DrawTextLine(g_titleFont, item->label, rect.left + 12, rect.top + 8, width - 24, C(255, 255, 255, 255));
 		DrawRect(device, static_cast<float>(rect.left + 10), static_cast<float>(rect.top + 32), static_cast<float>(width - 20), 1.0f, C(90, 220, 220, 220));
 
 		for (size_t i = 0; i < g_contextMenu.actions.size(); ++i)
@@ -709,30 +1071,58 @@ namespace
 
 	void RenderInventorySplitDialog(IDirect3DDevice9* device, UiDocument& document)
 	{
-		if (!g_split.active || g_split.documentId != document.id || !IsSlotUsed(document, g_split.slot))
+		if (!g_split.active || g_split.documentId != document.id)
 			return;
+
+		InventorySlot* item = GetUiSlot(document, g_split.paneId, g_split.slot);
+		if (!item)
+		{
+			ClearInventorySplit();
+			return;
+		}
 
 		RECT rect = GetSplitDialogRect(document);
 		const int width = rect.right - rect.left;
+		DrawRect(device, static_cast<float>(document.bounds.left), static_cast<float>(document.bounds.top), static_cast<float>(document.bounds.right - document.bounds.left), static_cast<float>(document.bounds.bottom - document.bounds.top), C(118, 0, 0, 0));
+
 		DrawRect(device, static_cast<float>(rect.left), static_cast<float>(rect.top), static_cast<float>(width), static_cast<float>(rect.bottom - rect.top), C(242, 4, 5, 6));
 		DrawBorder(device, static_cast<float>(rect.left), static_cast<float>(rect.top), static_cast<float>(width), static_cast<float>(rect.bottom - rect.top), C(210, 245, 245, 245));
 		DrawTextLine(g_titleFont, "Split Stack", rect.left + 14, rect.top + 10, width - 28, C(255, 255, 255, 255));
 		DrawRect(device, static_cast<float>(rect.left + 12), static_cast<float>(rect.top + 40), static_cast<float>(width - 24), 1.0f, C(90, 230, 230, 230));
 
-		const InventorySlot& slot = document.slots[g_split.slot];
+		const InventorySlot& slot = *item;
 		DrawTextLine(g_font, slot.label, rect.left + 16, rect.top + 55, width - 32, C(230, 225, 232, 232));
+		char totalText[64] = {};
+		sprintf(totalText, "Stack: %u item(s)", static_cast<unsigned>(slot.amount));
+		DrawTextLine(g_font, totalText, rect.left + 16, rect.top + 76, width - 32, C(205, 190, 198, 198));
+		DrawTextLine(g_font, "Drag the bar or use quick buttons.", rect.left + 16, rect.top + 96, width - 32, C(190, 178, 186, 186));
+
 		char amountText[64] = {};
 		sprintf(amountText, "%d / %d", g_split.amount, g_split.maxAmount);
-		DrawTextLine(g_titleFont, amountText, rect.left + 16, rect.top + 82, width - 32, C(255, 255, 255, 255), DT_CENTER | DT_TOP | DT_NOCLIP);
+		DrawTextLine(g_titleFont, amountText, rect.left + 16, rect.top + 76, width - 32, C(255, 255, 255, 255), DT_CENTER | DT_TOP | DT_NOCLIP);
+
+		RECT slider = GetSplitSliderRect(document);
+		const bool sliderHovered = PointInRect(g_mouse.x, g_mouse.y, slider) || g_split.draggingSlider;
+		DrawRect(device, static_cast<float>(slider.left), static_cast<float>(slider.top + 7), static_cast<float>(slider.right - slider.left), 4.0f, C(230, 31, 36, 38));
+		DrawBorder(device, static_cast<float>(slider.left), static_cast<float>(slider.top + 5), static_cast<float>(slider.right - slider.left), 8.0f, sliderHovered ? C(220, 245, 245, 245) : C(110, 120, 130, 130));
+
+		int fillW = 0;
+		if (g_split.maxAmount > 1)
+			fillW = static_cast<int>((static_cast<float>(g_split.amount - 1) / static_cast<float>(g_split.maxAmount - 1)) * static_cast<float>(slider.right - slider.left));
+		DrawRect(device, static_cast<float>(slider.left), static_cast<float>(slider.top + 7), static_cast<float>(fillW), 4.0f, C(255, 236, 238, 238));
+
+		const int knobX = slider.left + fillW;
+		DrawRect(device, static_cast<float>(knobX - 4), static_cast<float>(slider.top), 8.0f, 18.0f, C(255, 245, 245, 245));
+		DrawBorder(device, static_cast<float>(knobX - 5), static_cast<float>(slider.top - 1), 10.0f, 20.0f, C(220, 0, 0, 0));
 
 		const char* labels[6] = { "-", "+", "Half", "Max", "Split", "Cancel" };
 		for (int i = 0; i < 6; ++i)
 		{
 			const int buttonW = i < 2 ? 46 : 70;
-			const int bx = rect.left + 16 + (i < 2 ? i * 54 : 108 + (i - 2) * 76);
-			const int by = i < 4 ? rect.top + 114 : rect.top + 144;
-			const int actualW = i < 4 ? buttonW : 145;
-			const int actualX = i == 4 ? rect.left + 16 : (i == 5 ? rect.left + 179 : bx);
+			const int bx = rect.left + 24 + (i < 2 ? i * 54 : 120 + (i - 2) * 78);
+			const int by = i < 4 ? rect.top + 150 : rect.top + 188;
+			const int actualW = i < 4 ? buttonW : 160;
+			const int actualX = i == 4 ? rect.left + 24 : (i == 5 ? rect.right - 184 : bx);
 			RECT button = { actualX, by, actualX + actualW, by + 24 };
 			const bool hovered = PointInRect(g_mouse.x, g_mouse.y, button);
 			DrawRect(device, static_cast<float>(button.left), static_cast<float>(button.top), static_cast<float>(button.right - button.left), static_cast<float>(button.bottom - button.top), hovered ? C(245, 82, 86, 89) : C(215, 12, 16, 18));
@@ -758,6 +1148,8 @@ namespace
 		const int startX = layout.startX;
 		const int startY = layout.startY;
 		const int maxRows = layout.maxRows;
+		const bool splitModalActive = IsDocumentSplitActive(document);
+		const bool interactionBlocked = IsDocumentPopupActive(document);
 		document.hoveredSlot = -1;
 
 		const uint16_t requestedCapacity = document.capacity ? document.capacity : 30;
@@ -772,12 +1164,12 @@ namespace
 			const int sx = startX + col * (slotSize + gap);
 			const int sy = startY + row * (slotSize + gap);
 			RECT slotRect = { sx, sy, sx + slotSize, sy + slotSize };
-			const bool hovered = PointInRect(g_mouse.x, g_mouse.y, slotRect);
+			const bool hovered = !interactionBlocked && PointInRect(g_mouse.x, g_mouse.y, slotRect);
 			if (hovered)
 				document.hoveredSlot = i;
 
-			const bool dragSource = g_drag.candidate && g_drag.documentId == document.id && g_drag.sourceSlot == static_cast<int>(i);
-			const bool dragTarget = g_drag.active && g_drag.documentId == document.id && document.hoveredSlot == static_cast<int>(i) && !dragSource;
+			const bool dragSource = !interactionBlocked && g_drag.candidate && g_drag.documentId == document.id && g_drag.sourceSlot == static_cast<int>(i);
+			const bool dragTarget = !interactionBlocked && g_drag.active && g_drag.documentId == document.id && document.hoveredSlot == static_cast<int>(i) && !dragSource;
 
 			D3DCOLOR slotFill = hovered ? C(238, 68, 72, 76) : C(205, 11, 15, 17);
 			D3DCOLOR slotBorder = hovered ? C(230, 245, 245, 245) : C(96, 95, 104, 104);
@@ -815,7 +1207,7 @@ namespace
 		DrawRect(device, static_cast<float>(detailsX), static_cast<float>(detailsY), static_cast<float>(detailsW), 344.0f, C(190, 9, 11, 13));
 		DrawBorder(device, static_cast<float>(detailsX), static_cast<float>(detailsY), static_cast<float>(detailsW), 344.0f, C(90, 160, 164, 164));
 
-		if (document.hoveredSlot >= 0 && document.hoveredSlot < static_cast<int>(document.slots.size()) && document.slots[document.hoveredSlot].used)
+		if (!interactionBlocked && document.hoveredSlot >= 0 && document.hoveredSlot < static_cast<int>(document.slots.size()) && document.slots[document.hoveredSlot].used)
 		{
 			const InventorySlot& slot = document.slots[document.hoveredSlot];
 			DrawTextLine(g_titleFont, slot.label, detailsX + 16, detailsY + 14, detailsW - 32, C(255, 255, 255, 255));
@@ -835,7 +1227,7 @@ namespace
 		DrawRect(device, static_cast<float>(x + 14), static_cast<float>(y + panelH - 38), static_cast<float>(panelW - 28), 1.0f, C(80, 230, 230, 230));
 		DrawTextLine(g_font, "LMB drag/drop  |  RMB secondary  |  ESC close", x + 18, y + panelH - 27, panelW - 36, C(210, 230, 230, 230));
 
-		if (g_drag.active && g_drag.documentId == document.id)
+		if (!interactionBlocked && g_drag.active && g_drag.documentId == document.id)
 		{
 			const bool outsidePanel = !PointInRect(g_mouse.x, g_mouse.y, document.bounds);
 			const int ghostW = 160;
@@ -853,7 +1245,197 @@ namespace
 			DrawTextLine(g_font, outsidePanel ? "drop to world" : "drop into slot", gx + 10, gy + 31, ghostW - 20, outsidePanel ? C(255, 255, 178, 86) : C(220, 225, 232, 232));
 		}
 
-		RenderInventoryContextMenu(device, document);
+		if (!splitModalActive)
+			RenderInventoryContextMenu(device, document);
+		RenderInventorySplitDialog(device, document);
+	}
+
+	const char* EquipmentSlotName(int slot)
+	{
+		switch (slot)
+		{
+			case 0: return "Head";
+			case 1: return "Mask";
+			case 2: return "Shirt";
+			case 3: return "Armor";
+			case 4: return "Pants";
+			case 5: return "Shoes";
+			case 6: return "Backpack";
+			case 7: return "Accessory";
+			case 8: return "Primary";
+			case 9: return "Secondary";
+			default: return "Equip";
+		}
+	}
+
+	void RenderWorkspacePaneBase(IDirect3DDevice9* device, UiPane& pane, int x, int y, int width, int height)
+	{
+		pane.bounds.left = x;
+		pane.bounds.top = y;
+		pane.bounds.right = x + width;
+		pane.bounds.bottom = y + height;
+		DrawRect(device, static_cast<float>(x), static_cast<float>(y), static_cast<float>(width), static_cast<float>(height), C(218, 4, 5, 6));
+		DrawBorder(device, static_cast<float>(x), static_cast<float>(y), static_cast<float>(width), static_cast<float>(height), C(120, 205, 211, 211));
+		DrawTextLine(g_titleFont, pane.title.empty() ? pane.id : pane.title, x + 14, y + 10, width - 28, C(255, 245, 248, 248));
+		DrawRect(device, static_cast<float>(x + 12), static_cast<float>(y + 40), static_cast<float>(width - 24), 1.0f, C(80, 230, 230, 230));
+		if (!pane.body.empty())
+			DrawWrappedText(g_font, pane.body, x + 14, y + 50, width - 28, 36, C(200, 205, 214, 214));
+	}
+
+	void RenderPaneSlot(IDirect3DDevice9* device, UiDocument& document, UiPane& pane, int slotIndex, const RECT& slotRect)
+	{
+		const bool interactionBlocked = IsDocumentPopupActive(document);
+		const bool hovered = document.hoveredPane >= 0
+			&& document.hoveredPane < static_cast<int>(document.panes.size())
+			&& !interactionBlocked
+			&& document.panes[document.hoveredPane].id == pane.id
+			&& document.hoveredSlot == slotIndex;
+		const bool dragSource = !interactionBlocked && g_drag.candidate && g_drag.documentId == document.id && g_drag.sourcePaneId == pane.id && g_drag.sourceSlot == slotIndex;
+		const bool dragTarget = !interactionBlocked && g_drag.active && hovered && !dragSource;
+
+		D3DCOLOR fill = hovered ? C(238, 68, 72, 76) : C(205, 11, 15, 17);
+		D3DCOLOR border = hovered ? C(230, 245, 245, 245) : C(96, 95, 104, 104);
+		if (dragSource)
+		{
+			fill = C(150, 45, 34, 12);
+			border = C(245, 255, 171, 65);
+		}
+		else if (dragTarget)
+		{
+			fill = C(235, 91, 75, 38);
+			border = C(255, 255, 194, 96);
+		}
+
+		DrawRect(device, static_cast<float>(slotRect.left), static_cast<float>(slotRect.top), static_cast<float>(slotRect.right - slotRect.left), static_cast<float>(slotRect.bottom - slotRect.top), fill);
+		DrawBorder(device, static_cast<float>(slotRect.left), static_cast<float>(slotRect.top), static_cast<float>(slotRect.right - slotRect.left), static_cast<float>(slotRect.bottom - slotRect.top), border);
+
+		if (pane.type == OMPPlusProtocol::UiPaneEquipment && slotIndex < static_cast<int>(pane.slots.size()) && !pane.slots[slotIndex].used)
+			DrawTextLine(g_font, EquipmentSlotName(slotIndex), slotRect.left + 8, slotRect.top + 15, slotRect.right - slotRect.left - 16, C(185, 170, 178, 178), DT_CENTER | DT_TOP | DT_NOCLIP);
+
+		if (slotIndex < static_cast<int>(pane.slots.size()) && pane.slots[slotIndex].used)
+		{
+			const InventorySlot& slot = pane.slots[slotIndex];
+			if (pane.type == OMPPlusProtocol::UiPaneRecipeList || pane.type == OMPPlusProtocol::UiPaneCraftQueue || pane.type == OMPPlusProtocol::UiPaneInfo)
+			{
+				DrawTextLine(g_font, slot.label, slotRect.left + 10, slotRect.top + 7, slotRect.right - slotRect.left - 20, C(255, 245, 245, 245));
+				if (slot.amount > 1)
+				{
+					char amount[16] = {};
+					sprintf(amount, "x%u", static_cast<unsigned>(slot.amount));
+					DrawTextLine(g_font, amount, slotRect.left + 10, slotRect.top + 7, slotRect.right - slotRect.left - 20, C(230, 235, 235, 235), DT_RIGHT | DT_TOP | DT_NOCLIP);
+				}
+			}
+			else
+			{
+				DrawRect(device, static_cast<float>(slotRect.left + 8), static_cast<float>(slotRect.top + 8), static_cast<float>(slotRect.right - slotRect.left - 16), static_cast<float>(slotRect.bottom - slotRect.top - 22), C(210, 33, 38, 40));
+				DrawTextLine(g_font, slot.label, slotRect.left + 7, slotRect.top + 18, slotRect.right - slotRect.left - 14, C(255, 245, 245, 240), DT_CENTER | DT_TOP | DT_NOCLIP);
+				if (slot.amount > 1)
+				{
+					char amount[16] = {};
+					sprintf(amount, "x%u", static_cast<unsigned>(slot.amount));
+					DrawTextLine(g_font, amount, slotRect.left + 4, slotRect.bottom - 19, slotRect.right - slotRect.left - 8, C(255, 255, 255, 255), DT_RIGHT | DT_TOP | DT_NOCLIP);
+				}
+			}
+		}
+	}
+
+	void RenderWorkspacePane(IDirect3DDevice9* device, UiDocument& document, UiPane& pane)
+	{
+		const uint16_t capacity = pane.capacity < MaxInventorySlots ? pane.capacity : MaxInventorySlots;
+		if (capacity && pane.slots.size() < capacity)
+			pane.slots.resize(capacity);
+
+		const int maxSlots = pane.type == OMPPlusProtocol::UiPaneEquipment ? 10 : capacity;
+		for (uint16_t slot = 0; slot < maxSlots; ++slot)
+		{
+			RECT rect = GetPaneSlotRect(pane, slot);
+			if (rect.top >= pane.bounds.bottom - 12)
+				break;
+			RenderPaneSlot(device, document, pane, slot, rect);
+		}
+	}
+
+	void LayoutWorkspacePanes(IDirect3DDevice9* device, UiDocument& document, const D3DVIEWPORT9& viewport)
+	{
+		const int panelW = document.workspaceLayout == OMPPlusProtocol::UiWorkspaceLayoutCrafting ? 1020 : 920;
+		const int panelH = 570;
+		const int x = (static_cast<int>(viewport.Width) - panelW) / 2;
+		const int y = (static_cast<int>(viewport.Height) - panelH) / 2;
+		document.bounds.left = x;
+		document.bounds.top = y;
+		document.bounds.right = x + panelW;
+		document.bounds.bottom = y + panelH;
+
+		if (document.workspaceLayout == OMPPlusProtocol::UiWorkspaceLayoutCrafting)
+		{
+			for (size_t i = 0; i < document.panes.size(); ++i)
+			{
+				UiPane& pane = document.panes[i];
+				if (pane.type == OMPPlusProtocol::UiPaneRecipeList)
+					RenderWorkspacePaneBase(device, pane, x, y, 270, panelH);
+				else if (pane.type == OMPPlusProtocol::UiPaneCraftQueue || pane.type == OMPPlusProtocol::UiPaneInfo)
+					RenderWorkspacePaneBase(device, pane, x + 282, y, 300, panelH);
+				else
+					RenderWorkspacePaneBase(device, pane, x + 594, y, panelW - 594, panelH);
+			}
+			return;
+		}
+
+		if (document.workspaceLayout == OMPPlusProtocol::UiWorkspaceLayoutStorage)
+		{
+			for (size_t i = 0; i < document.panes.size(); ++i)
+			{
+				UiPane& pane = document.panes[i];
+				if (pane.type == OMPPlusProtocol::UiPaneStorage || pane.type == OMPPlusProtocol::UiPaneLoot)
+					RenderWorkspacePaneBase(device, pane, x, y, 430, panelH);
+				else
+					RenderWorkspacePaneBase(device, pane, x + 444, y, panelW - 444, panelH);
+			}
+			return;
+		}
+
+		for (size_t i = 0; i < document.panes.size(); ++i)
+		{
+			UiPane& pane = document.panes[i];
+			if (pane.type == OMPPlusProtocol::UiPaneEquipment || pane.type == OMPPlusProtocol::UiPaneInfo)
+				RenderWorkspacePaneBase(device, pane, x, y, 330, panelH);
+			else
+				RenderWorkspacePaneBase(device, pane, x + 344, y, panelW - 344, panelH);
+		}
+	}
+
+	void RenderWorkspace(IDirect3DDevice9* device, UiDocument& document, const D3DVIEWPORT9& viewport)
+	{
+		if (document.panes.empty())
+		{
+			RenderGenericPanel(device, document, viewport);
+			return;
+		}
+
+		LayoutWorkspacePanes(device, document, viewport);
+		UpdateWorkspaceHover(document);
+		for (size_t i = 0; i < document.panes.size(); ++i)
+			RenderWorkspacePane(device, document, document.panes[i]);
+
+		if (!IsDocumentPopupActive(document) && g_drag.active && g_drag.documentId == document.id && !g_drag.sourcePaneId.empty())
+		{
+			const bool outsidePanel = !PointInRect(g_mouse.x, g_mouse.y, document.bounds);
+			const int ghostW = 170;
+			const int ghostH = 52;
+			int gx = g_mouse.x + 18;
+			int gy = g_mouse.y + 18;
+			if (gx + ghostW > static_cast<int>(viewport.Width))
+				gx = g_mouse.x - ghostW - 18;
+			if (gy + ghostH > static_cast<int>(viewport.Height))
+				gy = g_mouse.y - ghostH - 18;
+			DrawRect(device, static_cast<float>(gx), static_cast<float>(gy), static_cast<float>(ghostW), static_cast<float>(ghostH), outsidePanel ? C(230, 58, 24, 12) : C(232, 24, 26, 27));
+			DrawBorder(device, static_cast<float>(gx), static_cast<float>(gy), static_cast<float>(ghostW), static_cast<float>(ghostH), outsidePanel ? C(255, 255, 128, 64) : C(230, 255, 255, 255));
+			DrawTextLine(g_titleFont, g_drag.item.label, gx + 10, gy + 8, ghostW - 20, C(255, 255, 255, 255));
+			DrawTextLine(g_font, outsidePanel ? "drop outside" : "drop into pane", gx + 10, gy + 31, ghostW - 20, outsidePanel ? C(255, 255, 178, 86) : C(220, 225, 232, 232));
+		}
+
+		if (!IsDocumentSplitActive(document))
+			RenderInventoryContextMenu(device, document);
 		RenderInventorySplitDialog(device, document);
 	}
 
@@ -882,6 +1464,9 @@ namespace
 
 	void HandleInventoryClick(UiDocument& document, uint8_t eventType)
 	{
+		if (IsDocumentPopupActive(document))
+			return;
+
 		UpdateInventoryHover(document);
 		if (document.hoveredSlot < 0)
 			return;
@@ -910,7 +1495,8 @@ namespace
 		if (index < 0 || index >= static_cast<int>(g_contextMenu.actions.size()))
 			return true;
 
-		if (!IsSlotUsed(document, g_contextMenu.slot))
+		InventorySlot* item = GetUiSlot(document, g_contextMenu.paneId, g_contextMenu.slot);
+		if (!item)
 		{
 			ClearInventoryContextMenu();
 			return true;
@@ -918,67 +1504,150 @@ namespace
 
 		const std::string actionId = g_contextMenu.actions[index].first;
 		const int slot = g_contextMenu.slot;
+		const std::string paneId = g_contextMenu.paneId;
 		if (actionId == "split")
 		{
-			BeginInventorySplit(document, slot, actionId);
+			if (paneId.empty())
+				BeginInventorySplit(document, slot, actionId);
+			else
+				BeginWorkspaceSplit(document, paneId, slot, actionId);
 			ClearInventoryContextMenu();
 			return true;
 		}
 
-		SendUiEvent(
-			document,
-			OMPPlusProtocol::UiEventInventoryAction,
-			static_cast<uint16_t>(slot),
-			actionId,
-			BuildInventoryActionPayload(document.slots[slot], actionId)
-		);
+		if (paneId.empty())
+		{
+			SendUiEvent(
+				document,
+				OMPPlusProtocol::UiEventInventoryAction,
+				static_cast<uint16_t>(slot),
+				actionId,
+				BuildInventoryActionPayload(*item, actionId)
+			);
+		}
+		else
+		{
+			SendUiEvent(
+				document,
+				OMPPlusProtocol::UiEventWorkspaceAction,
+				static_cast<uint16_t>(slot),
+				paneId,
+				BuildWorkspaceActionPayload(*item, actionId)
+			);
+		}
 		ClearInventoryContextMenu();
 		return true;
 	}
 
-	bool HandleInventorySplitClick(UiDocument& document)
+	void SendInventorySplit(UiDocument& document)
+	{
+		if (!g_split.active || g_split.documentId != document.id)
+			return;
+
+		InventorySlot* item = GetUiSlot(document, g_split.paneId, g_split.slot);
+		if (!item)
+			return;
+
+		ClampSplitAmount();
+		if (g_split.paneId.empty())
+		{
+			SendUiEvent(
+				document,
+				OMPPlusProtocol::UiEventInventorySplit,
+				static_cast<uint16_t>(g_split.slot),
+				g_split.actionId,
+				BuildInventorySplitPayload(*item, g_split.amount, g_split.actionId)
+			);
+		}
+		else
+		{
+			SendUiEvent(
+				document,
+				OMPPlusProtocol::UiEventWorkspaceSplit,
+				static_cast<uint16_t>(g_split.slot),
+				g_split.paneId,
+				BuildInventorySplitPayload(*item, g_split.amount, g_split.actionId)
+			);
+		}
+	}
+
+	bool HandleInventorySplitMouseDown(UiDocument& document)
 	{
 		if (!g_split.active || g_split.documentId != document.id)
 			return false;
 
 		RECT rect = GetSplitDialogRect(document);
 		if (!PointInRect(g_mouse.x, g_mouse.y, rect))
+		{
+			ClearInventorySplitAndSuppressClick();
 			return true;
+		}
 
-		RECT minusButton = { rect.left + 16, rect.top + 114, rect.left + 62, rect.top + 138 };
-		RECT plusButton = { rect.left + 70, rect.top + 114, rect.left + 116, rect.top + 138 };
-		RECT halfButton = { rect.left + 124, rect.top + 114, rect.left + 194, rect.top + 138 };
-		RECT maxButton = { rect.left + 200, rect.top + 114, rect.left + 270, rect.top + 138 };
-		RECT splitButton = { rect.left + 16, rect.top + 144, rect.left + 161, rect.top + 168 };
-		RECT cancelButton = { rect.left + 179, rect.top + 144, rect.left + 324, rect.top + 168 };
+		RECT slider = GetSplitSliderRect(document);
+		if (PointInRect(g_mouse.x, g_mouse.y, slider))
+		{
+			g_split.draggingSlider = true;
+			SetSplitAmountFromMouse(document);
+			return true;
+		}
+
+		RECT minusButton = { rect.left + 24, rect.top + 150, rect.left + 70, rect.top + 174 };
+		RECT plusButton = { rect.left + 78, rect.top + 150, rect.left + 124, rect.top + 174 };
+		RECT halfButton = { rect.left + 144, rect.top + 150, rect.left + 214, rect.top + 174 };
+		RECT maxButton = { rect.left + 222, rect.top + 150, rect.left + 292, rect.top + 174 };
+		RECT splitButton = { rect.left + 24, rect.top + 188, rect.left + 184, rect.top + 212 };
+		RECT cancelButton = { rect.right - 184, rect.top + 188, rect.right - 24, rect.top + 212 };
 
 		if (PointInRect(g_mouse.x, g_mouse.y, minusButton))
-			g_split.amount = g_split.amount > 1 ? g_split.amount - 1 : 1;
+		{
+			g_split.amount--;
+			ClampSplitAmount();
+		}
 		else if (PointInRect(g_mouse.x, g_mouse.y, plusButton))
-			g_split.amount = g_split.amount < g_split.maxAmount ? g_split.amount + 1 : g_split.maxAmount;
+		{
+			g_split.amount++;
+			ClampSplitAmount();
+		}
 		else if (PointInRect(g_mouse.x, g_mouse.y, halfButton))
-			g_split.amount = (g_split.maxAmount + 1) / 2 > 1 ? (g_split.maxAmount + 1) / 2 : 1;
+		{
+			g_split.amount = (g_split.maxAmount + 1) / 2;
+			ClampSplitAmount();
+		}
 		else if (PointInRect(g_mouse.x, g_mouse.y, maxButton))
+		{
 			g_split.amount = g_split.maxAmount;
+			ClampSplitAmount();
+		}
 		else if (PointInRect(g_mouse.x, g_mouse.y, splitButton))
 		{
-			if (IsSlotUsed(document, g_split.slot))
-			{
-				SendUiEvent(
-					document,
-					OMPPlusProtocol::UiEventInventorySplit,
-					static_cast<uint16_t>(g_split.slot),
-					g_split.actionId,
-					BuildInventorySplitPayload(document.slots[g_split.slot], g_split.amount, g_split.actionId)
-				);
-			}
-			ClearInventorySplit();
+			SendInventorySplit(document);
+			ClearInventorySplitAndSuppressClick();
 		}
 		else if (PointInRect(g_mouse.x, g_mouse.y, cancelButton))
 		{
-			ClearInventorySplit();
+			ClearInventorySplitAndSuppressClick();
 		}
 
+		return true;
+	}
+
+	bool HandleInventorySplitMouseMove(UiDocument& document)
+	{
+		if (!g_split.active || g_split.documentId != document.id)
+			return false;
+
+		if (g_split.draggingSlider)
+			SetSplitAmountFromMouse(document);
+
+		return true;
+	}
+
+	bool HandleInventorySplitMouseUp(UiDocument& document)
+	{
+		if (!g_split.active || g_split.documentId != document.id)
+			return false;
+
+		g_split.draggingSlider = false;
 		return true;
 	}
 }
@@ -1023,6 +1692,7 @@ void CRmlUiManager::Clear()
 	ClearInventoryDrag();
 	ClearInventoryContextMenu();
 	ClearInventorySplit();
+	g_suppressNextLeftUp = false;
 	g_captureActive = false;
 	if (hadDocuments)
 		CDInput8DeviceProxy::RequestInputReset();
@@ -1078,7 +1748,9 @@ void CRmlUiManager::Render(IDirect3DDevice9* device)
 	for (size_t i = 0; i < g_documents.size(); ++i)
 	{
 		UiDocument& document = g_documents[i];
-		if (document.templateId == OMPPlusProtocol::UiTemplateInventory || document.templateId == OMPPlusProtocol::UiTemplateStorage)
+		if (document.templateId == OMPPlusProtocol::UiTemplateWorkspace)
+			RenderWorkspace(device, document, viewport);
+		else if (document.templateId == OMPPlusProtocol::UiTemplateInventory || document.templateId == OMPPlusProtocol::UiTemplateStorage)
 			RenderInventory(device, document, viewport);
 		else
 			RenderGenericPanel(device, document, viewport);
@@ -1124,15 +1796,27 @@ bool CRmlUiManager::HandleWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM
 		g_mouse.x = GET_X_LPARAM(lParam);
 		g_mouse.y = GET_Y_LPARAM(lParam);
 		ClampMouseToWindow();
+		if (UiDocument* document = TopDocument())
+		{
+			if ((IsInventoryTemplate(*document) || IsWorkspaceTemplate(*document)) && HandleInventorySplitMouseMove(*document))
+				return true;
+			if ((IsInventoryTemplate(*document) || IsWorkspaceTemplate(*document)) && IsDocumentContextMenuActive(*document))
+				return true;
+		}
 		UpdateInventoryDrag();
 		return ShouldCaptureMouse();
 	case WM_LBUTTONDOWN:
 		ClampMouseToWindow();
 		if (UiDocument* document = TopDocument())
 		{
-			if (IsInventoryTemplate(*document) && HandleInventorySplitClick(*document))
+			if ((IsInventoryTemplate(*document) || IsWorkspaceTemplate(*document)) && HandleInventorySplitMouseDown(*document))
 				return true;
-			if (IsInventoryTemplate(*document) && HandleInventoryContextMenuClick(*document))
+			if ((IsInventoryTemplate(*document) || IsWorkspaceTemplate(*document)) && HandleInventoryContextMenuClick(*document))
+			{
+				g_suppressNextLeftUp = true;
+				return true;
+			}
+			if (IsWorkspaceTemplate(*document) && BeginWorkspaceDrag(*document))
 				return true;
 			if (IsInventoryTemplate(*document) && BeginInventoryDrag(*document))
 				return true;
@@ -1140,10 +1824,24 @@ bool CRmlUiManager::HandleWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM
 		return ShouldCaptureMouse();
 	case WM_LBUTTONUP:
 		ClampMouseToWindow();
+		if (g_suppressNextLeftUp)
+		{
+			g_suppressNextLeftUp = false;
+			return true;
+		}
 		if (UiDocument* document = TopDocument())
 		{
+			if (IsWorkspaceTemplate(*document))
+			{
+				if (HandleInventorySplitMouseUp(*document))
+					return true;
+				if (!FinishWorkspaceDrag(*document))
+					HandleWorkspaceClick(*document);
+			}
 			if (IsInventoryTemplate(*document))
 			{
+				if (HandleInventorySplitMouseUp(*document))
+					return true;
 				if (!FinishInventoryDrag(*document))
 					HandleInventoryClick(*document, OMPPlusProtocol::UiEventClick);
 			}
@@ -1158,7 +1856,7 @@ bool CRmlUiManager::HandleWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM
 		}
 		if (g_split.active)
 		{
-			ClearInventorySplit();
+			ClearInventorySplitAndSuppressClick();
 			return true;
 		}
 		if (g_contextMenu.active)
@@ -1168,6 +1866,11 @@ bool CRmlUiManager::HandleWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM
 		}
 		if (UiDocument* document = TopDocument())
 		{
+			if (IsWorkspaceTemplate(*document))
+			{
+				OpenWorkspaceContextMenu(*document);
+				return true;
+			}
 			if (IsInventoryTemplate(*document))
 			{
 				OpenInventoryContextMenu(*document);
@@ -1293,10 +1996,15 @@ void CRmlUiManager::HandleOpen(RakNet::BitStream& stream)
 		return;
 
 	document.capacity = document.capacity < MaxInventorySlots ? document.capacity : MaxInventorySlots;
-	if ((document.templateId == OMPPlusProtocol::UiTemplateInventory || document.templateId == OMPPlusProtocol::UiTemplateStorage) && document.capacity == 0)
+	if (document.templateId == OMPPlusProtocol::UiTemplateWorkspace)
+	{
+		document.workspaceLayout = static_cast<uint8_t>(document.capacity);
+		document.capacity = 0;
+	}
+	else if ((document.templateId == OMPPlusProtocol::UiTemplateInventory || document.templateId == OMPPlusProtocol::UiTemplateStorage) && document.capacity == 0)
 		document.capacity = 30;
 
-	if (document.capacity)
+	if (document.capacity && document.templateId != OMPPlusProtocol::UiTemplateWorkspace)
 		document.slots.resize(document.capacity);
 
 	std::vector<UiDocument>::iterator existing = FindDocument(document.id);
@@ -1420,4 +2128,120 @@ void CRmlUiManager::HandleInventorySetSlotActions(RakNet::BitStream& stream)
 		it->capacity = slot + 1;
 
 	it->slots[slot].actions = ParseInventoryActions(actions);
+}
+
+void CRmlUiManager::HandleWorkspaceClear(RakNet::BitStream& stream)
+{
+	std::string id;
+	if (!ReadBoundString(stream, id, MaxDocumentIdLength) || id.empty())
+		return;
+
+	std::vector<UiDocument>::iterator it = FindDocument(id);
+	if (it == g_documents.end())
+		return;
+
+	it->panes.clear();
+	if (g_drag.documentId == id)
+		ClearInventoryDrag();
+}
+
+void CRmlUiManager::HandleWorkspaceSetPane(RakNet::BitStream& stream)
+{
+	std::string id;
+	UiPane pane;
+	if (!ReadBoundString(stream, id, MaxDocumentIdLength)
+		|| !ReadBoundString(stream, pane.id, MaxKeyLength)
+		|| !stream.Read(pane.type)
+		|| !stream.Read(pane.capacity)
+		|| !ReadBoundString(stream, pane.title, MaxTitleLength)
+		|| !ReadBoundString(stream, pane.body, MaxBodyLength)
+		|| id.empty()
+		|| pane.id.empty())
+	{
+		return;
+	}
+
+	std::vector<UiDocument>::iterator doc = FindDocument(id);
+	if (doc == g_documents.end())
+		return;
+
+	pane.capacity = pane.capacity < MaxInventorySlots ? pane.capacity : MaxInventorySlots;
+	if (pane.type == OMPPlusProtocol::UiPaneEquipment && pane.capacity == 0)
+		pane.capacity = 10;
+	if ((IsWorkspaceGridPane(pane) || pane.type == OMPPlusProtocol::UiPaneRecipeList || pane.type == OMPPlusProtocol::UiPaneCraftQueue) && pane.capacity == 0)
+		pane.capacity = 30;
+	if (pane.capacity)
+		pane.slots.resize(pane.capacity);
+
+	std::vector<UiPane>::iterator existing = FindPane(*doc, pane.id);
+	if (existing != doc->panes.end())
+		*existing = pane;
+	else
+		doc->panes.push_back(pane);
+}
+
+void CRmlUiManager::HandleWorkspaceSetSlot(RakNet::BitStream& stream)
+{
+	std::string id;
+	std::string paneId;
+	uint16_t slot = 0;
+	InventorySlot value;
+	if (!ReadBoundString(stream, id, MaxDocumentIdLength)
+		|| !ReadBoundString(stream, paneId, MaxKeyLength)
+		|| !stream.Read(slot)
+		|| !stream.Read(value.itemId)
+		|| !stream.Read(value.amount)
+		|| !ReadBoundString(stream, value.label, MaxSlotLabelLength)
+		|| !ReadBoundString(stream, value.description, MaxSlotDescriptionLength)
+		|| !ReadBoundString(stream, value.icon, MaxIconLength))
+	{
+		return;
+	}
+
+	std::vector<UiDocument>::iterator doc = FindDocument(id);
+	if (doc == g_documents.end() || slot >= MaxInventorySlots)
+		return;
+
+	UiPane* pane = FindPanePtr(*doc, paneId);
+	if (!pane)
+		return;
+
+	if (pane->slots.size() <= slot)
+		pane->slots.resize(slot + 1);
+	if (pane->capacity <= slot)
+		pane->capacity = slot + 1;
+
+	value.used = value.itemId != 0 || !value.label.empty();
+	if (pane->slots[slot].used && !pane->slots[slot].actions.empty())
+		value.actions = pane->slots[slot].actions;
+	pane->slots[slot] = value;
+}
+
+void CRmlUiManager::HandleWorkspaceSetSlotActions(RakNet::BitStream& stream)
+{
+	std::string id;
+	std::string paneId;
+	uint16_t slot = 0;
+	std::string actions;
+	if (!ReadBoundString(stream, id, MaxDocumentIdLength)
+		|| !ReadBoundString(stream, paneId, MaxKeyLength)
+		|| !stream.Read(slot)
+		|| !ReadBoundString(stream, actions, MaxActionsLength))
+	{
+		return;
+	}
+
+	std::vector<UiDocument>::iterator doc = FindDocument(id);
+	if (doc == g_documents.end() || slot >= MaxInventorySlots)
+		return;
+
+	UiPane* pane = FindPanePtr(*doc, paneId);
+	if (!pane)
+		return;
+
+	if (pane->slots.size() <= slot)
+		pane->slots.resize(slot + 1);
+	if (pane->capacity <= slot)
+		pane->capacity = slot + 1;
+	pane->slots[slot].actions = ParseInventoryActions(actions);
 }

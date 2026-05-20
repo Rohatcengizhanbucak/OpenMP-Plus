@@ -18,7 +18,7 @@ namespace OMPPlusProtocol
 	static const uint8_t ClientInfoVersion = 1;
 	static const uint16_t ClientVersionMajor = 0;
 	static const uint16_t ClientVersionMinor = 1;
-	static const uint16_t ClientVersionPatch = 30;
+	static const uint16_t ClientVersionPatch = 32;
 	static const uint8_t MaxClientHashLength = 64;
 	static const int MaxPayloadBytes = 4096;
 	static const int MaxMessagesPerSecond = 60;
@@ -95,7 +95,28 @@ namespace OMPPlusProtocol
 		UiTemplateStorage = 2,
 		UiTemplateCrafting = 3,
 		UiTemplatePhone = 4,
-		UiTemplateTablet = 5
+		UiTemplateTablet = 5,
+		UiTemplateWorkspace = 6
+	};
+
+	enum UiWorkspaceLayout : uint8_t
+	{
+		UiWorkspaceLayoutAuto = 0,
+		UiWorkspaceLayoutInventory = 1,
+		UiWorkspaceLayoutStorage = 2,
+		UiWorkspaceLayoutCrafting = 3,
+		UiWorkspaceLayoutTrade = 4
+	};
+
+	enum UiPaneType : uint8_t
+	{
+		UiPaneGrid = 0,
+		UiPaneEquipment = 1,
+		UiPaneStorage = 2,
+		UiPaneLoot = 3,
+		UiPaneRecipeList = 4,
+		UiPaneCraftQueue = 5,
+		UiPaneInfo = 6
 	};
 
 	enum UiFlags : uint32_t
@@ -115,7 +136,11 @@ namespace OMPPlusProtocol
 		UiEventSlotDrop = 5,
 		UiEventWorldDrop = 6,
 		UiEventInventoryAction = 7,
-		UiEventInventorySplit = 8
+		UiEventInventorySplit = 8,
+		UiEventWorkspaceDrop = 9,
+		UiEventWorkspaceWorldDrop = 10,
+		UiEventWorkspaceAction = 11,
+		UiEventWorkspaceSplit = 12
 	};
 
 	enum class Message : uint8_t
@@ -191,6 +216,10 @@ namespace OMPPlusProtocol
 	X(UI_INVENTORY_CLEAR) \
 	X(UI_INVENTORY_SET_SLOT) \
 	X(UI_INVENTORY_SET_SLOT_ACTIONS) \
+	X(UI_WORKSPACE_CLEAR) \
+	X(UI_WORKSPACE_SET_PANE) \
+	X(UI_WORKSPACE_SET_SLOT) \
+	X(UI_WORKSPACE_SET_SLOT_ACTIONS) \
 	X(ON_UI_EVENT)
 
 	enum LegacyRPC : uint16_t

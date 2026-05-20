@@ -106,6 +106,21 @@
 #define SAMPP_UI_TEMPLATE_CRAFTING 3
 #define SAMPP_UI_TEMPLATE_PHONE 4
 #define SAMPP_UI_TEMPLATE_TABLET 5
+#define SAMPP_UI_TEMPLATE_WORKSPACE 6
+
+#define SAMPP_WORKSPACE_LAYOUT_AUTO 0
+#define SAMPP_WORKSPACE_LAYOUT_INVENTORY 1
+#define SAMPP_WORKSPACE_LAYOUT_STORAGE 2
+#define SAMPP_WORKSPACE_LAYOUT_CRAFTING 3
+#define SAMPP_WORKSPACE_LAYOUT_TRADE 4
+
+#define SAMPP_PANE_GRID 0
+#define SAMPP_PANE_EQUIPMENT 1
+#define SAMPP_PANE_STORAGE 2
+#define SAMPP_PANE_LOOT 3
+#define SAMPP_PANE_RECIPE_LIST 4
+#define SAMPP_PANE_CRAFT_QUEUE 5
+#define SAMPP_PANE_INFO 6
 
 #define SAMPP_UI_FLAG_MODAL 1
 #define SAMPP_UI_FLAG_CAPTURE_MOUSE 2
@@ -121,6 +136,21 @@
 #define SAMPP_UI_EVENT_WORLD_DROP 6
 #define SAMPP_UI_EVENT_INVENTORY_ACTION 7
 #define SAMPP_UI_EVENT_INVENTORY_SPLIT 8
+#define SAMPP_UI_EVENT_WORKSPACE_DROP 9
+#define SAMPP_UI_EVENT_WORKSPACE_WORLD_DROP 10
+#define SAMPP_UI_EVENT_WORKSPACE_ACTION 11
+#define SAMPP_UI_EVENT_WORKSPACE_SPLIT 12
+
+#define SAMPP_EQUIP_HEAD 0
+#define SAMPP_EQUIP_MASK 1
+#define SAMPP_EQUIP_SHIRT 2
+#define SAMPP_EQUIP_ARMOR 3
+#define SAMPP_EQUIP_PANTS 4
+#define SAMPP_EQUIP_SHOES 5
+#define SAMPP_EQUIP_BACKPACK 6
+#define SAMPP_EQUIP_ACCESSORY 7
+#define SAMPP_EQUIP_PRIMARY_WEAPON 8
+#define SAMPP_EQUIP_SECONDARY_WEAPON 9
 
 #define SAMPP_CAPTURE_CONSUME_GAME_INPUT 1
 #define SAMPP_CAPTURE_BLOCK_SWITCH_WEAPON 2
@@ -339,6 +369,11 @@ native SAMPP_InventoryOpen(playerid, const documentid[], const title[], slots = 
 native SAMPP_InventoryClear(playerid, const documentid[]);
 native SAMPP_InventorySetSlot(playerid, const documentid[], slot, itemid, amount, const label[], const description[] = "", const icon[] = "");
 native SAMPP_InventorySetSlotActions(playerid, const documentid[], slot, const actions[]);
+native SAMPP_WorkspaceOpen(playerid, const documentid[], layout, const title[], const body[] = "", flags = SAMPP_UI_DEFAULT_FLAGS);
+native SAMPP_WorkspaceClear(playerid, const documentid[]);
+native SAMPP_WorkspaceSetPane(playerid, const documentid[], const paneid[], pane_type, const title[], capacity = 0, const body[] = "");
+native SAMPP_WorkspaceSetSlot(playerid, const documentid[], const paneid[], slot, itemid, amount, const label[], const description[] = "", const icon[] = "");
+native SAMPP_WorkspaceSetSlotActions(playerid, const documentid[], const paneid[], slot, const actions[]);
 native SAMPP_ExecuteCallback(type, {Float,_}:...);
 
 stock bool:SAMPP_TargetAddAction(playerid, targetid, optionid, const label[], const icon[] = "")
@@ -517,6 +552,12 @@ forward OnPlayerSAMPPInventoryAction(playerid, documentid[], slot, action[], pay
 forward OnPlayerOMPPlusInventoryAction(playerid, documentid[], slot, action[], payload[]);
 forward OnPlayerSAMPPInventorySplit(playerid, documentid[], slot, amount, payload[]);
 forward OnPlayerOMPPlusInventorySplit(playerid, documentid[], slot, amount, payload[]);
+forward OnPlayerSAMPPWorkspaceDrop(playerid, documentid[], from_pane[], from_slot, to_pane[], to_slot, amount, payload[]);
+forward OnPlayerOMPPlusWorkspaceDrop(playerid, documentid[], from_pane[], from_slot, to_pane[], to_slot, amount, payload[]);
+forward OnPlayerSAMPPWorkspaceAction(playerid, documentid[], paneid[], slot, action[], payload[]);
+forward OnPlayerOMPPlusWorkspaceAction(playerid, documentid[], paneid[], slot, action[], payload[]);
+forward OnPlayerSAMPPWorkspaceSplit(playerid, documentid[], paneid[], slot, amount, payload[]);
+forward OnPlayerOMPPlusWorkspaceSplit(playerid, documentid[], paneid[], slot, amount, payload[]);
 
 public OnPlayerConnect(playerid)
 {

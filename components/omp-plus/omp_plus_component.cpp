@@ -91,7 +91,29 @@ namespace
 
 	bool IsValidUiTemplate(uint8_t templateid)
 	{
-		return templateid <= OMPPlusProtocol::UiTemplateTablet;
+		return templateid <= OMPPlusProtocol::UiTemplateWorkspace;
+	}
+
+	std::vector<std::string> SplitPayloadFields(const std::string& payload, size_t maxFields)
+	{
+		std::vector<std::string> fields;
+		size_t cursor = 0;
+		while (cursor <= payload.length() && fields.size() < maxFields)
+		{
+			size_t next = payload.find('|', cursor);
+			if (next == std::string::npos)
+				next = payload.length();
+			fields.push_back(payload.substr(cursor, next - cursor));
+			if (next >= payload.length())
+				break;
+			cursor = next + 1;
+		}
+		return fields;
+	}
+
+	int ParseSignedInt(const std::string& value, int fallback)
+	{
+		return ParseFirstSignedInt(value, fallback);
 	}
 
 	bool IsValidTargetType(uint8_t targetType)
@@ -756,6 +778,73 @@ bool OMPPlusComponent::setInventorySlotActions(int playerid, const std::string& 
 	return sendLegacyRPC(playerid, OMPPlusProtocol::UI_INVENTORY_SET_SLOT_ACTIONS, &stream);
 }
 
+bool OMPPlusComponent::openWorkspace(int playerid, const std::string& documentid, uint8_t layout, const std::string& title, const std::string& body, uint32_t flags)
+{
+	if (layout > OMPPlusProtocol::UiWorkspaceLayoutTrade)
+		layout = OMPPlusProtocol::UiWorkspaceLayoutAuto;
+
+	return openUi(playerid, documentid, OMPPlusProtocol::UiTemplateWorkspace, flags, layout, title, body);
+}
+
+bool OMPPlusComponent::clearWorkspace(int playerid, const std::string& documentid)
+{
+	if (playerid < 0 || playerid >= PLAYER_POOL_SIZE || !isUsingOMPPlus(playerid) || documentid.empty())
+		return false;
+
+	NetworkBitStream stream;
+	WriteBoundString(stream, documentid, MaxUiDocumentIdLength);
+	return sendLegacyRPC(playerid, OMPPlusProtocol::UI_WORKSPACE_CLEAR, &stream);
+}
+
+bool OMPPlusComponent::setWorkspacePane(int playerid, const std::string& documentid, const std::string& paneid, uint8_t paneType, const std::string& title, uint16_t capacity, const std::string& body)
+{
+	if (playerid < 0 || playerid >= PLAYER_POOL_SIZE || !isUsingOMPPlus(playerid) || documentid.empty() || paneid.empty())
+		return false;
+
+	if (paneType > OMPPlusProtocol::UiPaneInfo)
+		paneType = OMPPlusProtocol::UiPaneGrid;
+	capacity = std::min<uint16_t>(capacity, MaxInventorySlots);
+
+	NetworkBitStream stream;
+	WriteBoundString(stream, documentid, MaxUiDocumentIdLength);
+	WriteBoundString(stream, paneid, MaxUiKeyLength);
+	stream.Write(paneType);
+	stream.Write(capacity);
+	WriteBoundString(stream, title, MaxUiTitleLength);
+	WriteBoundString(stream, body, MaxUiBodyLength);
+	return sendLegacyRPC(playerid, OMPPlusProtocol::UI_WORKSPACE_SET_PANE, &stream);
+}
+
+bool OMPPlusComponent::setWorkspaceSlot(int playerid, const std::string& documentid, const std::string& paneid, uint16_t slot, uint32_t itemid, uint16_t amount, const std::string& label, const std::string& description, const std::string& icon)
+{
+	if (playerid < 0 || playerid >= PLAYER_POOL_SIZE || !isUsingOMPPlus(playerid) || documentid.empty() || paneid.empty() || slot >= MaxInventorySlots)
+		return false;
+
+	NetworkBitStream stream;
+	WriteBoundString(stream, documentid, MaxUiDocumentIdLength);
+	WriteBoundString(stream, paneid, MaxUiKeyLength);
+	stream.Write(slot);
+	stream.Write(itemid);
+	stream.Write(amount);
+	WriteBoundString(stream, label, MaxInventoryLabelLength);
+	WriteBoundString(stream, description, MaxInventoryDescriptionLength);
+	WriteBoundString(stream, icon, MaxInventoryIconLength);
+	return sendLegacyRPC(playerid, OMPPlusProtocol::UI_WORKSPACE_SET_SLOT, &stream);
+}
+
+bool OMPPlusComponent::setWorkspaceSlotActions(int playerid, const std::string& documentid, const std::string& paneid, uint16_t slot, const std::string& actions)
+{
+	if (playerid < 0 || playerid >= PLAYER_POOL_SIZE || !isUsingOMPPlus(playerid) || documentid.empty() || paneid.empty() || slot >= MaxInventorySlots)
+		return false;
+
+	NetworkBitStream stream;
+	WriteBoundString(stream, documentid, MaxUiDocumentIdLength);
+	WriteBoundString(stream, paneid, MaxUiKeyLength);
+	stream.Write(slot);
+	WriteBoundString(stream, actions, MaxInventoryActionsLength);
+	return sendLegacyRPC(playerid, OMPPlusProtocol::UI_WORKSPACE_SET_SLOT_ACTIONS, &stream);
+}
+
 void OMPPlusComponent::resetPlayer(int playerid)
 {
 	if (playerid >= 0 && playerid < PLAYER_POOL_SIZE)
@@ -1314,6 +1403,31 @@ void OMPPlusComponent::processUiEvent(IPlayer& player, NetworkBitStream& stream)
 		bool called = false;
 		callPublicIfExists("OnPlayerSAMPPInventorySplit", DefaultReturnValue_True, called, playerid, StringView(documentid.c_str(), documentid.length()), static_cast<int>(slot), amount, StringView(payload.c_str(), payload.length()));
 		callPublicIfExists("OnPlayerOMPPlusInventorySplit", DefaultReturnValue_True, called, playerid, StringView(documentid.c_str(), documentid.length()), static_cast<int>(slot), amount, StringView(payload.c_str(), payload.length()));
+	}
+	else if (eventType == OMPPlusProtocol::UiEventWorkspaceDrop || eventType == OMPPlusProtocol::UiEventWorkspaceWorldDrop)
+	{
+		std::vector<std::string> fields = SplitPayloadFields(payload, 5);
+		const std::string toPane = eventType == OMPPlusProtocol::UiEventWorkspaceWorldDrop ? std::string("world") : (fields.size() > 0 ? fields[0] : std::string());
+		const int toSlot = eventType == OMPPlusProtocol::UiEventWorkspaceWorldDrop ? -1 : (fields.size() > 1 ? ParseSignedInt(fields[1], -1) : -1);
+		const int amount = fields.size() > 2 ? ParseSignedInt(fields[2], 0) : 0;
+		bool called = false;
+		callPublicIfExists("OnPlayerSAMPPWorkspaceDrop", DefaultReturnValue_True, called, playerid, StringView(documentid.c_str(), documentid.length()), StringView(element.c_str(), element.length()), static_cast<int>(slot), StringView(toPane.c_str(), toPane.length()), toSlot, amount, StringView(payload.c_str(), payload.length()));
+		callPublicIfExists("OnPlayerOMPPlusWorkspaceDrop", DefaultReturnValue_True, called, playerid, StringView(documentid.c_str(), documentid.length()), StringView(element.c_str(), element.length()), static_cast<int>(slot), StringView(toPane.c_str(), toPane.length()), toSlot, amount, StringView(payload.c_str(), payload.length()));
+	}
+	else if (eventType == OMPPlusProtocol::UiEventWorkspaceAction)
+	{
+		std::vector<std::string> fields = SplitPayloadFields(payload, 4);
+		const std::string action = fields.size() > 0 ? fields[0] : std::string();
+		bool called = false;
+		callPublicIfExists("OnPlayerSAMPPWorkspaceAction", DefaultReturnValue_True, called, playerid, StringView(documentid.c_str(), documentid.length()), StringView(element.c_str(), element.length()), static_cast<int>(slot), StringView(action.c_str(), action.length()), StringView(payload.c_str(), payload.length()));
+		callPublicIfExists("OnPlayerOMPPlusWorkspaceAction", DefaultReturnValue_True, called, playerid, StringView(documentid.c_str(), documentid.length()), StringView(element.c_str(), element.length()), static_cast<int>(slot), StringView(action.c_str(), action.length()), StringView(payload.c_str(), payload.length()));
+	}
+	else if (eventType == OMPPlusProtocol::UiEventWorkspaceSplit)
+	{
+		const int amount = ParseFirstSignedInt(payload, 0);
+		bool called = false;
+		callPublicIfExists("OnPlayerSAMPPWorkspaceSplit", DefaultReturnValue_True, called, playerid, StringView(documentid.c_str(), documentid.length()), StringView(element.c_str(), element.length()), static_cast<int>(slot), amount, StringView(payload.c_str(), payload.length()));
+		callPublicIfExists("OnPlayerOMPPlusWorkspaceSplit", DefaultReturnValue_True, called, playerid, StringView(documentid.c_str(), documentid.length()), StringView(element.c_str(), element.length()), static_cast<int>(slot), amount, StringView(payload.c_str(), payload.length()));
 	}
 }
 

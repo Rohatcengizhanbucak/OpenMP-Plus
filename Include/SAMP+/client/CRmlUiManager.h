@@ -30,4 +30,8 @@ public:
 	static void HandleInventoryClear(RakNet::BitStream& stream);
 	static void HandleInventorySetSlot(RakNet::BitStream& stream);
 	static void HandleInventorySetSlotActions(RakNet::BitStream& stream);
+	static void HandleWorkspaceClear(RakNet::BitStream& stream);
+	static void HandleWorkspaceSetPane(RakNet::BitStream& stream);
+	static void HandleWorkspaceSetSlot(RakNet::BitStream& stream);
+	static void HandleWorkspaceSetSlotActions(RakNet::BitStream& stream);
 };
